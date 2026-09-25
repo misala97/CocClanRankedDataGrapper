@@ -16,7 +16,9 @@ Moved verbatim from the pre-split routes.py.
 import datetime as dt
 import math
 
-from flask import flash, jsonify, redirect, request, session as flask_session, url_for
+from flask import (
+    flash, has_request_context, jsonify, redirect, request, session as flask_session, url_for,
+)
 
 from auth import wants_json
 from extensions import db
@@ -232,6 +234,89 @@ def _to_note(value):
     return note or None
 
 
+# The phone's name for a set it adds (SessionSet.client_key): a uuid from
+# the live screen's outbox, never text a lifter typed.
+MAX_CLIENT_KEY_CHARS = 36
+_CLIENT_KEY_CHARS = frozenset('abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-')
+
+
+def _to_client_key(value):
+    """An added set's key, or None when the request has none (the debrief, a
+    page from before the outbox). InvalidInput for anything else that is not
+    one: no screen sends it, so it is a bug to hear about, not a key to
+    store."""
+    if not value:
+        return None
+    if len(value) > MAX_CLIENT_KEY_CHARS or not set(value) <= _CLIENT_KEY_CHARS:
+        raise InvalidInput('Der Satz kam mit einem ungültigen Schlüssel.')
+    return value
+
+
+# The live screen's outbox (static/gym/src/session/outbox.ts) holds what the
+# lifter logs while the phone is offline and sends it when it can -- minutes
+# or a day later. Each write says how long ago the lifter made it, in
+# milliseconds, and "now" would be the wrong time for all of them (B6, D6-A).
+WRITE_AGE_HEADER = 'X-Gym-Write-Age'
+# While the outbox holds writes for a workout, the page names it in this
+# cookie with the time of the oldest: "<session id>:<epoch ms>".
+OUTBOX_COOKIE = 'gym_outbox'
+# The cookie's own Max-Age, held here too: the cookie is the phone's to set.
+OUTBOX_HOLD_LIMIT = dt.timedelta(days=7)
+
+
+def _from_millis(raw):
+    """Naive UTC from epoch milliseconds as the phone sends them, or None
+    for anything that is not a number of them."""
+    try:
+        return dt.datetime.fromtimestamp(int(raw) / 1000, dt.timezone.utc).replace(tzinfo=None)
+    except (TypeError, ValueError, OverflowError, OSError):
+        return None
+
+
+def _write_time(session_):
+    """When the lifter made this write, or None when the request does not
+    say.
+
+    The phone says how long ago, not when: its clock can be minutes off, and
+    a set stamped by it read as lifted that much early -- a rest still
+    running counted as over, and its push never came (B6 review). An age is
+    the same on any clock. A set stamped with its arrival instead read as
+    lifted hours late, its rest ran from then, and a push buzzed for a rest
+    that had ended long before.
+
+    Held to what is possible: never before the workout began, never after
+    now."""
+    try:
+        age = dt.timedelta(milliseconds=max(int(request.headers.get(WRITE_AGE_HEADER)), 0))
+    except (TypeError, ValueError, OverflowError):
+        return None
+    now = dt.datetime.utcnow()
+    try:
+        moment = now - age
+    except OverflowError:
+        moment = session_.started_at
+    return min(max(moment, session_.started_at), now)
+
+
+def _outbox_hold(session_):
+    """The time of the oldest write the caller's phone still holds for this
+    workout (OUTBOX_COOKIE), or None.
+
+    Held to the workout and to now like a write's own time. It can only
+    postpone the three-hour rule, and only for the caller's own workout --
+    every caller has checked ownership first -- and for a week at most."""
+    if not has_request_context():
+        return None
+    named, _, millis = request.cookies.get(OUTBOX_COOKIE, '').partition(':')
+    if named != str(session_.id):
+        return None
+    moment = _from_millis(millis)
+    now = dt.datetime.utcnow()
+    if moment is None or now - moment > OUTBOX_HOLD_LIMIT:
+        return None
+    return min(max(moment, session_.started_at), now)
+
+
 # LIVE_SURFACE_HEADER (scope.py) is sent by the live workout island on every
 # write. The debrief writes to the same set routes on purpose -- a finished
 # workout is corrected there -- so finished_at alone cannot tell the two
@@ -253,8 +338,10 @@ def _refuse_live_write_if_finished(session_):
     # A screen left open overnight writes into a workout nobody came back
     # to: it ends at its last set first, and the screen reloads into that
     # (B4 review) -- instead of today's set landing in yesterday's workout.
+    # Judged at the moment the lifter made the write: one the phone held
+    # while offline was made while the workout ran (B6).
     session_id = session_.id
-    if _settle_if_abandoned(session_) == 'live':
+    if _settle_if_abandoned(session_, as_of=_write_time(session_)) == 'live':
         return None
     return _finished_refusal(session_id)
 
@@ -273,7 +360,7 @@ def _refuse_structure_edit_if_finished(session_):
     island still answers the 409 by reloading into the debrief.
     """
     session_id = session_.id
-    if _settle_if_abandoned(session_) == 'live':
+    if _settle_if_abandoned(session_, as_of=_write_time(session_)) == 'live':
         return None
     return _finished_refusal(session_id)
 
@@ -434,16 +521,37 @@ def _last_set_at(session_):
 DISCARDED_SESSION_KEY = 'gym_discarded_session'
 
 
-def _is_abandoned(session_):
-    """Left alone for STALE_SESSION_TIMEOUT: counted from its last set, or
-    from its start while it has none."""
-    return (dt.datetime.utcnow() - (_last_set_at(session_) or session_.started_at)
-            > STALE_SESSION_TIMEOUT)
+def _is_abandoned(session_, as_of=None):
+    """Left alone for STALE_SESSION_TIMEOUT by `as_of` (default now):
+    counted from its last set, or from its start while it has none."""
+    moment = as_of or dt.datetime.utcnow()
+    return moment - (_last_set_at(session_) or session_.started_at) > STALE_SESSION_TIMEOUT
 
 
-def _settle_if_abandoned(session_):
+def _abandon_clock(session_, as_of=None):
+    """The moment the three-hour rule is judged at: now, or earlier when the
+    phone says the lifter acted earlier (B6, D6-A) -- a write by its own
+    time (`as_of`, _write_time), and anything by the oldest write the phone
+    still holds for this workout (_outbox_hold).
+
+    Offline to the end of a workout, the app closed, opened again the next
+    day: the page load ended the workout at its last set that had reached
+    the server -- or threw it away when none had -- before the phone could
+    send the rest, and each of them was refused. The hold postpones only
+    that; once the phone has sent everything, the rule applies as ever."""
+    moments = [dt.datetime.utcnow()]
+    if as_of is not None:
+        moments.append(as_of)
+    hold = _outbox_hold(session_)
+    if hold is not None:
+        moments.append(hold)
+    return min(moments)
+
+
+def _settle_if_abandoned(session_, as_of=None):
     """End a running workout nobody came back to, and say what it is now:
-    'live', 'finished' or 'discarded'.
+    'live', 'finished' or 'discarded'. `as_of`: when the write asking was
+    made (_abandon_clock).
 
     Abandoned (_is_abandoned), it is finished at its last set and marked
     auto_finished, or discarded when nothing in it counts (D5, G-086,
@@ -461,7 +569,8 @@ def _settle_if_abandoned(session_):
     """
     if session_.finished_at is not None:
         return 'finished'
-    if not _is_abandoned(session_):
+    clock = _abandon_clock(session_, as_of)
+    if not _is_abandoned(session_, clock):
         return 'live'
     session_id = session_.id
     lock_sessions([session_id])
@@ -472,7 +581,7 @@ def _settle_if_abandoned(session_):
         return 'discarded'
     if session_.finished_at is not None:
         return 'finished'
-    if not _is_abandoned(session_):
+    if not _is_abandoned(session_, clock):
         return 'live'
     if not _counted(session_):
         _discard_session(session_)

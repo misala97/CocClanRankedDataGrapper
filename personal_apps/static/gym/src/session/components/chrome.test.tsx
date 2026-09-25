@@ -1,11 +1,11 @@
-import { render, screen } from '@testing-library/react'
+import { act, render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { SessionHeader } from './SessionHeader'
 import { SaveErrorBanner } from './SaveErrorBanner'
 import { ReorderBar } from './ReorderBar'
 import { LiveRegion } from './LiveRegion'
-import { useAnnouncer, useSaveState, useSheets, useWorkoutUi } from '../stores'
+import { useAnnouncer, useOutbox, useSaveState, useSheets, useWorkoutUi } from '../stores'
 import { payload } from '../types.test-d'
 
 beforeEach(() => {
@@ -13,6 +13,7 @@ beforeEach(() => {
   useWorkoutUi.setState(useWorkoutUi.getInitialState(), true)
   useSaveState.setState(useSaveState.getInitialState(), true)
   useAnnouncer.setState(useAnnouncer.getInitialState(), true)
+  useOutbox.setState(useOutbox.getInitialState(), true)
   vi.useFakeTimers({ shouldAdvanceTime: true })
   vi.setSystemTime(new Date('2026-08-10T12:30:00Z'))
 })
@@ -117,6 +118,39 @@ describe('SaveErrorBanner', () => {
     window.dispatchEvent(new Event('online'))
     expect(resend).toHaveBeenCalledOnce()
     expect(reload).not.toHaveBeenCalled()
+  })
+
+  it('resends only once the writes the phone held are in (B6 review)', async () => {
+    // On `online` the outbox is still on its first try: a write it does not
+    // keep, sent then, was failed again at once, behind the held ones.
+    render(<SaveErrorBanner />)
+    const resend = vi.fn()
+    act(() => { useOutbox.getState().publish({ state: 'waiting', count: 2, setIds: [] }) })
+    useSaveState.getState().fail('exercise-5', 'Verbindung fehlgeschlagen', resend)
+    await screen.findByRole('alert')
+
+    window.dispatchEvent(new Event('online'))
+    act(() => { useOutbox.getState().publish({ state: 'sending', count: 1, setIds: [] }) })
+    expect(resend).not.toHaveBeenCalled()
+    act(() => { useOutbox.getState().publish({ state: 'idle', count: 0, setIds: [] }) })
+    expect(resend).toHaveBeenCalledOnce()
+  })
+
+  it('counts a swap lost to a lapsed login once, not with the outbox\'s note (B6 re-review)', async () => {
+    // Nothing kept, so the note that says why the queue waits was counted as
+    // a change of its own: "2 Änderungen nicht gespeichert" for one swap.
+    render(<SaveErrorBanner />)
+    const reload = vi.fn()
+    act(() => { useOutbox.getState().publish({ state: 'blocked', count: 0, setIds: [] }) })
+    useSaveState.getState().fail('replace-7', 'Sitzung abgelaufen — bitte Seite neu laden.',
+      vi.fn(), 'manual')
+    useSaveState.getState().fail('outbox-blocked', 'Sitzung abgelaufen — bitte Seite neu laden.',
+      reload, 'reload')
+    const alert = await screen.findByRole('alert')
+    expect(alert).toHaveTextContent('Nicht gespeichert')
+    expect(alert).not.toHaveTextContent('2 Änderungen')
+    expect(screen.getByRole('button', { name: 'Neu laden' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Verwerfen' })).toBeInTheDocument()
   })
 
   it('counts the lost writes and says each reason once (G-139)', async () => {

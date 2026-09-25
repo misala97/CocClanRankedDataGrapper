@@ -16,6 +16,8 @@ beforeEach(() => {
 
 const actions = (): SessionActions => ({
   onConfirmSet: vi.fn(), onToggleSet: vi.fn(), onFinish: vi.fn(), onDiscard: vi.fn(),
+  onSendNow: vi.fn(),
+  onReload: vi.fn(),
   onReorder: vi.fn(),
   onSessionMetaSave: vi.fn(), onSkipRest: vi.fn(), onShiftRest: vi.fn(), onInvite: vi.fn(),
   onEnablePush: vi.fn(), onToggleDeload: vi.fn(), onAddExercise: vi.fn(),

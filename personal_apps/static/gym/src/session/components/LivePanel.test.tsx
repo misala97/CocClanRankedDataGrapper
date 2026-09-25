@@ -2,15 +2,16 @@ import { act, fireEvent, render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { kg1 } from '../../format'
-import { BAND_ARMS_MS, LivePanel } from './LivePanel'
+import { BAND_ARMS_MS, CONFIRM_GUARD_MS, LivePanel } from './LivePanel'
 import { Rail } from './Rail'
 import { SessionTotals } from './SessionTotals'
-import { useSheets } from '../stores'
+import { useOutbox, useSheets } from '../stores'
 import { payload } from '../types.test-d'
 import type { SeedSource, SessionDetailPayload } from '../types'
 
 beforeEach(() => {
   useSheets.setState(useSheets.getInitialState(), true)
+  useOutbox.setState(useOutbox.getInitialState(), true)
 })
 
 const handlers = () => ({
@@ -19,6 +20,15 @@ const handlers = () => ({
 })
 
 const live = payload.visible_exercises.find((se) => se.id === payload.live_id)!
+
+/** The fixture with the live exercise's sets replaced. */
+function withLiveSets(sets: typeof live.sets): SessionDetailPayload {
+  return {
+    ...payload,
+    visible_exercises: payload.visible_exercises.map((se) =>
+      (se.id === live.id ? { ...se, sets } : se)),
+  }
+}
 
 describe('LivePanel', () => {
   it('names the live exercise and opens its own sheet', async () => {
@@ -109,11 +119,149 @@ describe('LivePanel', () => {
     expect(h.onToggleSet).toHaveBeenCalledWith(done.id, false)
   })
 
-  it('holds the confirm button while a set write is in flight', () => {
-    // It keyed on the next set's id -- null once the last set was optimistically
-    // done, so a double tap on an exercise's last set appended a phantom one.
-    render(<LivePanel payload={payload} {...handlers()} confirmBusy />)
-    expect(screen.getByText('Satz geschafft').closest('button')).toBeDisabled()
+  it('drops a bounce on "Satz geschafft", and is never held for the connection (G-138)', async () => {
+    // Held while a set write was in flight, the button stayed held for as
+    // long as the wifi was gone: offline, no set could be logged at all. A
+    // double tap still must not log the next set, or append a phantom one
+    // after an exercise's last.
+    const user = userEvent.setup()
+    const h = handlers()
+    const now = vi.spyOn(Date, 'now').mockReturnValue(1_000_000)
+    render(<LivePanel payload={payload} {...h} />)
+    const go = screen.getByText('Satz geschafft').closest('button')!
+    expect(go).toBeEnabled()
+
+    await user.click(go)
+    now.mockReturnValue(1_000_000 + CONFIRM_GUARD_MS - 1)
+    await user.click(go)
+    expect(h.onConfirm).toHaveBeenCalledTimes(1)
+
+    now.mockReturnValue(1_000_000 + CONFIRM_GUARD_MS)
+    await user.click(go)
+    expect(h.onConfirm).toHaveBeenCalledTimes(2)
+    now.mockRestore()
+  })
+
+  it('marks the chips whose write waits on the phone (B6)', () => {
+    const done = live.sets.find((s) => s.completed)!
+    useOutbox.setState({ state: 'waiting', count: 1, setIds: [done.id] })
+    render(<LivePanel payload={payload} {...handlers()} />)
+    const index = live.sets.indexOf(done) + 1
+    const chip = screen.getByLabelText(new RegExp(`^Satz ${index} (erledigt|— Rekord)`))
+    expect(chip).toHaveClass('is-waiting')
+    expect(chip.getAttribute('aria-label')).toContain('wartet auf Verbindung')
+    expect(document.querySelectorAll('.set.is-waiting')).toHaveLength(1)
+  })
+
+  it('keeps the numbers dialled in for a set through a reload (G-009)', async () => {
+    // Component state alone: iOS dropping the PWA in the background put the
+    // plan back on a set the lifter had already set up.
+    const user = userEvent.setup()
+    const next = live.sets.find((s) => !s.completed)!
+    const first = render(<LivePanel payload={payload} {...handlers()} />)
+    await user.click(screen.getByLabelText('Wiederholungen erhöhen'))
+    await user.click(screen.getByLabelText('Wiederholungen erhöhen'))
+    first.unmount()
+
+    render(<LivePanel payload={payload} {...handlers()} />)
+    expect(screen.getByLabelText('Wiederholungen eingeben'))
+      .toHaveTextContent(String(next.reps! + 2))
+  })
+
+  it('drops the draft once the set is logged, and for any other set', async () => {
+    const user = userEvent.setup()
+    const next = live.sets.find((s) => !s.completed)!
+    const h = handlers()
+    const first = render(<LivePanel payload={payload} {...h} />)
+    await user.click(screen.getByLabelText('Wiederholungen erhöhen'))
+    await user.click(screen.getByText('Satz geschafft').closest('button')!)
+    expect(h.onConfirm).toHaveBeenCalledWith(next.weight, next.reps! + 1, next.id)
+    first.unmount()
+
+    render(<LivePanel payload={payload} {...handlers()} />)
+    expect(screen.getByLabelText('Wiederholungen eingeben')).toHaveTextContent(String(next.reps))
+  })
+
+  it('drops the draft when the steppers move to another set', async () => {
+    // Dialled in, then the lifter bound the steppers to a later chip: the
+    // numbers were left behind, and a reload must not bring them back.
+    const user = userEvent.setup()
+    const [next, later] = live.sets.filter((s) => !s.completed)
+    const first = render(<LivePanel payload={payload} {...handlers()} />)
+    await user.click(screen.getByLabelText('Wiederholungen erhöhen'))
+    await user.click(screen.getByLabelText(new RegExp(`^Satz ${live.sets.indexOf(later!) + 1}, geplant`)))
+    first.unmount()
+
+    render(<LivePanel payload={payload} {...handlers()} />)
+    expect(screen.getByLabelText('Wiederholungen eingeben')).toHaveTextContent(String(next!.reps))
+  })
+
+  it('keeps the numbers dialled in when the set just added gets its real id (B6 review)', async () => {
+    // Appended with no signal, drawn as -5 until the add lands: its real id
+    // is the same set, and the numbers dialled for the next one stay.
+    const user = userEvent.setup()
+    const drawn = withLiveSets(live.sets.map((s) => ({ ...s, completed: true }))
+      .concat({ id: -5, weight: 70, reps: 5, completed: true, base_weight: null, key: 'k1' }))
+    const named = withLiveSets(drawn.visible_exercises.find((se) => se.id === live.id)!.sets
+      .map((s) => (s.id === -5 ? { ...s, id: 900 } : s)))
+    const view = render(<LivePanel payload={drawn} {...handlers()} />)
+    await user.click(screen.getByLabelText('Wiederholungen erhöhen'))
+    view.rerender(<LivePanel payload={named} {...handlers()} />)
+    expect(screen.getByLabelText('Wiederholungen eingeben')).toHaveTextContent('6')
+  })
+
+  it('keeps the numbers dialled for a set just added and reopened, as it gets its real id (B6 re-review)', async () => {
+    // Bound by its drawn id, the steppers were re-seeded -- and the draft
+    // cleared -- the moment the add landed.
+    const user = userEvent.setup()
+    const drawn = withLiveSets(live.sets.map((s) => ({ ...s, completed: true }))
+      .concat({ id: -5, weight: 70, reps: 5, completed: false, base_weight: null, key: 'k1' }))
+    const named = withLiveSets(drawn.visible_exercises.find((se) => se.id === live.id)!.sets
+      .map((s) => (s.id === -5 ? { ...s, id: 900 } : s)))
+    const view = render(<LivePanel payload={drawn} {...handlers()} />)
+    await user.click(screen.getByLabelText('Wiederholungen erhöhen'))
+    expect(screen.getByLabelText('Wiederholungen eingeben')).toHaveTextContent('6')
+    view.rerender(<LivePanel payload={named} {...handlers()} />)
+    expect(screen.getByLabelText('Wiederholungen eingeben')).toHaveTextContent('6')
+  })
+
+  it('keeps a set just added picked, as it gets its real id (B6 re-review)', async () => {
+    const user = userEvent.setup()
+    const open = live.sets.map((s, i) => ({ ...s, completed: i > 0 ? s.completed : false }))
+    const drawn = withLiveSets(open
+      .concat({ id: -5, weight: 70, reps: 5, completed: false, base_weight: null, key: 'k1' }))
+    const named = withLiveSets(drawn.visible_exercises.find((se) => se.id === live.id)!.sets
+      .map((s) => (s.id === -5 ? { ...s, id: 900 } : s)))
+    const view = render(<LivePanel payload={drawn} {...handlers()} />)
+    const added = () => screen.getByLabelText(new RegExp(`^Satz ${live.sets.length + 1}, geplant`))
+    await user.click(added())
+    expect(screen.getByLabelText('Wiederholungen eingeben')).toHaveTextContent('5')
+    view.rerender(<LivePanel payload={named} {...handlers()} />)
+    expect(screen.getByLabelText('Wiederholungen eingeben')).toHaveTextContent('5')
+    expect(added()).toHaveClass('is-now')
+    // The same chip, not one drawn anew: that dropped the keyboard's focus.
+    expect(added()).toHaveFocus()
+  })
+
+  it('never takes a draft left for another set', async () => {
+    const user = userEvent.setup()
+    const next = live.sets.find((s) => !s.completed)!
+    const first = render(<LivePanel payload={payload} {...handlers()} />)
+    await user.click(screen.getByLabelText('Wiederholungen erhöhen'))
+    first.unmount()
+
+    // The server moved on meanwhile: that set is done, the next one is up.
+    const moved: SessionDetailPayload = {
+      ...payload,
+      visible_exercises: payload.visible_exercises.map((se) =>
+        se.id === live.id
+          ? { ...se, sets: se.sets.map((s) => (s.id === next.id ? { ...s, completed: true } : s)) }
+          : se),
+    }
+    const after = live.sets.find((s) => !s.completed && s.id !== next.id)
+    render(<LivePanel payload={moved} {...handlers()} />)
+    const shown = after?.reps ?? next.reps
+    expect(screen.getByLabelText('Wiederholungen eingeben')).toHaveTextContent(String(shown))
   })
 
   it('says everything is skipped rather than showing a skipped exercise as live', () => {
@@ -139,8 +287,8 @@ describe('LivePanel', () => {
       visible_exercises: payload.visible_exercises.map((se) =>
         se.id === live.id
           ? { ...se, sets: [
-            { id: 900, weight: 50, reps: 10, completed: false, base_weight: null },
-            { id: 901, weight: 50, reps: 10, completed: false, base_weight: null },
+            { id: 900, weight: 50, reps: 10, completed: false, base_weight: null, key: null },
+            { id: 901, weight: 50, reps: 10, completed: false, base_weight: null, key: null },
           ] }
           : se),
     }
@@ -176,7 +324,7 @@ describe('LivePanel', () => {
       visible_exercises: payload.visible_exercises.map((se) =>
         se.id === other.id
           ? { ...se, skipped: false, sets: [
-            { id: 950, weight: next.weight, reps: next.reps, completed: false, base_weight: null },
+            { id: 950, weight: next.weight, reps: next.reps, completed: false, base_weight: null, key: null },
           ] }
           : se),
     }

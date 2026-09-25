@@ -62,8 +62,13 @@ def _settle_an_abandoned_workout_first():
     _settle_if_abandoned) -- not halfway through the render by the nav's
     context processor, after the page had drawn it as running. JSON reads
     too: the island's refetch learns its workout was ended and reloads.
-    Writes settle in their own guards."""
-    if request.method == 'GET' and current_user_id() is not None:
+    Writes settle in their own guards.
+
+    Only under /gym: the phone's hold cookie (helpers._outbox_hold) is
+    scoped there, and /sw.js -- the one route outside, fetched by the
+    browser on its own -- ended the workout a phone still held sets for."""
+    if (request.method == 'GET' and request.path.startswith('/gym')
+            and current_user_id() is not None):
         helpers._get_active_session()
 
 

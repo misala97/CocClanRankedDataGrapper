@@ -55,5 +55,5 @@ describe('every gym page', () => {
     const reload = stubReload()
     ;(onShow as (event: Event) => void)(restored(true))
     expect(reload).toHaveBeenCalledOnce()
-  })
+  }, 20_000) // the first import compiles the whole island: ~1 s alone, ~5 s beside the suite
 })

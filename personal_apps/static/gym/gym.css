@@ -1972,6 +1972,13 @@ button.pic { cursor: zoom-in; }
 /* A planned set still waiting for its numbers reads "Satz 2": a word, not a
    load, so one weight lighter than the numerals beside it. */
 .set.is-blank { font-weight: var(--w-semi); }
+/* Logged, and kept on the phone until the connection is back (B6): the same
+   dashed edge as the outbox line that explains it. Inside the chip, so
+   nothing moves when it comes and goes. */
+.set.is-waiting { outline: 1.5px dashed currentColor; outline-offset: -5px; }
+/* The dash is an outline too, and outranks the site-wide :where() ring: a
+   keyboard landing on a waiting chip saw no focus at all (B6 review). */
+.set.is-waiting:focus-visible { outline: 2px solid var(--ink); outline-offset: 2px; }
 /* The tap itself, before the network answers. A chip is a submit button whose
    result arrives one round trip later, and on gym wifi that round trip is
    visible -- so the press has to be answered locally or the screen reads as
@@ -2571,6 +2578,11 @@ button.pic { cursor: zoom-in; }
   padding-block: var(--sp-1);
 }
 .sset .label { text-align: start; }
+/* The set's write is kept on the phone (B6): the waiting chip's dashed edge. */
+.sset .label.is-waiting {
+  justify-self: start; padding-inline: 5px; border-radius: var(--r-inset);
+  outline: 1.5px dashed currentColor; outline-offset: 1px;
+}
 .sset .input--num {
   inline-size: 100%; min-block-size: 44px; text-align: center;
   font-variant-numeric: tabular-nums; font-weight: var(--w-bold); font-size: var(--t-name);
@@ -2767,6 +2779,28 @@ summary.sheet-row::-webkit-details-marker { display: none; }
   background: var(--chassis); border-radius: var(--r-control); box-shadow: var(--lift);
 }
 .reorder-bar__txt { flex: 1; font-size: var(--t-meta); color: var(--dim); line-height: 1.4; }
+
+/* The outbox (B6): writes kept on the phone while the connection is gone. The
+   reorder bar's calm surface, not the save banner's alarm ring -- nothing is
+   lost -- and the dashed edge the waiting chips carry, so the line and the
+   marks read as one fact. */
+.outbox {
+  display: flex; align-items: center; gap: var(--sp-3);
+  margin: var(--sp-3) var(--sp-4) 0; padding: var(--sp-2) var(--sp-2) var(--sp-2) var(--sp-4);
+  background: var(--chassis); border-radius: var(--r-control);
+  border: 1.5px dashed var(--dim);
+}
+.outbox__txt { flex: 1; margin: 0; font-size: var(--t-meta); color: var(--dim); line-height: 1.4; }
+.outbox__txt b { color: var(--ink); font-weight: var(--w-semi); }
+.outbox__why { display: block; color: var(--ink); }
+.outbox__send {
+  flex: none; min-block-size: var(--tap); padding-inline: var(--sp-3);
+  border-radius: var(--r-control); background: var(--raised); color: var(--ink);
+  font-size: var(--t-sm); font-weight: var(--w-bold);
+}
+@media (min-width: 900px) {
+  .session-view > .outbox { grid-area: note; max-inline-size: 640px; }
+}
 .reorder-bar__done {
   flex: none; min-block-size: var(--tap); padding-inline: var(--sp-4);
   border-radius: var(--r-control); background: var(--live); color: var(--on-live);

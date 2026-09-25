@@ -1,6 +1,8 @@
 import { Fragment, useEffect, useLayoutEffect, useRef, useState } from 'react'
 import type { SeedSource, SessionDetailPayload, VariantRef } from '../types'
-import { useSheets } from '../stores'
+import { useOutbox, useSheets } from '../stores'
+import { clearDraft, readDraft, saveDraft } from '../drafts'
+import { setName } from '../setName'
 import { useRestTick } from '../useRestTick'
 import { useRecordTakeover } from '../useRecordTakeover'
 import { Icon } from '../../components/Icon'
@@ -72,9 +74,13 @@ interface Props {
   onShiftRest(seconds: number): void
   /** End the running rest now. */
   onSkipRest(): void
-  /** A set write is still on its way. The confirm button waits for it. */
-  confirmBusy?: boolean
 }
+
+/** How long "Satz geschafft" ignores a second tap after a set: the first
+ *  tap bouncing, not a set -- the next chip is up at once, and a bounce
+ *  logged it too. It used to wait for the server's answer instead, which
+ *  offline never came (G-138). */
+export const CONFIRM_GUARD_MS = 600
 
 /**
  * The one lifted panel for the exercise you are on.
@@ -87,9 +93,12 @@ interface Props {
  * state needed the control, not new machinery.
  */
 export function LivePanel({
-  payload, onConfirm, onToggleSet, onRestOver, onShiftRest, onSkipRest, confirmBusy = false,
+  payload, onConfirm, onToggleSet, onRestOver, onShiftRest, onSkipRest,
 }: Props) {
   const openSheet = useSheets((s) => s.open)
+  const sessionId = payload.session.id
+  // The chips whose write the phone is holding (B6): marked, never locked.
+  const waitingIds = useOutbox((s) => s.setIds)
   const live = payload.visible_exercises.find((se) => se.id === payload.live_id) ?? null
 
   // Tapping an open chip picks it: the steppers bind to it and "Satz
@@ -97,8 +106,9 @@ export function LivePanel({
   // numbers, whatever the steppers said -- a tap to look became a set logged
   // at the wrong weight. The pick lapses by itself once that set is done or
   // the live exercise changes, because it is looked up, never stored as a set.
-  const [pickedId, setPickedId] = useState<number | null>(null)
-  const picked = live?.sets.find((s) => s.id === pickedId && !s.completed) ?? null
+  // By name: a set just added changes id when it lands (B6 re-review).
+  const [pickedName, setPickedName] = useState<string | null>(null)
+  const picked = live?.sets.find((s) => setName(s) === pickedName && !s.completed) ?? null
   const nextSet = picked ?? live?.sets.find((s) => !s.completed) ?? null
 
   // Appending after everything is logged starts from the set you just did, not
@@ -117,8 +127,16 @@ export function LivePanel({
     ? nextSet.reps
     : lastDone?.reps ?? suggestion?.reps ?? null
 
-  const [weight, setWeight] = useState<number | null>(seedWeight)
-  const [reps, setReps] = useState<number | null>(seedReps)
+  // Which set the steppers are for -- see the re-seed below. A set this
+  // screen added is named by its key: its id changes when the server names
+  // it (B6), and the numbers dialled for it, or after it, are still for the
+  // same set -- a reopened one was re-seeded as it landed (B6 re-review).
+  const boundTo = `${live?.id ?? 'none'}:${nextSet !== null
+    ? setName(nextSet) : `after-${lastDone === null ? 'none' : setName(lastDone)}`}`
+  // A draft left by the page before a reload, drawn from the first frame.
+  const [restored] = useState(() => readDraft(sessionId, boundTo))
+  const [weight, setWeight] = useState<number | null>(restored?.weight ?? seedWeight)
+  const [reps, setReps] = useState<number | null>(restored?.reps ?? seedReps)
   // What is being typed right now, before the entry closes: the go button
   // names the next step from it ("Wdh. eintippen" while the kg is typed).
   const [draftWeight, setDraftWeight] = useState<number | null>(null)
@@ -136,11 +154,36 @@ export function LivePanel({
   // The numbers stay in the list for the other direction: a plan re-seeded in
   // place (a reorder, a partner's reorder) keeps its set ids and changes only
   // what they hold.
-  const boundTo = `${live?.id ?? 'none'}:${nextSet?.id ?? `after-${lastDone?.id ?? 'none'}`}`
+  // What was last put on the steppers from outside, so the effect below runs
+  // once per change -- not twice under StrictMode, which would throw the
+  // draft it just restored away.
+  const seeded = useRef<string | null>(null)
   useEffect(() => {
+    const seed = `${boundTo}|${seedWeight}|${seedReps}`
+    if (seeded.current === seed) return
+    const first = seeded.current === null
+    seeded.current = seed
+    // A reload drops component state, and with it the numbers the lifter
+    // had dialled in (G-009): the first seed after a mount takes their
+    // draft for the same set over the plan. Any later seed is the server
+    // saying the set, or its plan, changed -- the draft is over.
+    const draft = first ? readDraft(sessionId, boundTo) : null
+    if (draft !== null) {
+      setWeight(draft.weight)
+      setReps(draft.reps)
+      return
+    }
+    if (!first) clearDraft(sessionId)
     setWeight(seedWeight)
     setReps(seedReps)
-  }, [boundTo, seedWeight, seedReps])
+  }, [boundTo, seedWeight, seedReps, sessionId])
+  // Kept as it is set, for the set it is set for.
+  const dial = (next: { weight: number | null; reps: number | null }) => {
+    setWeight(next.weight)
+    setReps(next.reps)
+    saveDraft(sessionId, { bound: boundTo, ...next })
+  }
+  const lastConfirm = useRef(-Infinity)
 
   // One ring when the countdown lands, then settle. The rest hitting zero is
   // the cue to start the next set and it arrives with the phone face-down on a
@@ -377,13 +420,16 @@ export function LivePanel({
             // they share a row instead of stacking. It was a <form> before the
             // port and is a plain wrapper now -- the class is load-bearing for
             // layout, not for semantics.
-            <div className="set-form" key={s.id}>
+            // Keyed by name: as a set just added lands, its chip -- and the
+            // keyboard focus on it -- stays.
+            <div className="set-form" key={setName(s)}>
               <SetRow set={s} ordinal={i + 1}
                 isRecord={payload.record_set_ids.includes(s.id)}
                 isNext={nextSet !== null && s.id === nextSet.id}
                 isUnilateral={live.is_unilateral}
+                waiting={waitingIds.includes(s.id)}
                 onToggle={(setId, completed) => {
-                  if (completed) setPickedId(setId)
+                  if (completed) setPickedName(setName(s))
                   else onToggleSet(setId, false)
                 }} />
             </div>
@@ -424,13 +470,13 @@ export function LivePanel({
           ariaLabel="Gewicht eingeben"
           enterHint={reps === null ? 'next' : 'done'}
           onEnter={reps === null ? () => repsField.current?.open() : undefined}
-          onDraft={setDraftWeight} onChange={setWeight} />
+          onDraft={setDraftWeight} onChange={(value) => dial({ weight: value, reps })} />
         <Stepper ref={repsField} label="Wdh." value={reps} step={1} decimals={0} min={1}
           max={MAX_REPS} refusedHint={REPS_HINT}
           ariaLabel="Wiederholungen eingeben"
           enterHint={weight === null ? 'next' : 'done'}
           onEnter={weight === null ? () => kgField.current?.open() : undefined}
-          onDraft={setDraftReps} onChange={setReps} />
+          onDraft={setDraftReps} onChange={(value) => dial({ weight, reps: value })} />
       </div>
 
       {/* The rest gets a band of its own above the button (D8, variant B):
@@ -475,25 +521,30 @@ export function LivePanel({
 
       {/* The button stays present and pressable for the whole countdown, and
           its name stays "Satz geschafft": the band charges underneath it. */}
-      {/* Disabled for the length of the round trip: a sweaty double-tap on a
-          64px thumb target is normal use, and the second press must not race
-          the first one's answer. It keyed on the NEXT set's id, which is null
-          the moment the last set is optimistically done -- so the second tap
-          on an exercise's last set went down the append path and logged a set
-          nobody did. Any set write in flight holds it now. No visual disabled
-          treatment: the window is a few hundred ms, and styling a flash would
-          be noise. */}
+      {/* A sweaty double-tap on a 64px thumb target is normal use: the second
+          press lands on the NEXT set, up the moment the first is drawn done
+          -- or, after an exercise's last set, down the append path, a set
+          nobody did. So a second tap inside CONFIRM_GUARD_MS is dropped. It
+          was disabled for the round trip instead, and offline the round trip
+          never ended: no set could be logged at all (G-138). No visual
+          treatment: the window is shorter than a look. */}
       {/* While a number is missing the button asks for it rather than
           logging: it opens the entry, keypad up, and says which number it
           wants -- a draft being typed counts, so the label has moved on by
           the time the thumb does. A tap cannot log a set without both. */}
       <button type="button"
         className={`go${rest.running ? ' is-resting' : ''}${ringing ? ' is-ready' : ''}`}
-        id="set-confirm" disabled={confirmBusy}
+        id="set-confirm"
         onClick={() => {
           if (weight === null) kgField.current?.open()
           else if (reps === null) repsField.current?.open()
-          else onConfirm(weight, reps, nextSet?.id ?? null)
+          else {
+            const now = Date.now()
+            if (now - lastConfirm.current < CONFIRM_GUARD_MS) return
+            lastConfirm.current = now
+            clearDraft(sessionId)
+            onConfirm(weight, reps, nextSet?.id ?? null)
+          }
         }}>
         <span className="go__lbl">
           {weight === null && draftWeight === null

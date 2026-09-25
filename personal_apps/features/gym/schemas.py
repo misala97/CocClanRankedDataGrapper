@@ -263,6 +263,10 @@ class LiveSet(_Model):
     # `deload_applied` is derived from -- the session's is_deload flag is not,
     # because a session flagged after a set was logged keeps its full weights.
     base_weight: float | None
+    # The live screen's own name for a set it added (SessionSet.client_key):
+    # how its outbox finds the real set behind the one it drew (B6). None on
+    # every other set.
+    key: str | None
 
 
 class LiveExercise(_Model):
@@ -288,6 +292,9 @@ class LiveExercise(_Model):
     #: the list's -- the mark under it says "deine" or "Liste".
     rest_setting_mine: bool
     increment: float
+    #: Where a blank kg stepper's "+" lands for this row (live_floor, when it
+    #: is live): the screen that moves on by itself offline needs it (B6).
+    floor: float
     notes: str | None
     # A boolean flag ("this hurt"), not free text -- NOT NULL with a False
     # default, so never None. Typed str here first and the endpoint rejected

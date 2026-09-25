@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import {
-  deleteSet, reorderExercises, setExerciseMeta, setRest, setRoutinePlan, shiftRest, skipRest,
-  toggleSet, toggleSkip, updateSet,
+  addSet, deleteSet, relive, reorderExercises, setExerciseMeta, setRest, setRoutinePlan,
+  setSessionMeta, shiftRest, skipRest, toggleSet, toggleSkip, updateSet,
 } from './optimistic'
 import { payload } from './types.test-d'
 import type { SessionDetailPayload } from './types'
@@ -113,7 +113,7 @@ describe('optimistic toggleSkip', () => {
     // and the sets still open are not going to be.
     const before = payload.tick_states.length
     const open = live.sets.filter((s) => !s.completed).length
-    const next = toggleSkip(payload, live.id)
+    const next = toggleSkip(payload, live.id, true)
     expect(next.visible_exercises.find((se) => se.id === live.id)!.skipped).toBe(true)
     expect(next.tick_states.length).toBe(before - open)
     expect(next.sets_done).toBe(payload.sets_done)
@@ -122,7 +122,7 @@ describe('optimistic toggleSkip', () => {
 
   it('puts them back when un-skipped', () => {
     const skipped = payload.visible_exercises.find((se) => se.skipped)!
-    const next = toggleSkip(payload, skipped.id)
+    const next = toggleSkip(payload, skipped.id, false)
     expect(next.tick_states.length)
       .toBe(payload.tick_states.length + skipped.sets.length)
   })
@@ -152,7 +152,7 @@ describe('optimistic retally', () => {
           ? { ...se, sets: se.sets.map((s) => (s.id === doneSet.id ? { ...s, reps: 0 } : s)) }
           : se),
     }
-    const next = toggleSkip(toggleSkip(zero, live.id), live.id)
+    const next = toggleSkip(toggleSkip(zero, live.id, true), live.id, false)
     expect(next.sets_done).toBe(payload.sets_done - 1)
     expect(next.has_completed_set).toBe(payload.sets_done - 1 > 0)
   })
@@ -181,10 +181,166 @@ describe('what deliberately has no optimistic path', () => {
     // Reordering is IN the list on purpose: the row order is the user's
     // explicit intent, so it is honest -- reorderExercises leaves live_id
     // untouched and the server's answer still replaces it wholesale.
+    // `relive` is that rule, for the one screen whose answer is not coming
+    // (B6, offline) -- the outbox applies it only then.
     const module = await import('./optimistic')
     expect(Object.keys(module).sort()).toEqual(
-      ['deleteSet', 'reorderExercises', 'setExerciseMeta', 'setRest', 'setRoutinePlan', 'shiftRest',
-        'skipRest', 'toggleSet', 'toggleSkip', 'updateSet'])
+      ['addSet', 'deleteSet', 'relive', 'reorderExercises', 'setExerciseMeta', 'setRest',
+        'setRoutinePlan', 'setSessionMeta', 'shiftRest', 'skipRest', 'toggleSet', 'toggleSkip',
+        'updateSet'])
+  })
+})
+
+// B6: the outbox draws every write until it lands -- offline, for as long as
+// that takes -- so each guess has to be what the server would answer.
+const AT = Date.UTC(2026, 0, 5, 10, 0, 0) // long past: its rest is over
+const naive = (ms: number) => new Date(ms).toISOString().replace('Z', '')
+
+describe('the rest a logged set starts (G-072)', () => {
+  it('runs from the tap, as long as the row\'s rest', () => {
+    const next = toggleSet(payload, openSet.id, true, 60, 8, AT)
+    expect(next.session.rest_ends_at).toBe(naive(AT + live.rest_setting! * 1000))
+    expect(next.session.resting_set_id).toBe(openSet.id)
+    expect(next.rest_total_seconds).toBe(live.rest_setting)
+  })
+
+  it('says it is over when the tap was longer ago than the rest', () => {
+    expect(toggleSet(payload, openSet.id, true, 60, 8, AT).resting).toBe(false)
+    expect(toggleSet(payload, openSet.id, true, 60, 8, Date.now()).resting).toBe(true)
+  })
+
+  it('takes this workout\'s own rest over the setting', () => {
+    const own = withLive({ rest_seconds: 45 })
+    expect(toggleSet(own, openSet.id, true, 60, 8, AT).session.rest_ends_at)
+      .toBe(naive(AT + 45_000))
+  })
+
+  it('ends the rest running when the row has none, as _schedule_rest does', () => {
+    const resting = toggleSet(payload, openSet.id, true, 60, 8, AT)
+    const none = {
+      ...resting,
+      visible_exercises: resting.visible_exercises.map((se) =>
+        (se.id === live.id ? { ...se, rest_seconds: null, rest_setting: null } : se)),
+    }
+    const next = toggleSet(none, live.sets[2]!.id, true, 60, 8, AT)
+    expect(next.session.rest_ends_at).toBeNull()
+    expect(next.session.resting_set_id).toBeNull()
+  })
+
+  it('keeps the rest of a set logged again', () => {
+    const resting = toggleSet(payload, openSet.id, true, 60, 8, AT)
+    expect(toggleSet(resting, doneSet.id, true, 60, 8, AT + 60_000).session)
+      .toEqual(resting.session)
+  })
+
+  it('ends with its set reopened or deleted, and only then', () => {
+    const resting = toggleSet(payload, openSet.id, true, 60, 8, AT)
+    expect(toggleSet(resting, openSet.id, false, 60, 8).session.rest_ends_at).toBeNull()
+    expect(deleteSet(resting, openSet.id).session.rest_ends_at).toBeNull()
+    expect(toggleSet(resting, doneSet.id, false, 60, 8).session.rest_ends_at)
+      .toBe(resting.session.rest_ends_at)
+  })
+})
+
+function withLive(over: Partial<(typeof payload.visible_exercises)[number]>): SessionDetailPayload {
+  return {
+    ...payload,
+    visible_exercises: payload.visible_exercises.map((se) =>
+      (se.id === live.id ? { ...se, ...over } : se)),
+  }
+}
+
+describe('a record reopened or deleted', () => {
+  it('is no record any more, as the server will answer', () => {
+    expect(payload.record_set_ids).toContain(doneSet.id)
+    for (const next of [
+      toggleSet(payload, doneSet.id, false, 60, 8), deleteSet(payload, doneSet.id)]) {
+      expect(next.record_set_ids).not.toContain(doneSet.id)
+      expect(next.record_details[String(doneSet.id)]).toBeUndefined()
+    }
+  })
+})
+
+describe('optimistic addSet', () => {
+  it('appends a done set under its temporary id and key, counted, with its rest', () => {
+    const next = addSet(payload, live.id, 70, 5, 'k-1', -9, AT)
+    const added = next.visible_exercises.find((se) => se.id === live.id)!.sets.at(-1)!
+    expect(added).toEqual({ id: -9, weight: 70, reps: 5, completed: true, base_weight: null, key: 'k-1' })
+    expect(next.sets_done).toBe(payload.sets_done + 1)
+    expect(next.session_volume).toBe(payload.session_volume + 70 * 5 * 2) // one-sided: both sides count
+    expect(next.session.resting_set_id).toBe(-9)
+    expect(next.session.rest_ends_at).toBe(naive(AT + live.rest_setting! * 1000))
+  })
+
+  it('adds nothing when the answer already holds the set -- a copy landed first', () => {
+    const landed = addSet(payload, live.id, 70, 5, 'k-1', 500, AT)
+    expect(addSet(landed, live.id, 70, 5, 'k-1', -9, AT)).toBe(landed)
+  })
+})
+
+describe('optimistic toggleSkip, stated', () => {
+  it('is the same applied twice as once: the outbox may do both', () => {
+    const once = toggleSkip(payload, live.id, true)
+    expect(toggleSkip(once, live.id, true)).toEqual(once)
+  })
+})
+
+describe('optimistic setSessionMeta', () => {
+  it('writes the fields sent and leaves the rest, a blank note as none', () => {
+    const noted = setSessionMeta(payload, { notes: '  Knie  ' })
+    expect(noted.session.notes).toBe('Knie')
+    expect(noted.session.bodyweight_kg).toBe(payload.session.bodyweight_kg)
+    const weighed = setSessionMeta(noted, { bodyweightKg: 81.5 })
+    expect(weighed.session).toMatchObject({ notes: 'Knie', bodyweight_kg: 81.5 })
+    expect(setSessionMeta(weighed, { notes: ' ', bodyweightKg: null }).session)
+      .toMatchObject({ notes: null, bodyweight_kg: null })
+  })
+})
+
+describe('relive: the live rule, for a screen whose answer is not coming', () => {
+  // Both rows counting: exercise 10 live, 11 after it.
+  const two: SessionDetailPayload = {
+    ...payload,
+    visible_exercises: payload.visible_exercises.map((se) => ({ ...se, skipped: false })),
+  }
+  const other = two.visible_exercises.find((se) => se.id !== live.id)!
+  const logAll = (p: SessionDetailPayload, seId: number) => p.visible_exercises
+    .find((se) => se.id === seId)!.sets.filter((s) => !s.completed)
+    .reduce((acc, s) => toggleSet(acc, s.id, true, 60, 8, AT), p)
+
+  it('leaves a screen whose live row still has open sets alone', () => {
+    expect(relive(two)).toBe(two)
+  })
+
+  it('moves on once the live row is logged, with that row\'s step and floor', () => {
+    const next = relive(logAll(two, live.id))
+    expect(next.live_id).toBe(other.id)
+    expect(next.live_index).toBe(two.visible_exercises.indexOf(other) + 1)
+    expect(next.live_increment).toBe(other.increment)
+    expect(next.live_floor).toBe(other.floor)
+    expect(next.tick_states).toContain('now')
+  })
+
+  it('passes over a skipped row', () => {
+    const skipped = toggleSkip(logAll(two, live.id), other.id, true)
+    expect(relive(skipped).live_id).toBe(live.id)
+  })
+
+  it('keeps the last counting row with everything logged, and none with everything skipped', () => {
+    const done = logAll(logAll(two, live.id), other.id)
+    expect(relive(done).live_id).toBe(two.visible_exercises.at(-1)!.id)
+    const none = two.visible_exercises.reduce((acc, se) => toggleSkip(acc, se.id, true), two)
+    expect(relive(none)).toMatchObject({ live_id: null, live_index: 0, live_floor: null })
+  })
+
+  it('keeps a started row live in a shared workout, the first rule aside', () => {
+    // The partner's order put 11 first; the lifter had started 10.
+    const shared: SessionDetailPayload = {
+      ...two, session_is_shared: true,
+      visible_exercises: [...two.visible_exercises].reverse(),
+    }
+    expect(relive(shared).live_id).toBe(live.id)
+    expect(relive({ ...shared, session_is_shared: false }).live_id).toBe(other.id)
   })
 })
 

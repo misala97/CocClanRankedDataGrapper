@@ -1762,6 +1762,31 @@ def test_skipping_propagates_through_the_route(joined_pair):
         assert all(se.skipped for se in follower_session.exercises)
 
 
+def test_a_copy_of_the_leaders_skip_does_not_skip_the_partner_again(joined_pair):
+    """The leader's outbox sends a write again when its answer was lost (B6).
+    The partner took the exercise back up in between; the copy changes
+    nothing on the leader's side, so nothing travels -- it used to skip the
+    partner's exercise again."""
+    from extensions import db
+    from models import WorkoutSession
+
+    with flask_app.app_context():
+        row_id = db.session.get(WorkoutSession, joined_pair['session']).exercises[0].id
+    leader = _client_for(joined_pair['leader'])
+    leader.post(f'/gym/session-exercise/{row_id}/skip', data={'skipped': '1'})
+    with flask_app.app_context():
+        follower_row_id = db.session.get(
+            WorkoutSession, joined_pair['follower_session']).exercises[0].id
+    _client_for(joined_pair['partner']).post(
+        f'/gym/session-exercise/{follower_row_id}/skip', data={'skipped': '0'})
+
+    leader.post(f'/gym/session-exercise/{row_id}/skip', data={'skipped': '1'})
+
+    with flask_app.app_context():
+        follower_session = db.session.get(WorkoutSession, joined_pair['follower_session'])
+        assert not any(se.skipped for se in follower_session.exercises)
+
+
 def test_logging_a_set_does_not_bump_the_followers_version(joined_pair):
     """Only structure travels. If logging bumped the version, the partner's
     page would re-render every time the leader ticked a set."""

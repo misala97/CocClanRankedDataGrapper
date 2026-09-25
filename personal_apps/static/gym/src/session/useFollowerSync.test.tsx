@@ -3,7 +3,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import type { ReactNode } from 'react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { useFollowerSync } from './useFollowerSync'
-import { sessionKey } from './useSessionMutation'
+import { sessionKey } from './api'
 import { useAnnouncer, usePartnerNotice } from './stores'
 
 /* The contract this pins is the one the React port lost: the follower's poll

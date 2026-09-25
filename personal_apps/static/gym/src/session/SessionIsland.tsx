@@ -1,15 +1,18 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import {
   QueryClient, QueryClientProvider, useQuery, useQueryClient,
 } from '@tanstack/react-query'
-import type { RoutinePlan, SessionDetailPayload } from './types'
-import { api, fetchSession, MutationFailed, type SessionMetaPatch } from './api'
+import type { SessionDetailPayload } from './types'
+import { fetchSession, MutationFailed, sessionKey } from './api'
 import { postNavigate } from '../api'
 import { enablePush, heartbeatSubscription } from '../push'
 import { useUndo } from '../undo'
-import { sessionKey, useSessionMutation } from './useSessionMutation'
 import * as optimistic from './optimistic'
-import { failureCheckpoint, usePush, useSaveState, useSheets } from './stores'
+import { setName } from './setName'
+import { Outbox, exclusively, localShelf, newId, writeHold } from './outbox'
+import { writeSpecs, type WriteArgs, type WriteKind } from './writes'
+import { clearDraft, sweepDrafts } from './drafts'
+import { failureCheckpoint, useOutbox, usePush, useSaveState, useSheets } from './stores'
 import { useWakeLock } from './useWakeLock'
 import { useFollowerSync } from './useFollowerSync'
 import { SessionPage, type SessionActions } from './SessionPage'
@@ -17,26 +20,33 @@ import type { ExerciseSheetActions } from './components/ExerciseSheet'
 
 const pushSupported = 'serviceWorker' in navigator && 'PushManager' in window
 
-/** Resolves once no write to this workout is in flight or queued behind one.
- *  Mutations share a scope per session (useSessionMutation), so a queued write
- *  counts as pending until its own request has answered. */
-export function writesSettled(client: QueryClient, key: readonly unknown[]): Promise<void> {
-  return new Promise((resolve) => {
-    const idle = () => client.isMutating({ mutationKey: key }) === 0
-    if (idle()) { resolve(); return }
-    const unsubscribe = client.getMutationCache().subscribe(() => {
-      if (idle()) { unsubscribe(); resolve() }
-    })
-  })
+/** A second add for the same exercise this soon is the first tap bouncing,
+ *  not a set: round 4's band guard, for "Satz geschafft" and the sheet's add
+ *  row alike. The client key makes a resend safe; this stops a double tap. */
+export const APPEND_GUARD_MS = 600
+
+/** Hidden this long, the page asks the server again on its way back: the
+ *  three-hour rule may have ended the workout meanwhile (every GET settles
+ *  it), and a screen left open overnight should say so, not take sets. */
+export const STALE_AFTER_HIDDEN_MS = 30 * 60 * 1000
+
+let lastTempId = 0
+
+/** A set's id until the server names it: negative, so never a real one, and
+ *  from the clock, so a new page never repeats one an old page left in the
+ *  outbox. */
+function tempId(): number {
+  lastTempId = Math.min(lastTempId - 1, -Date.now())
+  return lastTempId
 }
 
 /**
- * Wires the page's actions to the mutation layer.
+ * Wires the page's actions to the outbox.
  *
- * Everything the screen writes goes through useSessionMutation, so the
- * optimistic path, the rollback, the save counter and the error banner are
- * defined once rather than per call site -- which is the arrangement the old
- * screen never had and paid for in stale-state bugs.
+ * Everything the screen writes goes through one queue (./outbox.ts), so the
+ * optimistic path, the order, the retry and the banner are defined once
+ * rather than per call site -- and a set logged with no signal stays logged,
+ * kept on the phone until it lands (B6, D6-A).
  */
 function SessionIslandInner({ initial }: { initial: SessionDetailPayload }) {
   const sessionId = initial.session.id
@@ -50,23 +60,89 @@ function SessionIslandInner({ initial }: { initial: SessionDetailPayload }) {
   // still be live and accepting taps into a finished workout: the entry
   // reloads it, as every gym page's does (../fresh.ts).
 
+  const [outbox] = useState(() => {
+    sweepDrafts(sessionId)
+    const saves = useSaveState.getState()
+    return new Outbox(initial, {
+      specs: writeSpecs(sessionId),
+      shelf: localShelf(sessionId),
+      show: (payload) => { client.setQueryData(sessionKey(sessionId), payload) },
+      status: (status) => { useOutbox.getState().publish(status) },
+      hold: (oldestAt) => { writeHold(sessionId, oldestAt) },
+      begin: saves.begin,
+      end: saves.end,
+      succeed: saves.succeed,
+      fail: saves.fail,
+      fetchFresh: () => fetchSession(sessionId),
+      finished: () => { window.location.reload() },
+      gone: () => { window.location.assign('/gym') },
+      reload: () => { window.location.reload() },
+      // Everything held back is in: ask again, with the hold cookie gone.
+      // Past the three-hour rule by now, the GET ends the workout at its
+      // real last set -- the replayed ones included -- and the effect below
+      // shows its debrief.
+      drained: () => { void client.invalidateQueries({ queryKey: sessionKey(sessionId) }) },
+      relive: optimistic.relive,
+      exclusive: exclusively(`gym-outbox-${sessionId}`),
+      now: () => Date.now(),
+      newId,
+    })
+  })
+
   const { data, error } = useQuery({
     queryKey: sessionKey(sessionId),
-    queryFn: () => fetchSession(sessionId),
-    initialData: initial,
-    // The server is asked only when something changed it. Every mutation
+    // Through the outbox: an answer to a write that lands while this is on
+    // its way is newer than it, and the writes not answered yet go on top.
+    queryFn: async () => {
+      const stamp = outbox.stamp()
+      return outbox.receive(await fetchSession(sessionId), stamp)
+    },
+    initialData: () => outbox.display(),
+    // The server is asked only when something changed it. Every write
     // returns the fresh payload, so polling for its own writes would be
     // asking a question it already has the answer to.
     staleTime: Infinity,
     refetchOnWindowFocus: false,
   })
 
+  // Sends what the phone kept -- from before a reload, from yesterday --
+  // and tries again the moment there may be a way through: the connection
+  // back, the app back in front. A phone with dead wifi never fires
+  // `online`; the backoff and the next tap cover it.
+  useEffect(() => {
+    outbox.start()
+    let hiddenAt: number | null = null
+    const kick = () => { outbox.kick() }
+    const onVisibility = () => {
+      if (document.visibilityState === 'hidden') { hiddenAt = Date.now(); return }
+      outbox.kick()
+      const away = hiddenAt === null ? 0 : Date.now() - hiddenAt
+      hiddenAt = null
+      // With writes held, the drain asks by itself once they are in.
+      if (away >= STALE_AFTER_HIDDEN_MS && useOutbox.getState().count === 0) {
+        void client.invalidateQueries({ queryKey: sessionKey(sessionId) })
+      }
+    }
+    window.addEventListener('online', kick)
+    window.addEventListener('pageshow', kick)
+    document.addEventListener('visibilitychange', onVisibility)
+    return () => {
+      outbox.stop()
+      window.removeEventListener('online', kick)
+      window.removeEventListener('pageshow', kick)
+      document.removeEventListener('visibilitychange', onVisibility)
+    }
+  }, [outbox, client, sessionId])
+
   // Finished under this screen -- on the other phone, or by the three-hour
   // rule: a refetch says so, and the page for the workout now is its
   // debrief. The screen kept taking sets for it (B4 review).
   useEffect(() => {
-    if (data.session.finished_at !== null) window.location.reload()
-  }, [data.session.finished_at])
+    if (data.session.finished_at !== null) {
+      clearDraft(sessionId)
+      window.location.reload()
+    }
+  }, [data.session.finished_at, sessionId])
   // Thrown away under this screen -- on the other phone, or by the three-hour
   // rule with nothing in it: there is no page for it any more. A refetch
   // read that as a lost connection (B4 re-review).
@@ -100,148 +176,83 @@ function SessionIslandInner({ initial }: { initial: SessionDetailPayload }) {
       .catch(() => setSubscribed(false))
   }, [setSubscribed])
 
-  // A set's writes are named by the set (WriteOptions.key): its delete
-  // answers its lost tick and its lost numbers, whichever hook sent them --
-  // and so does the delete sent past the queue (sendNow).
-  const toggleSet = useSessionMutation(sessionId,
-    (setId: number, completed: boolean, weight: number | null, reps: number | null) =>
-      api.toggleSet(setId, completed, weight, reps),
-    optimistic.toggleSet, { key: (setId) => `set-${setId}:done` })
-  // Every add is new work: a later add to the same row does not answer a
-  // lost one, and a lost one is not sent again by itself.
-  const addSet = useSessionMutation(sessionId,
-    (seId: number, weight: number, reps: number) => api.addSet(seId, weight, reps),
-    undefined, { key: () => null, idempotent: false })
-  const updateSet = useSessionMutation(sessionId,
-    (setId: number, weight: number, reps: number) => api.updateSet(setId, weight, reps),
-    optimistic.updateSet, { key: (setId) => `set-${setId}:numbers` })
-  const deleteSet = useSessionMutation(sessionId,
-    (setId: number) => api.deleteSet(setId), optimistic.deleteSet,
-    { key: (setId) => `set-${setId}` })
-  // A toggle: sent twice, the skip is undone.
-  const toggleSkip = useSessionMutation(sessionId,
-    (seId: number) => api.toggleSkip(seId), optimistic.toggleSkip, { idempotent: false })
-  const exerciseMeta = useSessionMutation(sessionId,
-    (seId: number, meta: { pain: boolean; notes: string }) =>
-      api.setExerciseMeta(seId, meta),
-    optimistic.setExerciseMeta)
-
-  // Reordering is optimistic for the row order alone -- that IS the user's
-  // intent -- while live_id waits for the server like every other live-moving
-  // write below.
-  // The newest order answers an older one that was lost: resent, that one
-  // would put back what the lifter had already changed.
-  const reorder = useSessionMutation(sessionId,
-    (order: number[]) => api.reorder(sessionId, order),
-    optimistic.reorderExercises, { key: () => 'order' })
-
-  // No optimistic entry: each of these moves which exercise is live, and that
-  // decision belongs to the server.
-  // Adding and swapping are new work each time, like an added set.
-  const addExercise = useSessionMutation(sessionId,
-    (exerciseId: number) => api.addExercise(sessionId, exerciseId),
-    undefined, { idempotent: false })
-  const removeExercise = useSessionMutation(sessionId,
-    (seId: number) => api.removeExercise(seId))
-  const replaceExercise = useSessionMutation(sessionId,
-    (seId: number, exerciseId: number) => api.replaceExercise(seId, exerciseId),
-    undefined, { idempotent: false })
-
-  const setRest = useSessionMutation(sessionId,
-    (seId: number, seconds: number) => api.setRest(seId, seconds), optimistic.setRest)
-  // The whole plan each time, so its newest answers an older failure.
-  const setRoutinePlan = useSessionMutation(sessionId,
-    (seId: number, plan: RoutinePlan) => api.setRoutinePlan(seId, plan),
-    optimistic.setRoutinePlan, { key: (seId) => `routine-plan-${seId}` })
-  // By field: the bodyweight saved later answers the one that was lost.
-  const sessionMeta = useSessionMutation(sessionId,
-    (meta: SessionMetaPatch) => api.setSessionMeta(sessionId, meta),
-    undefined, { key: (meta) => Object.keys(meta).sort().join(',') })
-  // The rest is now: a lost skip or shift is reported, never sent again.
-  const skipRest = useSessionMutation(sessionId, () => api.skipRest(sessionId),
-    optimistic.skipRest, { key: () => 'rest', ephemeral: true })
-  const shiftRest = useSessionMutation(sessionId,
-    (seconds: number) => api.shiftRest(sessionId, seconds), optimistic.shiftRest,
-    { key: () => 'rest', ephemeral: true })
-  const toggleDeload = useSessionMutation(sessionId,
-    (on: boolean, pct: number) => api.toggleDeload(sessionId, on, pct),
-    undefined, { key: () => 'deload' })
+  /** Queues a write. The promise settles once the server has answered it --
+   *  never for a lost connection, which only means later -- and rejects when
+   *  it was refused or could not be kept, which the banner already says. */
+  const write = <K extends WriteKind>(kind: K, ...args: WriteArgs[K]) =>
+    outbox.enqueue(kind, args)
+  const send = <K extends WriteKind>(kind: K, ...args: WriteArgs[K]) => {
+    write(kind, ...args).catch(() => {})
+  }
 
   const close = useSheets((s) => s.close)
   const openSheet = useSheets((s) => s.open)
-  const lock = useSaveState((s) => s.lock)
-  const unlock = useSaveState((s) => s.unlock)
   const offerUndo = useUndo((s) => s.offer)
 
   // Un-logging a chip waits out the undo window before it is sent, like every
   // other destructive tap here -- a sweaty thumb on a done chip used to undo
   // the set on the spot. Until then the screen shows it open, drawn over the
-  // server's payload with the same guess the write itself would make.
-  const [pendingUnlog, setPendingUnlog] = useState<number | null>(null)
+  // payload with the same guess the write itself makes.
+  // By its name, not its id: a set just added changes id when it lands.
+  const [pendingUnlog, setPendingUnlog] = useState<string | null>(null)
   const unlogged = pendingUnlog === null
     ? undefined
-    : data.visible_exercises.flatMap((se) => se.sets).find((s) => s.id === pendingUnlog)
+    : data.visible_exercises.flatMap((se) => se.sets).find((s) => setName(s) === pendingUnlog)
   const view = unlogged === undefined
     ? data
     : optimistic.toggleSet(data, unlogged.id, false, unlogged.weight, unlogged.reps)
 
   const [finishing, setFinishing] = useState(false)
+  // An add has no optimistic path, so its row is the only place that can say
+  // the tap landed.
+  const [addingExerciseId, setAddingExerciseId] = useState<number | null>(null)
 
   const live = view.visible_exercises.find((se) => se.id === view.live_id) ?? null
 
   /** Leave for `url` once every write has landed. Finishing with a set still
    *  on its way used to navigate away from it: the form post won the race and
-   *  the set never reached the workout. A pending undo is sent first, and so
-   *  is every lost write that mends by itself -- finishing past one filed the
-   *  workout without it (B4 review). A write that FAILS while waiting, one
-   *  only the lifter may send again, or one only a fresh page mends, keeps
-   *  the lifter here, with the banner.
+   *  the set never reached the workout. A pending undo goes into the queue
+   *  first, and so does every lost write that mends by itself -- finishing
+   *  past one filed the workout without it (B4 review). Writes that cannot
+   *  get through keep the lifter here, and the status line says why; so does
+   *  a write that fails on the way, one only the lifter may send again, or
+   *  one only a fresh page mends.
    *
-   *  `discarding`: the workout is thrown away, and whatever was lost goes
-   *  with it. Sent again first, a lost set landed and the discard refused a
+   *  `discarding`: the workout is thrown away, and whatever was not sent goes
+   *  with it. Sent first, a lost set landed and the discard refused a
    *  workout that now had one (B4 re-review). */
-  const leaveAfterWrites = (url: string, discarding = false) => {
+  const leaveAfterWrites = async (url: string, discarding = false) => {
     setFinishing(true)
-    const failedSince = failureCheckpoint()
-    if (discarding) useSaveState.getState().dismissErrors()
-    else useSaveState.getState().resendAll()
-    useUndo.getState().commitNow()
-    void writesSettled(client, sessionKey(sessionId)).then(() => {
-      if (failedSince() || useSaveState.getState().errors.some((e) => e.remedy !== 'auto')) {
-        setFinishing(false)
-        close()
-        return
-      }
+    if (discarding) {
+      useSaveState.getState().dismissErrors()
+      useUndo.getState().commitNow()
+      await outbox.clear()
+      clearDraft(sessionId)
       postNavigate(url)
-    })
+      return
+    }
+    const failedSince = failureCheckpoint()
+    useSaveState.getState().resendAll()
+    useUndo.getState().commitNow()
+    const drained = await outbox.flush()
+    if (!drained || failedSince()
+      || useSaveState.getState().errors.some((e) => e.remedy !== 'auto')) {
+      setFinishing(false)
+      if (!drained) useOutbox.getState().refuseFinish()
+      close()
+      return
+    }
+    clearDraft(sessionId)
+    postNavigate(url)
   }
 
-  /** A write the page may not stay alive to see answered -- an undo window
-   *  flushed by leaving it (G-147). Sent at once with keepalive: queued
-   *  behind a write still in flight -- this workout's writes take turns --
-   *  it never started before the page was gone (B4 review). Its success
-   *  answers the failures its set had, as the queued write's would; if it
-   *  fails, the queued write is the fallback, banner and all. */
-  const sendNow = (keepalive: boolean,
-    direct: () => Promise<unknown>, queued: () => Promise<unknown>, answers: string) => (keepalive
-    ? direct()
-      .then(() => {
-        useSaveState.getState().succeed(answers)
-        void client.invalidateQueries({ queryKey: sessionKey(sessionId) })
-      })
-      .catch(() => queued())
-    : queued())
-
+  // Per exercise: when its last add went out (APPEND_GUARD_MS).
+  const lastAppend = useRef(new Map<number, number>())
   const appendSet = (seId: number, weight: number, reps: number) => {
-    // add cannot be made idempotent -- a second POST creates a second set --
-    // so the lock is what protects it from a double tap. One key per
-    // exercise, shared by the confirm button and the sheet's add row.
-    const formId = `add-${seId}`
-    if (useSaveState.getState().isLocked(formId)) return
-    lock(formId)
-    addSet.mutateAsync([seId, weight, reps])
-      .catch(() => {}) // the banner already says so
-      .finally(() => unlock(formId))
+    const now = Date.now()
+    if (now - (lastAppend.current.get(seId) ?? -Infinity) < APPEND_GUARD_MS) return
+    lastAppend.current.set(seId, now)
+    send('addSet', seId, weight, reps, newId(), tempId())
   }
 
   const actions: SessionActions = {
@@ -254,81 +265,74 @@ function SessionIslandInner({ initial }: { initial: SessionDetailPayload }) {
         appendSet(live.id, weight, reps)
         return
       }
-      if (setId === pendingUnlog) {
-        // Re-logging the chip whose un-log is still in its undo window: send
+      if (unlogged !== undefined && unlogged.id === setId) {
+        // Re-logging the chip whose un-log is still in its undo window: queue
         // the un-log now, so the numbers on the steppers are what lands.
         useUndo.getState().commitNow()
         setPendingUnlog(null)
       }
-      toggleSet.mutate([setId, true, weight, reps])
+      send('toggleSet', setId, true, weight, reps)
     },
     onToggleSet: (setId, completed) => {
       const owner = data.visible_exercises.find((se) => se.sets.some((s) => s.id === setId))
       const target = owner?.sets.find((s) => s.id === setId)
       if (owner === undefined || target === undefined) return
       if (completed) {
-        toggleSet.mutate([setId, true, target.weight, target.reps])
+        send('toggleSet', setId, true, target.weight, target.reps)
         return
       }
-      setPendingUnlog(setId)
+      const name = setName(target)
+      setPendingUnlog(name)
       offerUndo({
         label: `Satz ${owner.sets.indexOf(target) + 1} wieder offen.`,
         undo: () => setPendingUnlog(null),
-        commit: (keepalive) => {
-          sendNow(keepalive,
-            () => api.toggleSet(setId, false, target.weight, target.reps, true),
-            () => toggleSet.mutateAsync([setId, false, target.weight, target.reps]),
-            `set-${setId}:done`)
-            .catch(() => {}) // rolled back and bannered by the mutation layer
-            // Cleared once the answer is in the payload, not before -- the
-            // chip would flash back to done for the length of the request.
-            .finally(() => setPendingUnlog((id) => (id === setId ? null : id)))
+        // On the phone the moment it is queued -- a flush on the way out of
+        // the page included -- and drawn open by the outbox from then on.
+        // A drawn id the server has named since is sent as the real one.
+        commit: () => {
+          send('toggleSet', setId, false, target.weight, target.reps)
+          setPendingUnlog((pending) => (pending === name ? null : pending))
         },
       })
     },
     // A POST that redirects to the debrief. This was `window.location.href`
     // -- a GET to a POST-only route, a 405 for everyone -- until 2026-08-11.
-    onFinish: () => leaveAfterWrites(`/gym/session/${sessionId}/finish`),
-    onDiscard: () => leaveAfterWrites(`/gym/session/${sessionId}/discard`, true),
-    onReorder: (order) => reorder.mutate([order]),
+    onFinish: () => { void leaveAfterWrites(`/gym/session/${sessionId}/finish`) },
+    onDiscard: () => { void leaveAfterWrites(`/gym/session/${sessionId}/discard`, true) },
+    onSendNow: () => { outbox.kick() },
+    onReload: () => { window.location.reload() },
+    onReorder: (order) => send('reorder', order),
     // Saved per field as it is left, so the sheet stays open: leaving the
     // bodyweight for the note must not close it under the lifter.
-    onSessionMetaSave: (meta) => { sessionMeta.mutate([meta]) },
-    onSkipRest: () => { skipRest.mutate([]); close() },
-    // Each tap is its own write, queued behind the last in the session's
-    // scope, and each moves the countdown on the spot.
-    onShiftRest: (seconds) => { shiftRest.mutate([seconds]) },
+    onSessionMetaSave: (meta) => send('sessionMeta', meta),
+    onSkipRest: () => { send('skipRest'); close() },
+    // Each tap is its own write, and each moves the countdown on the spot.
+    onShiftRest: (seconds) => send('shiftRest', seconds),
     // A navigation, not an in-place write: the invite has its own page.
     // postNavigate carries the csrf_token the hand-built form here forgot,
     // which the blueprint gate has 403'd since it closed.
     onInvite: (partnerId) => postNavigate(
       `/gym/session/${sessionId}/invite`, { partner_id: String(partnerId) }),
     onEnablePush: () => { void enablePush(data.vapid_public_key) },
-    onToggleDeload: (on, pct) => { toggleDeload.mutate([on, pct]); close() },
-    onAddExercise: (exerciseId) => addExercise.mutate([exerciseId]),
+    onToggleDeload: (on, pct) => { send('toggleDeload', on, pct); close() },
+    onAddExercise: (exerciseId) => {
+      setAddingExerciseId(exerciseId)
+      write('addExercise', exerciseId)
+        .catch(() => {})
+        .finally(() => setAddingExerciseId((id) => (id === exerciseId ? null : id)))
+    },
     onSaveTemplate: (name) => postNavigate(
       `/gym/session/${sessionId}/save_as_template`, { template_name: name }),
     exerciseActions: (seId: number): ExerciseSheetActions => ({
-      onRestChange: (seconds) => setRest.mutate([seId, seconds]),
-      // Flushed as the page goes away, it goes out at once (sendNow): queued
-      // behind a write in flight, it never left before the page was gone.
-      onRoutinePlanChange: (plan, leaving) => {
-        sendNow(leaving,
-          () => api.setRoutinePlan(seId, plan, true),
-          () => setRoutinePlan.mutateAsync([seId, plan]),
-          `routine-plan-${seId}`)
-          .catch(() => {}) // rolled back and bannered by the mutation layer
-      },
+      onRestChange: (seconds) => send('setRest', seId, seconds),
+      onRoutinePlanChange: (plan) => send('routinePlan', seId, plan),
       onOpenSettings: () => openSheet(`sheet-settings-${seId}`),
       // No close(): the flag saves on the tap and the note on blur, both
       // while the sheet stays open.
-      onMetaSave: (meta) => exerciseMeta.mutate([seId, meta]),
-      onSetUpdate: (setId, weight, reps) => updateSet.mutate([setId, weight, reps]),
-      // The promise, so the sheet can bring the row back if the write fails.
-      // Flushed as the page goes away (G-147), it goes out at once (sendNow).
-      onSetDelete: (setId, keepalive) => sendNow(keepalive,
-        () => api.deleteSet(setId, true), () => deleteSet.mutateAsync([setId]),
-        `set-${setId}`),
+      onMetaSave: (meta) => send('exerciseMeta', seId, meta),
+      onSetUpdate: (setId, weight, reps) => send('updateSet', setId, weight, reps),
+      // The promise, so the sheet can bring the row back if it is refused.
+      onSetDelete: (setId) => write('deleteSet', setId),
       onAddSet: (weight, reps) => appendSet(seId, weight, reps),
       // In front of the live exercise, which is how the live rule reads a
       // step away from a busy machine (_live_context).
@@ -336,12 +340,17 @@ function SessionIslandInner({ initial }: { initial: SessionDetailPayload }) {
         const order = data.visible_exercises.map((se) => se.id).filter((id) => id !== seId)
         const at = data.live_id === null ? 0 : Math.max(0, order.indexOf(data.live_id))
         order.splice(at, 0, seId)
-        reorder.mutate([order])
+        send('reorder', order)
         close()
       },
-      onToggleSkip: () => { toggleSkip.mutate([seId]); close() },
-      onReplace: (exerciseId) => { replaceExercise.mutate([seId, exerciseId]); close() },
-      onRemove: () => { removeExercise.mutate([seId]); close() },
+      // The state wanted, not a flip: sent twice, a flip undid itself.
+      onToggleSkip: () => {
+        const se = data.visible_exercises.find((row) => row.id === seId)
+        if (se !== undefined) send('toggleSkip', seId, !se.skipped)
+        close()
+      },
+      onReplace: (exerciseId) => { send('replaceExercise', seId, exerciseId); close() },
+      onRemove: () => { send('removeExercise', seId); close() },
       onShowProgress: () => {
         const se = data.visible_exercises.find((row) => row.id === seId)
         if (se) window.location.href = `/gym/exercises/${se.exercise_id}`
@@ -351,20 +360,14 @@ function SessionIslandInner({ initial }: { initial: SessionDetailPayload }) {
 
   return (
     <SessionPage payload={view} actions={actions} pushSupported={pushSupported}
-      confirmBusy={toggleSet.isPending || addSet.isPending}
-      finishing={finishing}
-      // An add has no optimistic path, so the row is the only place that can
-      // say the tap landed. `variables` is the argument tuple of the write
-      // still in flight.
-      busyExerciseId={addExercise.isPending ? addExercise.variables?.[0] ?? null : null} />
+      finishing={finishing} busyExerciseId={addingExerciseId} />
   )
 }
 
 export function SessionIsland({ initial }: { initial: SessionDetailPayload }) {
-  // One client per island. Retries are off: every one of these writes is a
-  // user action with a visible banner and an explicit retry button, and a
-  // silent second attempt would be a second POST to routes that are not all
-  // idempotent.
+  // One client per island. Retries are off: the outbox owns every write and
+  // its retries, and a query that fails says so (a workout gone, a login
+  // lapsed) rather than asking again behind the lifter's back.
   //
   // useState's initialiser, not a bare `new` in the body: that built a fresh
   // client -- and an empty cache -- on every render of this component.

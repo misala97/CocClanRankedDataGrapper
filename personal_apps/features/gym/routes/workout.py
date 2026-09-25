@@ -11,6 +11,7 @@ Moved verbatim from the pre-split routes.py.
 import datetime as dt
 
 from flask import abort, current_app, flash, jsonify, redirect, render_template, request, url_for
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import joinedload, load_only
 
 from extensions import db
@@ -43,8 +44,8 @@ from .helpers import (
     NON_MUSCLE_GROUPS, ONBOARDING_WORKOUTS, RECENT_SESSIONS, WEEKDAY_SHORT, InvalidInput,
     _cancel_pending_push, _debrief_args, _discard_session, _finish_session,
     _get_active_session, _refuse_live_write_if_finished, _refuse_structure_edit_if_finished,
-    _settle_if_abandoned, _to_bodyweight, _to_int, _to_name, _to_note, _to_reps,
-    _to_rest_seconds, _to_weight, _was_discarded,
+    _settle_if_abandoned, _to_bodyweight, _to_client_key, _to_int, _to_name, _to_note,
+    _to_reps, _to_rest_seconds, _to_weight, _was_discarded, _write_time,
     _username, _wants_json,
 )
 from .history import counts, done_sets, load_performed, performed_from_session, _session_rest_entries
@@ -160,7 +161,11 @@ def _schedule_rest(session_set):
     # Replace any still-pending push for this session rather than stacking
     # multiple -- a new completed set means a new (possibly shorter) rest period.
     _cancel_pending_push(session_)
-    db.session.add(PendingPush(session_id=session_.id, fire_at=rest_ends_at))
+    # A set the phone held while offline arrives with its own stamp, and its
+    # rest may be over by then: the notifier sends a push due in the past at
+    # once, for a rest nobody is waiting out (B6).
+    if rest_ends_at > dt.datetime.utcnow():
+        db.session.add(PendingPush(session_id=session_.id, fire_at=rest_ends_at))
 
 
 def _rest_total_seconds(session_, setups):
@@ -806,6 +811,9 @@ def _session_payload(session_):
             # Resolved, never raw: the fallback lives in stats and a second
             # copy would drift the moment DEFAULT_INCREMENT moves.
             'increment': stats.resolve_increment(setup.weight_increment, se.exercise.is_unilateral),
+            # live_floor for this row: offline, the screen moves on to the
+            # next exercise by itself (B6) and needs its floor to do it.
+            'floor': _weight_floor(setup, se.exercise),
             'notes': se.notes,
             'pain': se.pain,
             'picture': art.picture_url(se.exercise.library_key),
@@ -816,6 +824,7 @@ def _session_payload(session_):
             'sets': [{
                 'id': s.id, 'weight': s.weight, 'reps': s.reps,
                 'completed': s.completed, 'base_weight': s.base_weight,
+                'key': s.client_key,
             } for s in se.sets],
         }
 
@@ -1418,9 +1427,14 @@ def gym_add_set(session_exercise_id):
 
     weight = _to_weight(request.form.get('weight', ''))
     reps = _to_reps(request.form.get('reps', ''))
+    # The live screen's outbox names every set it adds, and sends the add
+    # again whenever its answer was lost on the way back (B6, D6-A): the
+    # copy's insert meets the unique index and finds the set already there.
+    key = _to_client_key(request.form.get('key'))
     if weight is not None and reps is not None:
         next_position = max([s.position for s in session_exercise.sets], default=0) + 1
-        finished = session_exercise.session.finished_at is not None
+        session_ = session_exercise.session
+        finished = session_.finished_at is not None
         new_set = SessionSet(
             session_exercise_id=session_exercise.id,
             position=next_position,
@@ -1430,13 +1444,21 @@ def gym_add_set(session_exercise_id):
             # Added from the debrief, it was lifted at some unknown point during
             # the workout. A stamp of "now" would read as a rest of hours after
             # the last real set; no stamp is the honest answer, and every rest
-            # measurement already treats NULL as silence.
-            completed_at=None if finished else dt.datetime.utcnow(),
+            # measurement already treats NULL as silence. Live, it is the moment
+            # the lifter tapped (B6).
+            completed_at=None if finished else (_write_time(session_) or dt.datetime.utcnow()),
+            client_key=key,
         )
         db.session.add(new_set)
-        db.session.flush()
-        _schedule_rest(new_set)
-        db.session.commit()
+        try:
+            db.session.flush()
+        except IntegrityError:
+            # A copy: its set is the one -- landed before, or a moment ago
+            # by the copy racing this one.
+            db.session.rollback()
+        else:
+            _schedule_rest(new_set)
+            db.session.commit()
 
     return _mutation_response(
         session_exercise.session, 'gym.session_detail', session_id=session_exercise.session_id)
@@ -1505,7 +1527,16 @@ def gym_toggle_skip_session_exercise(session_exercise_id):
     if refusal is not None:
         return refusal
 
-    session_exercise.skipped = not session_exercise.skipped
+    # The state wanted, like the set tick: the live screen's outbox sends a
+    # write again whenever its answer was lost (B6), and a flip sent twice
+    # was undone by its own copy -- an un-skip sent twice planned the
+    # missing sets twice. A page from before that sends nothing: a flip.
+    wanted = request.form.get('skipped')
+    skipped = (wanted == '1') if wanted in ('0', '1') else not session_exercise.skipped
+    if skipped == session_exercise.skipped:
+        return _mutation_response(
+            session_, 'gym.session_detail', session_id=session_.id)
+    session_exercise.skipped = skipped
     if session_exercise.skipped:
         # Drop only the not-yet-confirmed sets -- anything already completed
         # (e.g. 2 of 4 sets done, then the lifter decides to skip the rest)
@@ -1709,10 +1740,13 @@ def gym_toggle_set_complete(set_id):
     # CHANGE moves it: a duplicate "done" used to re-stamp a set already
     # logged. And a tick on a finished workout gets no stamp at all -- the set
     # was lifted at some unknown point during it, not hours later when the
-    # debrief was corrected (G-090; gym_add_set does the same).
+    # debrief was corrected (G-090; gym_add_set does the same). Live, it is
+    # the moment the lifter tapped, which the outbox says when it sent the
+    # tick late (B6).
     if set_.completed != was_completed:
         live = session_.finished_at is None
-        set_.completed_at = dt.datetime.utcnow() if set_.completed and live else None
+        set_.completed_at = ((_write_time(session_) or dt.datetime.utcnow())
+                             if set_.completed and live else None)
 
     if set_.completed and was_default_seeded and (weight_changed or reps_changed):
         # A correction to the invented default plan, being confirmed done --
@@ -1898,7 +1932,9 @@ def gym_skip_rest(session_id):
     refusal = _refuse_structure_edit_if_finished(session_)
     if refusal is not None:
         return refusal
-    now = dt.datetime.utcnow().replace(microsecond=0)
+    # When the lifter tapped, which the outbox says when it sent the skip
+    # late (B6): the band counts up from there.
+    now = (_write_time(session_) or dt.datetime.utcnow()).replace(microsecond=0)
     if session_.rest_ends_at and session_.rest_ends_at > now:
         session_.rest_ends_at = now
     _cancel_pending_push(session_)

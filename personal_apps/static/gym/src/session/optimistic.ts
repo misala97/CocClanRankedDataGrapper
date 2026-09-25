@@ -6,14 +6,19 @@ import { REST_MAX } from '../settings/values'
  * Local guesses at what a write will do, applied before the server answers.
  *
  * Only for writes whose effect is computable honestly and completely. The ones
- * that are not -- adding or replacing an exercise, anything that changes which
- * exercise is live -- have no entry here and wait for the server. A screen
- * that is briefly a lie is worse than one that is briefly slow, and
- * `_live_context` deliberately owns the live-exercise rule because three
- * surfaces have to agree on it. (Reordering is the one write that LOOKS like
- * it belongs in that group but does not: the row order is the user's explicit
- * intent, so it is honest -- only `live_id` stays the server's and is left
- * untouched below.)
+ * that are not -- adding or replacing an exercise, the deload -- have no entry
+ * here and wait for the server. A screen that is briefly a lie is worse than
+ * one that is briefly slow, and `_live_context` deliberately owns the
+ * live-exercise rule because three surfaces have to agree on it: these leave
+ * `live_id` alone, and the server's answer moves it. Only when that answer
+ * cannot come -- offline, with the outbox waiting (B6) -- does `relive` apply
+ * the same rule here. (Reordering is the one write that LOOKS like it belongs
+ * in the first group but does not: the row order is the user's explicit
+ * intent, so it is honest.)
+ *
+ * Each takes the moment the lifter acted as its last argument where time
+ * matters (the rest): the outbox applies a write again on every answer that
+ * comes in before it lands, and "now" would move its rest each time.
  */
 
 /** Whether a set counts: done, with reps (Q1, G-038) -- stats.set_counts,
@@ -70,29 +75,80 @@ function retally(payload: SessionDetailPayload): SessionDetailPayload {
   }
 }
 
+/** Naive UTC, as the server sends it. */
+function naive(ms: number): string {
+  return new Date(ms).toISOString().replace('Z', '')
+}
+
+/** The rest a set logged at `at` starts, as workout._schedule_rest starts it:
+ *  from the set's own moment, as long as the row's rest -- this workout's
+ *  own, else the lifter's setting. No rest ends the one running. It used to
+ *  start only when the server answered, so on a slow network the band came
+ *  late and offline it never came (G-072). */
+function startRest(
+  payload: SessionDetailPayload, se: LiveExercise, setId: number, at: number,
+): SessionDetailPayload {
+  const seconds = se.rest_seconds ?? se.rest_setting
+  if (!seconds) return endRest(payload)
+  const ends = at + seconds * 1000
+  return {
+    ...payload,
+    resting: ends > Date.now(),
+    rest_total_seconds: seconds,
+    session: { ...payload.session, rest_ends_at: naive(ends), resting_set_id: setId },
+  }
+}
+
+/** A set reopened or deleted is no record: the server's answer says so too.
+ *  Drawn until then -- offline, for good -- an open chip stayed gold. */
+function dropRecord(payload: SessionDetailPayload, setId: number): SessionDetailPayload {
+  if (!payload.record_set_ids.includes(setId)) return payload
+  const details = { ...payload.record_details }
+  delete details[String(setId)]
+  return {
+    ...payload,
+    record_set_ids: payload.record_set_ids.filter((id) => id !== setId),
+    record_details: details,
+  }
+}
+
+/** No rest running, and no band: its set was reopened or deleted. */
+function endRest(payload: SessionDetailPayload): SessionDetailPayload {
+  return {
+    ...payload,
+    resting: false,
+    rest_total_seconds: 0,
+    session: { ...payload.session, rest_ends_at: null, resting_set_id: null },
+  }
+}
+
 /** Ticking a set off, or putting it back. The one write that happens dozens of
- *  times per workout, and the only one where the round trip is felt. */
+ *  times per workout, and the only one where the round trip is felt. `at`:
+ *  when the lifter tapped, which the rest runs from. */
 export function toggleSet(
   payload: SessionDetailPayload,
   setId: number,
   completed: boolean,
   weight: number | null,
   reps: number | null,
+  at: number = Date.now(),
 ): SessionDetailPayload {
-  return retally({
+  const owner = payload.visible_exercises.find((se) => se.sets.some((s) => s.id === setId))
+  const was = owner?.sets.find((s) => s.id === setId)
+  const next = retally({
     ...payload,
     visible_exercises: payload.visible_exercises.map((se) => {
-      const at = se.sets.findIndex((s) => s.id === setId)
-      if (at === -1) return se
+      const index = se.sets.findIndex((s) => s.id === setId)
+      if (index === -1) return se
       // Logging a set fills the blanks of the open sets after it -- the
       // server does the same (workout._fill_blanks_after). Without it here
       // the next set flashed blank for the length of the request.
-      const fills = completed && !se.sets[at]!.completed
+      const fills = completed && !se.sets[index]!.completed
       return {
         ...se,
         sets: se.sets.map((s, i) => {
-          if (i === at) return { ...s, completed, weight, reps }
-          if (fills && i > at && !s.completed && (s.weight === null || s.reps === null)) {
+          if (i === index) return { ...s, completed, weight, reps }
+          if (fills && i > index && !s.completed && (s.weight === null || s.reps === null)) {
             return { ...s, weight: s.weight ?? weight, reps: s.reps ?? reps }
           }
           return s
@@ -100,6 +156,40 @@ export function toggleSet(
       }
     }),
   })
+  if (owner === undefined || was === undefined) return next
+  // A set already logged, logged again, keeps the rest it is part-way
+  // through -- the server's duplicate rule. A blank cannot be logged.
+  if (completed && !was.completed && weight !== null && reps !== null) {
+    return startRest(next, owner, setId, at)
+  }
+  if (completed) return next
+  const open = dropRecord(next, setId)
+  return payload.session.resting_set_id === setId ? endRest(open) : open
+}
+
+/** A set appended already done: "Satz geschafft" with no open set left, or
+ *  the sheet's add row. `tempId` names it until the server does -- negative,
+ *  so it is never a real id -- and `key` is how the outbox finds the real one
+ *  in the answer (SessionSet.client_key). A payload already holding the key
+ *  has the set: the server answered a copy of this write first. */
+export function addSet(
+  payload: SessionDetailPayload,
+  sessionExerciseId: number,
+  weight: number,
+  reps: number,
+  key: string,
+  tempId: number,
+  at: number = Date.now(),
+): SessionDetailPayload {
+  const se = payload.visible_exercises.find((row) => row.id === sessionExerciseId)
+  if (se === undefined || se.sets.some((s) => s.key === key)) return payload
+  const added: LiveSet = { id: tempId, weight, reps, completed: true, base_weight: null, key }
+  const next = retally({
+    ...payload,
+    visible_exercises: payload.visible_exercises.map((row) =>
+      row.id === sessionExerciseId ? { ...row, sets: [...row.sets, added] } : row),
+  })
+  return startRest(next, se, tempId, at)
 }
 
 /** Correcting a logged set's numbers without changing whether it is done. */
@@ -122,25 +212,29 @@ export function deleteSet(
   payload: SessionDetailPayload,
   setId: number,
 ): SessionDetailPayload {
-  return retally({
+  const next = dropRecord(retally({
     ...payload,
     visible_exercises: payload.visible_exercises.map((se) => ({
       ...se,
       sets: se.sets.filter((s) => s.id !== setId),
     })),
-  })
+  }), setId)
+  // The server clears a rest whose set goes (gym_delete_set).
+  return payload.session.resting_set_id === setId ? endRest(next) : next
 }
 
 /** Skipping is instant and reversible, and it changes the totals because a
- *  skipped exercise's open sets leave the strip; its done sets stay. */
+ *  skipped exercise's open sets leave the strip; its done sets stay. The
+ *  state wanted, not a flip: the outbox may apply and send it twice. */
 export function toggleSkip(
   payload: SessionDetailPayload,
   sessionExerciseId: number,
+  skipped: boolean,
 ): SessionDetailPayload {
   return retally({
     ...payload,
     visible_exercises: payload.visible_exercises.map((se) =>
-      se.id === sessionExerciseId ? { ...se, skipped: !se.skipped } : se),
+      se.id === sessionExerciseId ? { ...se, skipped } : se),
   })
 }
 
@@ -196,6 +290,51 @@ export function setRoutinePlan(
   }
 }
 
+/** The workout's bodyweight and note, as gym_update_session_meta stores
+ *  them: a key left out is left alone, a blank note is none. */
+export function setSessionMeta(
+  payload: SessionDetailPayload,
+  meta: { bodyweightKg?: number | null; notes?: string },
+): SessionDetailPayload {
+  const session = { ...payload.session }
+  if (meta.bodyweightKg !== undefined) session.bodyweight_kg = meta.bodyweightKg
+  if (meta.notes !== undefined) session.notes = meta.notes.trim() || null
+  return { ...payload, session }
+}
+
+/** Which exercise is live, by the server's own rule (workout._live_context),
+ *  for a screen whose writes cannot reach the server (B6): offline, the
+ *  answer that moves the card on never came, and the last set of an
+ *  exercise left "Satz geschafft" appending to it for the rest of the
+ *  workout.
+ *
+ *  The first visible row, not skipped, not fully logged; with everything
+ *  logged, the last one still counting; with everything skipped, none. In a
+ *  shared workout, the row the lifter has started stays live until it is
+ *  done (keep_started) -- the server picks the most recently logged of two
+ *  started rows, which needs stamps this payload does not carry, so the one
+ *  live now wins here, else the first. */
+export function relive(payload: SessionDetailPayload): SessionDetailPayload {
+  const rows = payload.visible_exercises
+  const logged = (se: LiveExercise) => se.sets.length > 0 && se.sets.every((s) => s.completed)
+  let live: LiveExercise | undefined
+  if (payload.session_is_shared) {
+    const started = rows.filter((se) =>
+      !se.skipped && se.sets.some((s) => s.completed) && !logged(se))
+    live = started.find((se) => se.id === payload.live_id) ?? started[0]
+  }
+  live ??= rows.find((se) => !se.skipped && !logged(se))
+  live ??= rows.filter((se) => !se.skipped).at(-1)
+  if ((live?.id ?? null) === payload.live_id) return payload
+  return retally({
+    ...payload,
+    live_id: live?.id ?? null,
+    live_index: live === undefined ? 0 : rows.indexOf(live) + 1,
+    live_increment: live?.increment ?? payload.live_increment,
+    live_floor: live?.floor ?? null,
+  })
+}
+
 /** "Pause heute". The setting's own value is stored as nothing -- the row
  *  follows the setting again -- which is the server's rule too
  *  (gym_update_session_exercise_rest). The rest already running keeps the
@@ -212,11 +351,6 @@ export function setRest(
         ? { ...se, rest_seconds: seconds === se.rest_setting ? null : seconds }
         : se),
   }
-}
-
-/** Naive UTC, as the server sends it. */
-function naive(ms: number): string {
-  return new Date(ms).toISOString().replace('Z', '')
 }
 
 /** The running rest ended now, as gym_skip_rest leaves it: its end stamped

@@ -5,7 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { LiveSettingsSheet } from './LiveSettingsSheet'
 import { useSheets } from '../stores'
 import { payload } from '../types.test-d'
-import { sessionKey } from '../useSessionMutation'
+import { sessionKey } from '../api'
 import type { ExerciseMeta } from '../../types'
 
 const se = payload.visible_exercises[0]!

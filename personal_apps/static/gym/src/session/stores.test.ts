@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import {
-  failureCheckpoint, usePush, useSaveState, useSheets, useWorkoutUi,
+  failureCheckpoint, useOutbox, usePush, useSaveState, useSheets, useWorkoutUi,
 } from './stores'
 
 /**
@@ -17,6 +17,7 @@ beforeEach(() => {
   useWorkoutUi.setState(useWorkoutUi.getInitialState(), true)
   useSaveState.setState(useSaveState.getInitialState(), true)
   usePush.setState(usePush.getInitialState(), true)
+  useOutbox.setState(useOutbox.getInitialState(), true)
 })
 
 describe('useSheets', () => {
@@ -207,24 +208,17 @@ describe('useSaveState', () => {
     useSaveState.getState().succeed('a')
     expect(useSaveState.getState().errors).toEqual([])
   })
+})
 
-  it('locks a form while its write is in flight', () => {
-    // One write per form at a time. The confirm button is in the thumb zone
-    // and its answer arrives a round trip later, so a second tap before the
-    // first resolves is what a sweaty hand does -- not an edge case.
-    const form = 'set-100'
-    expect(useSaveState.getState().isLocked(form)).toBe(false)
-    useSaveState.getState().lock(form)
-    expect(useSaveState.getState().isLocked(form)).toBe(true)
-    useSaveState.getState().unlock(form)
-    expect(useSaveState.getState().isLocked(form)).toBe(false)
-  })
-
-  it('locks each form independently', () => {
-    // Two different sets landing in quick succession is legitimate; the same
-    // one twice is not.
-    useSaveState.getState().lock('set-100')
-    expect(useSaveState.getState().isLocked('set-101')).toBe(false)
+describe('useOutbox', () => {
+  it('forgets a refused finish once everything is in, not before', () => {
+    const { publish, refuseFinish } = useOutbox.getState()
+    publish({ state: 'waiting', count: 2, setIds: [5] })
+    refuseFinish()
+    publish({ state: 'sending', count: 1, setIds: [] })
+    expect(useOutbox.getState().finishRefused).toBe(true)
+    publish({ state: 'idle', count: 0, setIds: [] })
+    expect(useOutbox.getState().finishRefused).toBe(false)
   })
 })
 

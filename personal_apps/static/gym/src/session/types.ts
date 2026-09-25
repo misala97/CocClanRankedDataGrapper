@@ -35,6 +35,10 @@ export interface LiveSet {
    *  is derived from it -- the session's is_deload flag is not, because a
    *  session flagged after a set was logged keeps its full weights. */
   base_weight: number | null
+  /** The live screen's own name for a set it added (SessionSet.client_key):
+   *  how the outbox finds the real set behind the one it drew (B6). Null on
+   *  every other set. */
+  key: string | null
 }
 
 export interface LiveExercise {
@@ -60,6 +64,9 @@ export interface LiveExercise {
    *  under it says "deine" -- rather than the list's ("Liste"). */
   rest_setting_mine: boolean
   increment: number
+  /** Where a blank kg stepper's "+" lands for this row: `live_floor` once
+   *  it is live. The screen that moves on by itself offline needs it (B6). */
+  floor: number
   notes: string | null
   /** A boolean flag ("this hurt"), not free text. NOT NULL with a false
    *  default, so never null -- typed as a string once and the endpoint

@@ -5,6 +5,7 @@ import { FinishSheet } from './components/FinishSheet'
 import { SessionHeader } from './components/SessionHeader'
 import { SaveErrorBanner } from './components/SaveErrorBanner'
 import { SavingSweep } from './components/SavingSweep'
+import { OutboxStatus } from './components/OutboxStatus'
 import { ReorderBar } from './components/ReorderBar'
 import { PartnerNotice } from './components/PartnerNotice'
 import { LiveRegion } from './components/LiveRegion'
@@ -39,6 +40,10 @@ export interface SessionActions {
   onConfirmSet(weight: number, reps: number, setId: number | null): void
   onToggleSet(setId: number, completed: boolean): void
   onFinish(): void
+  /** "Jetzt senden": try the writes the phone is holding now (B6). */
+  onSendNow(): void
+  /** "Neu laden": the fresh page that sends what a lapsed login held. */
+  onReload(): void
   /** Throw away a workout with nothing logged -- the finish sheet offers it
    *  only then, and the server refuses it otherwise. */
   onDiscard(): void
@@ -59,8 +64,6 @@ interface Props {
   payload: SessionDetailPayload
   actions: SessionActions
   pushSupported: boolean
-  /** A set write is in flight; the confirm button waits for it. */
-  confirmBusy?: boolean
   /** Finish or discard is waiting for writes still on their way. */
   finishing?: boolean
   /** Which add-exercise row is waiting on the server -- see AddExerciseSheet. */
@@ -79,8 +82,7 @@ interface Props {
  * have to agree on it, and a rule expressed three times is a rule that drifts.
  */
 export function SessionPage({
-  payload, actions, pushSupported, confirmBusy = false, finishing = false,
-  busyExerciseId = null,
+  payload, actions, pushSupported, finishing = false, busyExerciseId = null,
 }: Props) {
   const announce = useAnnouncer((s) => s.announce)
   const openSheet = useSheets((s) => s.open)
@@ -95,6 +97,7 @@ export function SessionPage({
           deloadDefaultPct={payload.deload_default_pct} />
 
       <SaveErrorBanner />
+      <OutboxStatus onSendNow={actions.onSendNow} onReload={actions.onReload} />
       <SavingSweep />
       <ReorderBar />
       <PartnerNotice />
@@ -104,7 +107,7 @@ export function SessionPage({
         liveIndex={payload.live_index}
         setsOpen={payload.sets_open} setsTotal={payload.sets_total} />
 
-      <LivePanel payload={payload} confirmBusy={confirmBusy}
+      <LivePanel payload={payload}
         onConfirm={actions.onConfirmSet}
         onToggleSet={actions.onToggleSet}
         onRestOver={() => announce('Pause vorbei.')}

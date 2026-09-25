@@ -25,7 +25,7 @@ const writeHeaders = () => ({ ...JSON_HEADERS, 'X-CSRF-Token': csrfToken() })
 const TIMEOUT_MS = 8000
 
 export type FailureReason =
-  'timeout' | 'network' | 'forbidden' | 'finished' | 'unauthorized' | 'invalid' | 'gone'
+  'timeout' | 'network' | 'server' | 'forbidden' | 'finished' | 'unauthorized' | 'invalid' | 'gone'
 
 export class MutationFailed extends Error {
   /** `serverMessage`: for 'invalid', the server's own sentence saying what it
@@ -62,15 +62,19 @@ export class MutationFailed extends Error {
     if (this.reason === 'gone') {
       return 'Gibt es nicht mehr — bitte Seite neu laden.'
     }
+    if (this.reason === 'server') {
+      return 'Fehler auf dem Server — die Änderung wurde nicht gespeichert.'
+    }
     return this.reason === 'timeout'
       ? 'Keine Antwort vom Server — deine letzte Änderung wurde nicht gespeichert.'
       : 'Verbindung fehlgeschlagen — deine letzte Änderung wurde nicht gespeichert.'
   }
 
-  /** Whether the same request could work if sent again. Only a lost or slow
-   *  connection can; a refused value or a stale page cannot. */
+  /** Whether the same request could work if sent again. A lost or slow
+   *  connection can, and a server error may have been a passing one; a
+   *  refused value or a stale page cannot. */
   get retryable(): boolean {
-    return this.reason === 'timeout' || this.reason === 'network'
+    return this.reason === 'timeout' || this.reason === 'network' || this.reason === 'server'
   }
 
   /** Whether a reload is the way out: a fresh page mints a fresh CSRF token,
@@ -81,9 +85,12 @@ export class MutationFailed extends Error {
 }
 
 /** A non-ok answer, named. Every status the server uses on purpose has its
- *  own reason; only what is left over reads as a failed connection -- a 400
- *  and a lapsed login used to be "Verbindung fehlgeschlagen" too (G-083,
- *  G-093). */
+ *  own reason -- a 400 and a lapsed login used to be "Verbindung
+ *  fehlgeschlagen" too (G-083, G-093). A server that is down, restarting or
+ *  busy reads as a failed connection: it will answer again. Anything else is
+ *  a server error, which the live outbox tries a few times, not forever --
+ *  a write the server fails every time held every later one on the phone
+ *  (B6 review). */
 async function failureFrom(response: Response): Promise<MutationFailed> {
   switch (response.status) {
     case 401: return new MutationFailed('unauthorized')
@@ -95,7 +102,8 @@ async function failureFrom(response: Response): Promise<MutationFailed> {
       return new MutationFailed('invalid',
         typeof body?.error === 'string' ? body.error : undefined)
     }
-    default: return new MutationFailed('network')
+    case 429: case 502: case 503: case 504: return new MutationFailed('network')
+    default: return new MutationFailed('server')
   }
 }
 
@@ -175,11 +183,24 @@ export function postNavigate(url: string, fields: Record<string, string> = {}): 
   form.submit()
 }
 
+/** A read, with a write's time limit: the outbox asks the server under the
+ *  workout's lock, and a question into dead wifi held every tab's writes
+ *  for as long as the phone took to give up (B6 re-review). */
 export async function getJson<T>(url: string): Promise<T> {
-  const response = await fetch(url, {
-    headers: JSON_HEADERS, credentials: 'same-origin',
-  })
-  if (!response.ok) throw await failureFrom(response)
-  if (landedOnLogin(response)) throw new MutationFailed('unauthorized')
-  return await response.json() as T
+  const controller = new AbortController()
+  const timer = setTimeout(() => controller.abort(), TIMEOUT_MS)
+  try {
+    const response = await fetch(url, {
+      headers: JSON_HEADERS, credentials: 'same-origin', signal: controller.signal,
+    })
+    if (!response.ok) throw await failureFrom(response)
+    if (landedOnLogin(response)) throw new MutationFailed('unauthorized')
+    return await response.json() as T
+  } catch (error) {
+    if (error instanceof MutationFailed) throw error
+    throw new MutationFailed(
+      (error as Error)?.name === 'AbortError' ? 'timeout' : 'network')
+  } finally {
+    clearTimeout(timer)
+  }
 }

@@ -1,7 +1,6 @@
 import { useEffect, useState } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { fetchSync } from './api'
-import { sessionKey } from './useSessionMutation'
+import { fetchSync, sessionKey } from './api'
 import { useAnnouncer, usePartnerNotice } from './stores'
 
 /** How often the follower asks whether the plan moved. The leader's edit is

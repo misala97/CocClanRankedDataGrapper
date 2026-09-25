@@ -4,7 +4,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { useUndo } from '../../undo'
 import { fold } from '../../search'
 import { ExerciseSheet } from './ExerciseSheet'
-import { useSaveState, useSheets } from '../stores'
+import { useOutbox, useSheets } from '../stores'
 import { payload } from '../types.test-d'
 import { listed } from '../__fixtures__/catalogue'
 import type { LiveExercise } from '../types'
@@ -13,7 +13,7 @@ import { NUDGE_SETTLE_MS } from '../../settings/Choice'
 beforeEach(() => {
   useUndo.setState({ pending: null, timer: null })
   useSheets.setState(useSheets.getInitialState(), true)
-  useSaveState.setState({ locked: {} })
+  useOutbox.setState(useOutbox.getInitialState(), true)
   vi.spyOn(window, 'confirm').mockReturnValue(true)
 })
 
@@ -178,18 +178,20 @@ describe('ExerciseSheet', () => {
     expect(a.onSetDelete).not.toHaveBeenCalled()
     expect(screen.getAllByLabelText(/Satz \d+ löschen/)).toHaveLength(rowsBefore - 1)
     useUndo.getState().commitNow()
-    expect(a.onSetDelete).toHaveBeenCalledWith(first.id, false)
+    expect(a.onSetDelete).toHaveBeenCalledWith(first.id)
   })
 
-  it('sends a delete flushed on the way out with keepalive (G-062)', async () => {
+  it('sends a delete flushed on the way out (G-062)', async () => {
+    // Queued on the phone by the island, which keeps it through the page
+    // going away -- nothing here has to say how.
     const user = userEvent.setup()
     const { actions: a } = open()
     await user.click(screen.getByLabelText('Satz 1 löschen'))
     useUndo.getState().commitNow(true)
-    expect(a.onSetDelete).toHaveBeenCalledWith(exercise.sets[0]!.id, true)
+    expect(a.onSetDelete).toHaveBeenCalledWith(exercise.sets[0]!.id)
   })
 
-  it('brings the row back when its delete fails (G-147)', async () => {
+  it('brings the row back when its delete is refused (G-147)', async () => {
     // The set stayed hidden: gone from the screen, still on the server.
     const user = userEvent.setup()
     open({ onSetDelete: vi.fn(() => Promise.reject(new Error('offline'))) })
@@ -299,10 +301,71 @@ describe('ExerciseSheet', () => {
     expect(a.onAddSet).toHaveBeenCalledWith(20, 10)
   })
 
-  it('holds the append row while an append for this exercise is in flight', () => {
-    useSaveState.setState({ locked: { [`add-${exercise.id}`]: true } })
+  it('never holds the append row for the connection (G-138)', () => {
+    // Held while an append was in flight, it stayed held for as long as the
+    // wifi was gone. A double tap is the island's to drop.
+    useOutbox.setState({ state: 'waiting', count: 1, setIds: [-5] })
     open()
-    expect(screen.getByRole('button', { name: 'Satz anhängen' })).toBeDisabled()
+    expect(screen.getByRole('button', { name: 'Satz anhängen' })).toBeEnabled()
+  })
+
+  it('keeps what is being typed when the set just added gets its real id (B6 review)', async () => {
+    // Drawn as -5 until the add lands: the same set, so nothing remounts.
+    const user = userEvent.setup()
+    const drawn = { ...exercise, sets: [...exercise.sets,
+      { id: -5, weight: 70, reps: 5, completed: true, base_weight: null, key: 'k1' }] }
+    const view = open({ exercise: drawn })
+    const typed = () => screen.getByLabelText('Neuer Satz, Gewicht in kg')
+    await user.clear(typed())
+    await user.type(typed(), '72.5')
+    const last = screen.getAllByLabelText(/^Satz \d+, Gewicht in kg$/).at(-1)!
+    await user.clear(last)
+    await user.type(last, '71')
+
+    const named = { ...drawn, sets: drawn.sets.map((s) => (s.id === -5 ? { ...s, id: 900 } : s)) }
+    view.rerender(
+      <ExerciseSheet exercise={named} catalogue={catalogue}
+        suggestion={{ weight: 60, reps: 8 }} canMakeLive={false} routine={null}
+        {...view.actions} />)
+    expect(typed()).toHaveValue(72.5)
+    expect(screen.getAllByLabelText(/^Satz \d+, Gewicht in kg$/).at(-1)).toHaveValue(71)
+  })
+
+  it('keeps a set just added hidden while its delete waits, as the set gets its real id (B6 re-review)', async () => {
+    // Hidden by its drawn id, the row came back when the add landed, for the
+    // rest of the undo window.
+    const user = userEvent.setup()
+    const drawn = { ...exercise, sets: [...exercise.sets,
+      { id: -5, weight: 70, reps: 5, completed: true, base_weight: null, key: 'k1' }] }
+    const view = open({ exercise: drawn })
+    const rows = () => screen.getAllByLabelText(/^Satz \d+, Gewicht in kg$/)
+    const before = rows().length
+    await user.click(screen.getByRole('button', { name: `Satz ${before} löschen` }))
+    expect(rows()).toHaveLength(before - 1)
+
+    const named = { ...drawn, sets: drawn.sets.map((s) => (s.id === -5 ? { ...s, id: 900 } : s)) }
+    view.rerender(
+      <ExerciseSheet exercise={named} catalogue={catalogue}
+        suggestion={{ weight: 60, reps: 8 }} canMakeLive={false} routine={null}
+        {...view.actions} />)
+    expect(rows()).toHaveLength(before - 1)
+  })
+
+  it('marks a set whose write waits on the phone (B6)', () => {
+    const [first, second] = exercise.sets
+    useOutbox.setState({ state: 'waiting', count: 1, setIds: [first!.id] })
+    const { container } = open()
+    const labels = container.querySelectorAll('.sset .label')
+    expect(labels[0]).toHaveClass('is-waiting')
+    expect(labels[0]).toHaveTextContent('1, wartet auf Verbindung')
+    expect(labels[1]).not.toHaveClass('is-waiting')
+    expect(second).toBeDefined()
+  })
+
+  it('says it waits for a reload while only a fresh page can send (B6 review)', () => {
+    useOutbox.setState({ state: 'blocked', count: 1, setIds: [exercise.sets[0]!.id] })
+    const { container } = open()
+    expect(container.querySelector('.sset .label')).toHaveTextContent('1, wartet auf Neuladen')
   })
 
   it('offers "Jetzt machen" only when asked to, and pulls the exercise forward', async () => {
@@ -433,7 +496,7 @@ describe('ExerciseSheet', () => {
         act(() => { vi.advanceTimersByTime(NUDGE_SETTLE_MS) })
         expect(a.onRoutinePlanChange).toHaveBeenCalledTimes(1)
         expect(a.onRoutinePlanChange)
-          .toHaveBeenCalledWith({ sets: 5, rep_min: 6, rep_max: 11 }, false)
+          .toHaveBeenCalledWith({ sets: 5, rep_min: 6, rep_max: 11 })
       } finally {
         vi.useRealTimers()
       }
@@ -458,15 +521,15 @@ describe('ExerciseSheet', () => {
         unmount()
         expect(a.onRoutinePlanChange).toHaveBeenCalledTimes(1)
         expect(a.onRoutinePlanChange)
-          .toHaveBeenCalledWith({ sets: 2, rep_min: 6, rep_max: 10 }, false)
+          .toHaveBeenCalledWith({ sets: 2, rep_min: 6, rep_max: 10 })
       } finally {
         vi.useRealTimers()
       }
     })
 
-    it('sends a draft still settling as leaving when the page goes away', () => {
+    it('sends a draft still settling when the page goes away', () => {
       // A tap on "Fortschritt" or a closed tab: the write has to outlive
-      // the page (B5 review).
+      // the page (B5 review) -- queued, it is on the phone already.
       vi.useFakeTimers()
       try {
         const { actions: a } = open({ routine })
@@ -474,7 +537,7 @@ describe('ExerciseSheet', () => {
         act(() => { window.dispatchEvent(new Event('pagehide')) })
         expect(a.onRoutinePlanChange).toHaveBeenCalledTimes(1)
         expect(a.onRoutinePlanChange)
-          .toHaveBeenCalledWith({ sets: 4, rep_min: 6, rep_max: 10 }, true)
+          .toHaveBeenCalledWith({ sets: 4, rep_min: 6, rep_max: 10 })
       } finally {
         vi.useRealTimers()
       }

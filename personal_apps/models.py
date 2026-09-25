@@ -471,6 +471,16 @@ class SessionSet(db.Model):
     # stops being invented and a later deload is free to treat it like any
     # other real set.
     is_default_seeded  = db.Column(db.Boolean, nullable=False, default=False, server_default=sa.false())
+    # The phone's name for a set it added on the live screen (B6, D6-A). Its
+    # outbox sends an add again whenever the answer was lost, and the second
+    # copy finds this set instead of making another (gym_add_set). Unique per
+    # exercise of the workout; NULL on every set added any other way.
+    client_key         = db.Column(db.String(36), nullable=True)
+
+    __table_args__ = (
+        db.Index('uq_gym_session_sets_client_key', 'session_exercise_id', 'client_key',
+                 unique=True),
+    )
 
     session_exercise = db.relationship('SessionExercise', back_populates='sets')
 

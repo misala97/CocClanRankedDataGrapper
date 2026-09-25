@@ -91,7 +91,7 @@ describe('Queue', () => {
     // -- done is the thing to know about it, and never by colour alone.
     const done: LiveExercise = {
       ...exercises[0]!, id: 90, name: 'Fertig', position: 4, skipped: false,
-      sets: [{ id: 1, weight: 50, reps: 5, completed: true, base_weight: null }],
+      sets: [{ id: 1, weight: 50, reps: 5, completed: true, base_weight: null, key: null }],
     }
     const drawn = exercises.map((se) => ({ ...se, picture: `/static/gym/art/x-${se.id}.webp?v=1` }))
     const { container } = render(
@@ -157,7 +157,7 @@ describe('Queue', () => {
     const blank: LiveExercise = {
       ...other, skipped: false,
       sets: [1, 2, 3].map((n) => ({
-        id: 900 + n, weight: null, reps: null, completed: false, base_weight: null,
+        id: 900 + n, weight: null, reps: null, completed: false, base_weight: null, key: null,
       })),
     }
     const { container } = render(<Queue liveId={liveId} onReorder={noop}
@@ -174,7 +174,7 @@ describe('Queue', () => {
     const ahead: LiveExercise = {
       ...other, skipped: false,
       sets: [1, 2, 3].map((n) => ({
-        id: 900 + n, weight: 50, reps: 8, completed: false, base_weight: null,
+        id: 900 + n, weight: 50, reps: 8, completed: false, base_weight: null, key: null,
       })),
     }
     const { container } = render(<Queue liveId={liveId} onReorder={noop}

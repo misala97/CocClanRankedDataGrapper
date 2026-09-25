@@ -10,8 +10,8 @@ export const MAX_PLAN_REPS = 100
 interface Props {
   routineName: string
   plan: RoutinePlan
-  /** `leaving`: the page is going away, and the write has to outlive it. */
-  onSave(plan: RoutinePlan, leaving: boolean): void
+  /** Queued on the phone, so a flush as the page goes away is kept too. */
+  onSave(plan: RoutinePlan): void
 }
 
 /**
@@ -29,20 +29,19 @@ export function RoutinePlanGroup({ routineName, plan, onSave }: Props) {
   // them runs once, and would otherwise see the first render's draft.
   const pending = useRef<{ plan: RoutinePlan; save: Props['onSave'] } | null>(null)
 
-  const settle = (leaving: boolean) => {
+  const settle = () => {
     window.clearTimeout(timer.current)
     const next = pending.current
     pending.current = null
     setDraft(null)
-    if (next !== null) next.save(next.plan, leaving)
+    if (next !== null) next.save(next.plan)
   }
 
   useEffect(() => {
-    const onHide = () => settle(true)
-    window.addEventListener('pagehide', onHide)
+    window.addEventListener('pagehide', settle)
     return () => {
-      window.removeEventListener('pagehide', onHide)
-      settle(false)
+      window.removeEventListener('pagehide', settle)
+      settle()
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
@@ -52,7 +51,7 @@ export function RoutinePlanGroup({ routineName, plan, onSave }: Props) {
     setDraft(next)
     pending.current = { plan: next, save: onSave }
     window.clearTimeout(timer.current)
-    timer.current = window.setTimeout(() => settle(false), NUDGE_SETTLE_MS)
+    timer.current = window.setTimeout(settle, NUDGE_SETTLE_MS)
   }
 
   return (

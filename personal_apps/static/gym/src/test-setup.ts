@@ -1,4 +1,10 @@
 import '@testing-library/jest-dom/vitest'
+import { beforeEach } from 'vitest'
+
+// The live workout keeps its outbox and the steppers' draft in localStorage
+// (B6, G-009), and jsdom keeps one localStorage per test file: what one test
+// left there would be sent, or restored, by the next.
+beforeEach(() => { localStorage.clear() })
 
 // jsdom does not implement HTMLDialogElement.showModal()/close(). The gym app
 // uses native <dialog> throughout precisely because the platform supplies the

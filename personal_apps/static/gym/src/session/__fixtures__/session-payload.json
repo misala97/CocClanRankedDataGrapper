@@ -140,7 +140,7 @@
     },
     {
       "common": true,
-      "days_ago": 1,
+      "days_ago": 2,
       "id": 18045,
       "label": "Kurzhantel",
       "movement": "Bankdrücken",
@@ -179,7 +179,7 @@
     },
     {
       "common": true,
-      "days_ago": 1,
+      "days_ago": 2,
       "id": 18061,
       "label": "Maschine, Scheiben",
       "movement": "Bankdrücken",
@@ -335,7 +335,7 @@
     },
     {
       "common": true,
-      "days_ago": 25,
+      "days_ago": 26,
       "id": 18120,
       "label": "Kurzhantel",
       "movement": "Bizepscurls",
@@ -439,7 +439,7 @@
     },
     {
       "common": true,
-      "days_ago": 1,
+      "days_ago": 2,
       "id": 18059,
       "label": "Maschine",
       "movement": "Butterfly",
@@ -491,7 +491,7 @@
     },
     {
       "common": false,
-      "days_ago": 1,
+      "days_ago": 2,
       "id": 18108,
       "label": "Kabel",
       "movement": "Face Pulls",
@@ -764,7 +764,7 @@
     },
     {
       "common": true,
-      "days_ago": 25,
+      "days_ago": 26,
       "id": 18121,
       "label": "Kurzhantel",
       "movement": "Hammercurls",
@@ -985,7 +985,7 @@
     },
     {
       "common": false,
-      "days_ago": 53,
+      "days_ago": 54,
       "id": 18079,
       "label": "Kabel",
       "movement": "Latzug",
@@ -1050,7 +1050,7 @@
     },
     {
       "common": true,
-      "days_ago": 1,
+      "days_ago": 2,
       "id": 18090,
       "label": "Maschine, Scheiben",
       "movement": "Latzug",
@@ -1180,7 +1180,7 @@
     },
     {
       "common": true,
-      "days_ago": 25,
+      "days_ago": 26,
       "id": 18114,
       "label": "Maschine",
       "movement": "Reverse Butterfly",
@@ -1336,7 +1336,7 @@
     },
     {
       "common": true,
-      "days_ago": 1,
+      "days_ago": 2,
       "id": 18088,
       "label": "Maschine",
       "movement": "Rudern",
@@ -1375,7 +1375,7 @@
     },
     {
       "common": false,
-      "days_ago": 74,
+      "days_ago": 75,
       "id": 18078,
       "label": "T-Bar, liegend",
       "movement": "Rudern",
@@ -1388,7 +1388,7 @@
     },
     {
       "common": true,
-      "days_ago": 1,
+      "days_ago": 2,
       "id": 18077,
       "label": "T-Bar, stehend",
       "movement": "Rudern",
@@ -1570,7 +1570,7 @@
     },
     {
       "common": true,
-      "days_ago": 1,
+      "days_ago": 2,
       "id": 18093,
       "label": "Langhantel, stehend",
       "movement": "Schulterdrücken",
@@ -1635,7 +1635,7 @@
     },
     {
       "common": true,
-      "days_ago": 25,
+      "days_ago": 26,
       "id": 18129,
       "label": "Maschine",
       "movement": "Scottcurls",
@@ -1648,7 +1648,7 @@
     },
     {
       "common": true,
-      "days_ago": 34,
+      "days_ago": 35,
       "id": 18130,
       "label": "Maschine, Scheiben",
       "movement": "Scottcurls",
@@ -1713,7 +1713,7 @@
     },
     {
       "common": true,
-      "days_ago": 1,
+      "days_ago": 2,
       "id": 18113,
       "label": "Maschine",
       "movement": "Seitheben",
@@ -1726,7 +1726,7 @@
     },
     {
       "common": false,
-      "days_ago": 35,
+      "days_ago": 36,
       "id": 18116,
       "label": "Maschine, Scheiben",
       "movement": "Seitheben",
@@ -1869,7 +1869,7 @@
     },
     {
       "common": true,
-      "days_ago": 1,
+      "days_ago": 2,
       "id": 18138,
       "label": "Kabel, Stange",
       "movement": "Trizepsdrücken",
@@ -1908,7 +1908,7 @@
     },
     {
       "common": true,
-      "days_ago": 23,
+      "days_ago": 24,
       "id": 18142,
       "label": "Kabel",
       "movement": "Trizepsstrecken über Kopf",
@@ -2207,7 +2207,7 @@
     "notes": null,
     "rest_ends_at": null,
     "resting_set_id": null,
-    "started_at": "2026-09-24T21:37:42",
+    "started_at": "2026-09-24T22:29:57",
     "structure_version": 0,
     "template_id": null,
     "template_name": null
@@ -2240,6 +2240,7 @@
   "visible_exercises": [
     {
       "exercise_id": 18045,
+      "floor": 2.0,
       "id": 10,
       "increment": 2.0,
       "is_unilateral": true,
@@ -2260,6 +2261,7 @@
           "base_weight": null,
           "completed": true,
           "id": 100,
+          "key": null,
           "reps": 8,
           "weight": 60.0
         },
@@ -2267,6 +2269,7 @@
           "base_weight": null,
           "completed": false,
           "id": 101,
+          "key": null,
           "reps": 8,
           "weight": 60.0
         },
@@ -2274,6 +2277,7 @@
           "base_weight": null,
           "completed": false,
           "id": 102,
+          "key": null,
           "reps": 6,
           "weight": 62.5
         }
@@ -2282,6 +2286,7 @@
     },
     {
       "exercise_id": 18059,
+      "floor": 8.0,
       "id": 11,
       "increment": 8.0,
       "is_unilateral": false,
@@ -2302,6 +2307,7 @@
           "base_weight": null,
           "completed": false,
           "id": 103,
+          "key": null,
           "reps": 10,
           "weight": 40.0
         }

@@ -1,7 +1,8 @@
 import { useState } from 'react'
-import type { CatalogueExercise, LiveExercise, RoutinePlan, Suggestion } from '../types'
+import type { CatalogueExercise, LiveExercise, LiveSet, RoutinePlan, Suggestion } from '../types'
 import { useUndo } from '../../undo'
-import { useSaveState } from '../stores'
+import { useOutbox, useWaitingFor } from '../stores'
+import { setName } from '../setName'
 import {
   MAX_NOTE_CHARS, MAX_REPS, MAX_WEIGHT_KG, parseSetInput, setInputProblem,
 } from '../../setInput'
@@ -20,8 +21,9 @@ export interface ExerciseSheetActions {
   onOpenSettings(): void
   onMetaSave(meta: { pain: boolean; notes: string }): void
   onSetUpdate(setId: number, weight: number, reps: number): void
-  /** Settles once the server has answered; rejects when the delete failed. */
-  onSetDelete(setId: number, keepalive: boolean): Promise<unknown>
+  /** Settles once the server has answered; rejects when it refused the
+   *  delete. A lost connection is neither: the delete waits on the phone. */
+  onSetDelete(setId: number): Promise<unknown>
   onAddSet(weight: number, reps: number): void
   onToggleSkip(): void
   onReplace(exerciseId: number): void
@@ -29,9 +31,8 @@ export interface ExerciseSheetActions {
   onShowProgress(): void
   /** Pull this exercise in front of the live one, so it is up next. */
   onMakeLive(): void
-  /** The routine's plan for the exercise, once the steppers settle --
-   *  `leaving` when the page is going away and the write must outlive it. */
-  onRoutinePlanChange(plan: RoutinePlan, leaving: boolean): void
+  /** The routine's plan for the exercise, once the steppers settle. */
+  onRoutinePlanChange(plan: RoutinePlan): void
 }
 
 interface Props extends ExerciseSheetActions {
@@ -68,27 +69,28 @@ export function ExerciseSheet({
 }: Props) {
   const [pain, setPain] = useState(exercise.pain)
   const [notes, setNotes] = useState(exercise.notes ?? '')
-  // The island locks the same key for the confirm button's add -- one append
-  // per exercise in flight, whichever control asked for it.
-  const adding = useSaveState((s) => s.locked[`add-${exercise.id}`] === true)
+  // The sets whose write the phone is holding (B6), marked as on the card.
+  const waitingIds = useOutbox((s) => s.setIds)
   const offerUndo = useUndo((s) => s.offer)
-  // Sets hidden while their delete waits out the undo window. Ids, not
-  // indices: the payload swap after the commit removes them for real.
-  const [hiddenSetIds, setHiddenSetIds] = useState<number[]>([])
+  // Sets hidden while their delete waits out the undo window. By name, not
+  // index: the payload swap after the commit removes them for real. Not by
+  // id either: a set just added changes id when it lands, and came back for
+  // the rest of the window (B6 re-review).
+  const [hidden, setHidden] = useState<string[]>([])
 
-  const deleteSet = (setId: number, ordinal: number) => {
-    setHiddenSetIds((ids) => [...ids, setId])
+  const deleteSet = (set: LiveSet, ordinal: number) => {
+    const name = setName(set)
+    const unhide = () => setHidden((names) => names.filter((n) => n !== name))
+    setHidden((names) => [...names, name])
     offerUndo({
       label: `Satz ${ordinal} gelöscht.`,
-      undo: () => setHiddenSetIds((ids) => ids.filter((id) => id !== setId)),
-      // keepalive rides through to the fetch, so a delete flushed by leaving
-      // the page leaves with it (G-062). A delete that fails brings its row
-      // back: the payload rolls back to the set, but this list kept hiding
-      // it, so a lost delete looked like a done one (G-147).
-      commit: (keepalive) => {
-        onSetDelete(setId, keepalive)
-          .catch(() => setHiddenSetIds((ids) => ids.filter((id) => id !== setId)))
-      },
+      undo: unhide,
+      // Queued on the phone the moment it commits -- a flush on the way out
+      // of the page included (G-062) -- and sent until it lands. A delete
+      // the server refuses brings its row back: this list kept hiding it,
+      // so a refused delete looked like a done one (G-147). A drawn id the
+      // server has named since is sent as the real one.
+      commit: () => { onSetDelete(set.id).catch(unhide) },
     })
   }
 
@@ -180,21 +182,22 @@ export function ExerciseSheet({
         <div className="sheet__group-head">
           <span className="label">Sätze</span>
         </div>
-        {exercise.sets.filter((s) => !hiddenSetIds.includes(s.id)).map((s, i) => (
+        {exercise.sets.filter((s) => !hidden.includes(setName(s))).map((s, i) => (
           // Keyed on the stored numbers, not on the id alone: an editor holds
           // its fields in local state, so a set rewritten while the sheet is
           // open -- by the partner's phone in a shared workout, or by the
           // deload toggle -- would otherwise keep showing the old value and
           // post it back on the next save. The key only moves when the SERVER
           // value moves; typing in the field does not touch it.
-          <SetEditor set={s} ordinal={i + 1} key={`${s.id}-${s.weight}-${s.reps}`}
+          <SetEditor set={s} ordinal={i + 1} key={`${s.key ?? s.id}-${s.weight}-${s.reps}`}
+            waiting={waitingIds.includes(s.id)}
             onSave={onSetUpdate} onDelete={deleteSet} />
         ))}
         {/* Seeded from the last set, not only from the session's opening
             suggestion: appending is usually one more of what you just did.
             Keyed on that seed so a new last set re-seeds the row. */}
         <AddSetRow key={lastSetKey(exercise)} seed={addSeed(exercise, suggestion)}
-          busy={adding} onAdd={onAddSet} />
+          onAdd={onAddSet} />
       </div>
 
       <div className="sheet__group">
@@ -285,11 +288,13 @@ export function ExerciseSheet({
   )
 }
 
-function SetEditor({ set, ordinal, onSave, onDelete }: {
+function SetEditor({ set, ordinal, waiting, onSave, onDelete }: {
   set: LiveExercise['sets'][number]
   ordinal: number
+  /** Its write is kept on the phone until the connection is back (B6). */
+  waiting: boolean
   onSave(setId: number, weight: number, reps: number): void
-  onDelete(setId: number, ordinal: number): void
+  onDelete(set: LiveSet, ordinal: number): void
 }) {
   // A blank planned set starts with empty fields, not the text "null".
   const [weight, setWeight] = useState(set.weight === null ? '' : String(set.weight))
@@ -300,11 +305,15 @@ function SetEditor({ set, ordinal, onSave, onDelete }: {
   const changed = parsed !== null
     && (parsed.weight !== set.weight || parsed.reps !== set.reps)
   const problem = setInputProblem(weight, reps)
+  const waitingFor = useWaitingFor()
 
   return (
     <>
     <div className="sset">
-      <span className="label">{ordinal}</span>
+      <span className={waiting ? 'label is-waiting' : 'label'}>
+        {ordinal}
+        {waiting && <span className="sr-only">, {waitingFor}</span>}
+      </span>
       <input type="number" step="0.5" min="0" max={MAX_WEIGHT_KG} className="input input--num"
         aria-label={`Satz ${ordinal}, Gewicht in kg`} value={weight}
         aria-invalid={problem?.startsWith('Gewicht') || undefined}
@@ -326,7 +335,7 @@ function SetEditor({ set, ordinal, onSave, onDelete }: {
             purpose -- see Icon.tsx's header. */}
         <button type="button" className="icon-btn"
           aria-label={`Satz ${ordinal} löschen`}
-          onClick={() => onDelete(set.id, ordinal)}>✕</button>
+          onClick={() => onDelete(set, ordinal)}>✕</button>
       </span>
     </div>
     <SetInputHint problem={problem} />
@@ -355,13 +364,11 @@ function addSeed(exercise: LiveExercise, suggestion: Suggestion | null) {
 
 function lastSetKey(exercise: LiveExercise): string {
   const last = exercise.sets[exercise.sets.length - 1]
-  return last === undefined ? 'none' : `${last.id}-${last.weight}-${last.reps}`
+  return last === undefined ? 'none' : `${last.key ?? last.id}-${last.weight}-${last.reps}`
 }
 
-function AddSetRow({ seed, busy, onAdd }: {
+function AddSetRow({ seed, onAdd }: {
   seed: { weight: number; reps: number } | null
-  /** An append for this exercise is still on its way to the server. */
-  busy: boolean
   onAdd(weight: number, reps: number): void
 }) {
   const [weight, setWeight] = useState(seed ? String(seed.weight) : '')
@@ -386,10 +393,11 @@ function AddSetRow({ seed, busy, onAdd }: {
       <span className="sset__acts">
         {/* Visible text short so the action slot never wraps; the accessible
             name stays the full phrase. Disabled while the fields cannot make a
-            set -- an empty row used to log 0 kg x 0 as done -- and while an
-            append is in flight, since a second tap would be a second set. */}
+            set -- an empty row used to log 0 kg x 0 as done. A double tap is
+            the island's to drop (APPEND_GUARD_MS): waiting for the answer
+            instead held the button for as long as the wifi was gone. */}
         <button type="button" className="btn btn--ghost btn--sm" aria-label="Satz anhängen"
-          disabled={parsed === null || busy}
+          disabled={parsed === null}
           onClick={() => { if (parsed !== null) onAdd(parsed.weight, parsed.reps) }}>
           Anhängen
         </button>

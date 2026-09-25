@@ -75,8 +75,8 @@ export const useWorkoutUi = create<WorkoutUiState>((set) => ({
 }))
 
 // ---------------------------------------------------------------------------
-// Save status: how many writes are in flight, which forms are locked, and the
-// one visible answer to "did that save?" -- for every write that did not.
+// Save status: how many writes are in flight, and the one visible answer to
+// "did that save?" -- for every write the outbox cannot keep trying.
 // ---------------------------------------------------------------------------
 
 /** What mends a failure. 'auto': sending the same write again, which the
@@ -106,7 +106,6 @@ interface SaveStateStore {
    *  slot kept only the newest, and any later success emptied it: earlier
    *  writes, already rolled back, vanished with no banner (G-139). */
   errors: SaveError[]
-  locked: Record<string, true>
   begin(): void
   end(): void
   succeed(key: string): void
@@ -123,9 +122,6 @@ interface SaveStateStore {
    *  included. */
   retryAll(): void
   dismissErrors(): void
-  lock(formId: string): void
-  unlock(formId: string): void
-  isLocked(formId: string): boolean
 }
 
 let lastErrorId = 0
@@ -133,7 +129,6 @@ let lastErrorId = 0
 export const useSaveState = create<SaveStateStore>((set, get) => ({
   pending: 0,
   errors: [],
-  locked: {},
 
   /** Counted, not flagged. Two concurrent saves need two ends -- a boolean
    *  would clear the sweep on the first while a second write was still out. */
@@ -179,21 +174,6 @@ export const useSaveState = create<SaveStateStore>((set, get) => ({
   },
 
   dismissErrors: () => set({ errors: [] }),
-
-  /** One write per form at a time. The confirm button is in the thumb zone
-   *  and its answer arrives a round trip later, so a second tap before the
-   *  first resolves is what a sweaty hand does, not an edge case. Keyed per
-   *  form because two different sets landing together is legitimate; the same
-   *  one twice is not. */
-  lock: (formId) => set((state) => ({ locked: { ...state.locked, [formId]: true } })),
-
-  unlock: (formId) => set((state) => {
-    const locked = { ...state.locked }
-    delete locked[formId]
-    return { locked }
-  }),
-
-  isLocked: (formId) => get().locked[formId] === true,
 }))
 
 /** Takes a checkpoint; the function it returns says whether any write has
@@ -202,6 +182,53 @@ export const useSaveState = create<SaveStateStore>((set, get) => ({
 export function failureCheckpoint(): () => boolean {
   const before = new Set(useSaveState.getState().errors.map((e) => e.id))
   return () => useSaveState.getState().errors.some((e) => !before.has(e.id))
+}
+
+// ---------------------------------------------------------------------------
+// The outbox (./outbox.ts): what the phone still holds for the server.
+// ---------------------------------------------------------------------------
+
+/** 'sending': a write is out, or next. 'waiting': the last try found no
+ *  connection, and the next comes by itself. 'blocked': only a fresh page
+ *  can send -- a stale token or a lapsed login. */
+export type OutboxState = 'idle' | 'sending' | 'waiting' | 'blocked'
+
+export interface OutboxStatus {
+  state: OutboxState
+  /** Writes kept on the phone and not answered yet. */
+  count: number
+  /** While waiting or blocked: the sets whose own write is among them, so
+   *  their chips can say so. Empty otherwise -- a write out for a moment is
+   *  no news. */
+  setIds: number[]
+}
+
+interface OutboxStore extends OutboxStatus {
+  /** "Beenden" was tapped while the writes could not get through: the
+   *  status line says why nothing happened, until they are in. */
+  finishRefused: boolean
+  publish(status: OutboxStatus): void
+  refuseFinish(): void
+}
+
+export const useOutbox = create<OutboxStore>((set) => ({
+  state: 'idle',
+  count: 0,
+  setIds: [],
+  finishRefused: false,
+  publish: (status) => set((state) => ({
+    ...status,
+    // Everything in: the reason finishing waited is gone with them.
+    finishRefused: state.finishRefused && status.count > 0,
+  })),
+  refuseFinish: () => set({ finishRefused: true }),
+}))
+
+/** What a set whose write the phone holds is waiting for, said on its chip:
+ *  the status line's words. "Verbindung" while only a fresh page can send
+ *  contradicted it (B6 review). */
+export function useWaitingFor(): string {
+  return useOutbox((s) => (s.state === 'blocked' ? 'wartet auf Neuladen' : 'wartet auf Verbindung'))
 }
 
 // ---------------------------------------------------------------------------

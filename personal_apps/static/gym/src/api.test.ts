@@ -59,11 +59,23 @@ describe('postForm failure reasons', () => {
     expect(headers['Accept']).toBe('application/json')
   })
 
-  it('keeps any other non-ok as a network failure', async () => {
-    vi.stubGlobal('fetch', vi.fn(async () => ({ ok: false, status: 500 } as Response)))
-    const error = await postForm('/gym/x').catch((e: unknown) => e)
-    expect((error as MutationFailed).reason).toBe('network')
-    expect((error as MutationFailed).retryable).toBe(true)
+  it('reads a server that is down or busy as a failed connection', async () => {
+    for (const status of [429, 502, 503, 504]) {
+      vi.stubGlobal('fetch', vi.fn(async () => ({ ok: false, status } as Response)))
+      const error = await postForm('/gym/x').catch((e: unknown) => e) as MutationFailed
+      expect(error.reason, String(status)).toBe('network')
+      expect(error.retryable).toBe(true)
+    }
+  })
+
+  it('names any other non-ok a server error: worth a retry, but not forever (B6 review)', async () => {
+    for (const status of [500, 413, 422]) {
+      vi.stubGlobal('fetch', vi.fn(async () => ({ ok: false, status } as Response)))
+      const error = await postForm('/gym/x').catch((e: unknown) => e) as MutationFailed
+      expect(error.reason, String(status)).toBe('server')
+      expect(error.retryable).toBe(true)
+      expect(error.germanMessage).toBe('Fehler auf dem Server — die Änderung wurde nicht gespeichert.')
+    }
   })
 
   it('shows the server\'s own sentence for a refused value, with nothing to retry', async () => {
@@ -124,5 +136,33 @@ describe('getJson failure reasons', () => {
     expect(error.reason).toBe('gone')
     expect(error.retryable).toBe(false)
     expect(error.germanMessage).toContain('Gibt es nicht mehr')
+  })
+
+  it('gives up on a read with a write\'s time limit, as a retry (B6 re-review)', async () => {
+    // The outbox asks under the workout's lock: a question into dead wifi
+    // held every tab's writes for as long as the phone took to give up.
+    vi.useFakeTimers()
+    try {
+      vi.stubGlobal('fetch', vi.fn((_url: string, init: RequestInit) => new Promise((_, reject) => {
+        init.signal!.addEventListener('abort', () => {
+          reject(Object.assign(new Error('aborted'), { name: 'AbortError' }))
+        })
+      })))
+      const asked = getJson('/gym/x.json').catch((e: unknown) => e)
+      await vi.advanceTimersByTimeAsync(8000)
+      const error = await asked as MutationFailed
+      expect(error).toBeInstanceOf(MutationFailed)
+      expect(error.reason).toBe('timeout')
+      expect(error.retryable).toBe(true)
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it('names a read that could not get through a failed connection', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => { throw new TypeError('Failed to fetch') }))
+    const error = await getJson('/gym/x.json').catch((e: unknown) => e) as MutationFailed
+    expect(error).toBeInstanceOf(MutationFailed)
+    expect(error.reason).toBe('network')
   })
 })

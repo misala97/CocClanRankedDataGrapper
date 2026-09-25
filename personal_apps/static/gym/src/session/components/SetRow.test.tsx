@@ -5,7 +5,7 @@ import { SetRow } from './SetRow'
 import type { LiveSet } from '../types'
 
 const aSet = (over: Partial<LiveSet> = {}): LiveSet => ({
-  id: 100, weight: 62.5, reps: 8, completed: false, base_weight: null, ...over,
+  id: 100, weight: 62.5, reps: 8, completed: false, base_weight: null, key: null, ...over,
 })
 
 const props = {
@@ -121,15 +121,24 @@ describe('SetRow', () => {
     })()
   })
 
-  it('cannot be tapped twice while its write is in flight', async () => {
-    // The confirm target is in the thumb zone and its answer arrives a round
-    // trip later, so a second tap before the first resolves is what a sweaty
-    // hand does -- not an edge case.
+  it('says a set kept on the phone is waiting, and stays tappable (B6)', async () => {
+    // Marked, never locked: a chip disabled for the length of an outage was
+    // a set the lifter could not un-log until the wifi came back.
     const user = userEvent.setup()
     const onToggle = vi.fn()
-    render(<SetRow {...props} set={aSet()} onToggle={onToggle} busy />)
+    render(<SetRow {...props} set={aSet({ completed: true })} onToggle={onToggle} waiting />)
 
-    await user.click(screen.getByRole('button'))
-    expect(onToggle).not.toHaveBeenCalled()
+    const chip = screen.getByRole('button')
+    expect(chip).toHaveClass('is-done', 'is-waiting')
+    expect(chip).toHaveAccessibleName(
+      'Satz 1 erledigt, 62,5 kg mal 8 — wartet auf Verbindung — antippen zum Zurücksetzen')
+    await user.click(chip)
+    expect(onToggle).toHaveBeenCalledWith(100, false)
+  })
+
+  it('says nothing of waiting when nothing waits', () => {
+    render(<SetRow {...props} set={aSet({ completed: true })} onToggle={vi.fn()} />)
+    expect(screen.getByRole('button')).not.toHaveClass('is-waiting')
+    expect(screen.getByRole('button').getAttribute('aria-label')).not.toContain('wartet')
   })
 })

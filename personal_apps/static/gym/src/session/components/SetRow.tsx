@@ -1,6 +1,7 @@
 import type { LiveSet } from '../types'
 import { Icon } from '../../components/Icon'
 import { kg1 } from '../../format'
+import { useWaitingFor } from '../stores'
 
 interface Props {
   set: LiveSet
@@ -10,8 +11,10 @@ interface Props {
   /** The one set the steppers are bound to. */
   isNext: boolean
   isUnilateral: boolean
-  /** True while this set's write is in flight. */
-  busy?: boolean
+  /** Its write is kept on the phone until the connection is back (B6). A
+   *  mark, never a lock: the chip stays tappable, and what it does next is
+   *  queued behind. */
+  waiting?: boolean
   onToggle(setId: number, completed: boolean): void
 }
 
@@ -27,8 +30,11 @@ interface Props {
  * do for them.
  */
 export function SetRow({
-  set, ordinal, isRecord, isNext, isUnilateral, busy = false, onToggle,
+  set, ordinal, isRecord, isNext, isUnilateral, waiting = false, onToggle,
 }: Props) {
+  const waitingFor = useWaitingFor()
+  const mark = waiting ? ' is-waiting' : ''
+  const said = waiting ? ` — ${waitingFor}` : ''
   // A planned set still waiting for its numbers (an exercise with no history)
   // is named, not numbered: an invented "20,0 × 8" read as advice. Only ever
   // an open set -- a logged one always has both.
@@ -36,9 +42,9 @@ export function SetRow({
     const missing = set.weight === null && set.reps === null
       ? 'Zahlen' : set.weight === null ? 'Gewicht' : 'Wdh.'
     return (
-      <button type="button" className={`set is-blank${isNext ? ' is-now' : ''}`}
-        aria-label={`Satz ${ordinal}, noch ohne ${missing} — antippen zum Auswählen`}
-        disabled={busy} onClick={() => onToggle(set.id, true)}>
+      <button type="button" className={`set is-blank${isNext ? ' is-now' : ''}${mark}`}
+        aria-label={`Satz ${ordinal}, noch ohne ${missing}${said} — antippen zum Auswählen`}
+        onClick={() => onToggle(set.id, true)}>
         {`Satz ${ordinal}`}
       </button>
     )
@@ -52,10 +58,10 @@ export function SetRow({
   // be byte-identical to a logged set's -- so the rarest state in the app did
   // not exist for a screen reader at all.
   const ariaLabel = isRecord
-    ? `Satz ${ordinal} — Rekord, ${amount} — antippen zum Zurücksetzen`
+    ? `Satz ${ordinal} — Rekord, ${amount}${said} — antippen zum Zurücksetzen`
     : set.completed
-      ? `Satz ${ordinal} erledigt, ${amount} — antippen zum Zurücksetzen`
-      : `Satz ${ordinal}, geplant ${weight} kg${perSide} mal ${set.reps} — antippen zum Auswählen`
+      ? `Satz ${ordinal} erledigt, ${amount}${said} — antippen zum Zurücksetzen`
+      : `Satz ${ordinal}, geplant ${weight} kg${perSide} mal ${set.reps}${said} — antippen zum Auswählen`
 
   const className = isRecord
     ? 'set is-record'
@@ -66,9 +72,8 @@ export function SetRow({
   return (
     <button
       type="button"
-      className={className}
+      className={`${className}${mark}`}
       aria-label={ariaLabel}
-      disabled={busy}
       // States the state it wants, not "flip me" -- see
       // gym_toggle_set_complete, which is idempotent precisely because the
       // client names its target rather than asking for an inversion. The

@@ -3,7 +3,7 @@ import type { LiveExercise } from '../types'
 import { fetchSettings } from '../../settings/api'
 import { SettingsBody } from '../../settings/SettingsBody'
 import { useSheets } from '../stores'
-import { sessionKey } from '../useSessionMutation'
+import { sessionKey } from '../api'
 import { Sheet } from './Sheet'
 
 interface Props {
