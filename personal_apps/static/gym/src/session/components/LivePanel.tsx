@@ -7,7 +7,7 @@ import { useRestTick } from '../useRestTick'
 import { useRecordTakeover } from '../useRecordTakeover'
 import { Icon } from '../../components/Icon'
 import { kg1, setsLine, shortDate, whenSaid } from '../../format'
-import { MAX_REPS, MAX_WEIGHT_KG, REPS_HINT, WEIGHT_HINT } from '../../setInput'
+import { MAX_REPS, MAX_WEIGHT_KG, REPS_HINT, WEIGHT_HINT, unlikely } from '../../setInput'
 import { REST_MAX, REST_NUDGE, clock } from '../../settings/values'
 import { Drawing, PictureTile } from './Picture'
 import { RecordTakeover } from './RecordTakeover'
@@ -176,11 +176,16 @@ export function LivePanel({
     if (!first) clearDraft(sessionId)
     setWeight(seedWeight)
     setReps(seedReps)
+    setAskedAbout(null)
   }, [boundTo, seedWeight, seedReps, sessionId])
+  // The numbers "Sicher?" was asked about (Q5, G-070): the next tap on the
+  // button logs them. Other numbers ask again.
+  const [askedAbout, setAskedAbout] = useState<string | null>(null)
   // Kept as it is set, for the set it is set for.
   const dial = (next: { weight: number | null; reps: number | null }) => {
     setWeight(next.weight)
     setReps(next.reps)
+    setAskedAbout(null)
     saveDraft(sessionId, { bound: boundTo, ...next })
   }
   const lastConfirm = useRef(-Infinity)
@@ -306,6 +311,11 @@ export function LivePanel({
   const perSide = live.is_unilateral ? ' je Seite' : ''
   const records = live.sets.filter(
     (s) => s.completed && payload.record_set_ids.includes(s.id))
+  // More than twice the best at the exercise: asked once before it is
+  // logged -- a slip of the thumb made a record that stayed (Q5, G-070).
+  const doubt = weight === null || reps === null
+    ? null : unlikely({ weight, reps }, live.best, `kg${perSide}`)
+  const asking = doubt !== null && askedAbout === `${weight}|${reps}`
 
   return (
     <section className="live" data-se-id={live.id}>
@@ -335,6 +345,14 @@ export function LivePanel({
           : <PictureTile src={null} size="live" />}
         <h2 className="live__name">{live.name}</h2>
       </div>
+      {/* Today's twinge and note, where the lifter looks before the set
+          (G-073): saved in the sheet, they showed nowhere else. */}
+      {(live.pain || Boolean(live.notes)) && (
+        <p className="live__meta">
+          {live.pain && <span className="chip chip--pain">Zwicken</span>}
+          {Boolean(live.notes) && <span className="live__note">{live.notes}</span>}
+        </p>
+      )}
 
       {/* Above the workspace, not below it. This is advice about the numbers
           you are about to set, and it used to render under the 64px confirm
@@ -424,8 +442,13 @@ export function LivePanel({
             // keyboard focus on it -- stays.
             <div className="set-form" key={setName(s)}>
               <SetRow set={s} ordinal={i + 1}
-                isRecord={payload.record_set_ids.includes(s.id)}
+                // Only a done set is gold: an un-log waiting out its undo
+                // keeps the record the server named (SessionIsland).
+                isRecord={s.completed && payload.record_set_ids.includes(s.id)}
                 isNext={nextSet !== null && s.id === nextSet.id}
+                // What "Satz geschafft" will log, on the chip it logs (G-054):
+                // the plan stayed on it while the steppers said otherwise.
+                now={nextSet !== null && s.id === nextSet.id ? { weight, reps } : undefined}
                 isUnilateral={live.is_unilateral}
                 waiting={waitingIds.includes(s.id)}
                 onToggle={(setId, completed) => {
@@ -532,6 +555,9 @@ export function LivePanel({
           logging: it opens the entry, keypad up, and says which number it
           wants -- a draft being typed counts, so the label has moved on by
           the time the thumb does. A tap cannot log a set without both. */}
+      {/* The question beside the button that answers it; in the tree while
+          empty, so it is heard the moment it asks. */}
+      <p className="live__doubt" role="status">{asking ? doubt : null}</p>
       <button type="button"
         className={`go${rest.running ? ' is-resting' : ''}${ringing ? ' is-ready' : ''}`}
         id="set-confirm"
@@ -542,6 +568,12 @@ export function LivePanel({
             const now = Date.now()
             if (now - lastConfirm.current < CONFIRM_GUARD_MS) return
             lastConfirm.current = now
+            // The first tap asks; a bounce inside the guard cannot answer.
+            if (doubt !== null && !asking) {
+              setAskedAbout(`${weight}|${reps}`)
+              return
+            }
+            setAskedAbout(null)
             clearDraft(sessionId)
             onConfirm(weight, reps, nextSet?.id ?? null)
           }
@@ -551,7 +583,7 @@ export function LivePanel({
             ? 'Gewicht eintippen'
             : reps === null && draftReps === null
               ? 'Wdh. eintippen'
-              : <><Icon name="check" />Satz geschafft</>}
+              : <><Icon name="check" />{asking ? 'Ja, eintragen' : 'Satz geschafft'}</>}
         </span>
         {rest.running && (
           <span className="go__band" aria-hidden="true">

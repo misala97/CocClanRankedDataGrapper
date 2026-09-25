@@ -68,6 +68,12 @@ export const api = {
   addSet: (sessionExerciseId: number, weight: number, reps: number, key: string, at?: number) =>
     post(`/gym/session-exercise/${sessionExerciseId}/sets/add`, { weight, reps, key }, at),
 
+  /** The sheet's "Anhängen" (Q2): the same route with `open`, which adds the
+   *  set open behind the others -- no rest, no record until it is ticked. */
+  planSet: (sessionExerciseId: number, weight: number, reps: number, key: string, at?: number) =>
+    post(`/gym/session-exercise/${sessionExerciseId}/sets/add`,
+      { weight, reps, key, open: '1' }, at),
+
   updateSet: (setId: number, weight: number, reps: number, at?: number) =>
     post(`/gym/set/${setId}/update`, { weight, reps }, at),
 
@@ -77,8 +83,11 @@ export const api = {
   addExercise: (sessionId: number, exerciseId: number, at?: number) =>
     post(`/gym/session/${sessionId}/exercises/add`, { exercise_id: exerciseId }, at),
 
-  removeExercise: (sessionExerciseId: number, at?: number) =>
-    post(`/gym/session-exercise/${sessionExerciseId}/delete`, {}, at),
+  /** `done`: the done sets the screen showed when the lifter asked. A row
+   *  holding more by the time this lands stays (a 409): a swap's undo sent
+   *  again later took the sets logged since with it (B7 review). */
+  removeExercise: (sessionExerciseId: number, done: number, at?: number) =>
+    post(`/gym/session-exercise/${sessionExerciseId}/delete`, { done: String(done) }, at),
 
   /** The state wanted, like the tick: a flip sent twice undid itself. */
   toggleSkip: (sessionExerciseId: number, skipped: boolean, at?: number) =>

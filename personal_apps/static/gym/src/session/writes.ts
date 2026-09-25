@@ -15,6 +15,8 @@ export interface WriteArgs {
   /** `key`: the set's own name (SessionSet.client_key). `tempId`: the id it
    *  has on the screen until the server names it -- negative. */
   addSet: [seId: number, weight: number, reps: number, key: string, tempId: number]
+  /** The sheet's "Anhängen" (Q2): addSet's, the set added open. */
+  planSet: [seId: number, weight: number, reps: number, key: string, tempId: number]
   updateSet: [setId: number, weight: number, reps: number]
   deleteSet: [setId: number]
   toggleSkip: [seId: number, skipped: boolean]
@@ -26,7 +28,8 @@ export interface WriteArgs {
   skipRest: []
   shiftRest: [seconds: number]
   addExercise: [exerciseId: number]
-  removeExercise: [seId: number]
+  /** `done`: the done sets on the row as the lifter saw it (api.removeExercise). */
+  removeExercise: [seId: number, done: number]
   replaceExercise: [seId: number, exerciseId: number]
   toggleDeload: [on: boolean, pct: number]
 }
@@ -66,6 +69,12 @@ export function writeSpecs(sessionId: number): Record<string, WriteSpec> {
       send: ([seId, weight, reps, key], at) => api.addSet(seId, weight, reps, key, at),
       apply: (p, [seId, weight, reps, key, tempId], at) =>
         optimistic.addSet(p, seId, weight, reps, key, tempId, at),
+      durable: true, key: ([, , , key]) => `add-${key}`, creates: { key: 3, temp: 4 },
+    },
+    planSet: {
+      send: ([seId, weight, reps, key], at) => api.planSet(seId, weight, reps, key, at),
+      apply: (p, [seId, weight, reps, key, tempId]) =>
+        optimistic.planSet(p, seId, weight, reps, key, tempId),
       durable: true, key: ([, , , key]) => `add-${key}`, creates: { key: 3, temp: 4 },
     },
     updateSet: {
@@ -131,7 +140,7 @@ export function writeSpecs(sessionId: number): Record<string, WriteSpec> {
       durable: false, key: ([exerciseId]) => `add-exercise-${exerciseId}`, resend: 'manual',
     },
     removeExercise: {
-      send: ([seId], at) => api.removeExercise(seId, at),
+      send: ([seId, done], at) => api.removeExercise(seId, done, at),
       durable: false, key: ([seId]) => `exercise-${seId}`, resend: 'auto',
     },
     replaceExercise: {

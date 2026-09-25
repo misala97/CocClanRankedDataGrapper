@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import {
-  addSet, deleteSet, relive, reorderExercises, setExerciseMeta, setRest, setRoutinePlan,
-  setSessionMeta, shiftRest, skipRest, toggleSet, toggleSkip, updateSet,
+  addSet, deleteSet, planSet, relive, removeExercise, reorderExercises, setExerciseMeta, setRest,
+  setRoutinePlan, setSessionMeta, shiftRest, skipRest, toggleSet, toggleSkip, unswap, updateSet,
 } from './optimistic'
 import { payload } from './types.test-d'
 import type { SessionDetailPayload } from './types'
@@ -182,12 +182,16 @@ describe('what deliberately has no optimistic path', () => {
     // explicit intent, so it is honest -- reorderExercises leaves live_id
     // untouched and the server's answer still replaces it wholesale.
     // `relive` is that rule, for the one screen whose answer is not coming
-    // (B6, offline) -- the outbox applies it only then.
+    // (B6, offline) -- the outbox applies it only then -- and for an exercise
+    // removed while its undo runs, which no answer covers until it is sent
+    // (removeExercise, G-067), or a swap taken back, whose original the
+    // screen still holds (unswap). A set planned on a row already done makes
+    // it live again on the server (G-060): the same rule, the same answer.
     const module = await import('./optimistic')
     expect(Object.keys(module).sort()).toEqual(
-      ['addSet', 'deleteSet', 'relive', 'reorderExercises', 'setExerciseMeta', 'setRest',
-        'setRoutinePlan', 'setSessionMeta', 'shiftRest', 'skipRest', 'toggleSet', 'toggleSkip',
-        'updateSet'])
+      ['addSet', 'deleteSet', 'planSet', 'relive', 'removeExercise', 'reorderExercises',
+        'setExerciseMeta', 'setRest', 'setRoutinePlan', 'setSessionMeta', 'shiftRest',
+        'skipRest', 'toggleSet', 'toggleSkip', 'unswap', 'updateSet'])
   })
 })
 
@@ -275,6 +279,26 @@ describe('optimistic addSet', () => {
   it('adds nothing when the answer already holds the set -- a copy landed first', () => {
     const landed = addSet(payload, live.id, 70, 5, 'k-1', 500, AT)
     expect(addSet(landed, live.id, 70, 5, 'k-1', -9, AT)).toBe(landed)
+  })
+})
+
+describe('optimistic planSet (Q2, G-060)', () => {
+  it('plans an open set behind the others: counted in the total, not as done, no rest', () => {
+    const next = planSet(payload, live.id, 70, 5, 'k-1', -9)
+    const sets = next.visible_exercises.find((se) => se.id === live.id)!.sets
+    expect(sets.at(-1)).toEqual({ id: -9, weight: 70, reps: 5, completed: false, base_weight: null, key: 'k-1' })
+    expect(sets).toHaveLength(live.sets.length + 1)
+    expect(next.sets_total).toBe(payload.sets_total + 1)
+    expect(next.sets_done).toBe(payload.sets_done)
+    expect(next.session_volume).toBe(payload.session_volume)
+    expect(next.tick_states).toHaveLength(payload.tick_states.length + 1)
+    expect(next.session.rest_ends_at).toBe(payload.session.rest_ends_at)
+    expect(next.session.resting_set_id).toBe(payload.session.resting_set_id)
+  })
+
+  it('adds nothing when the answer already holds the set', () => {
+    const landed = planSet(payload, live.id, 70, 5, 'k-1', 500)
+    expect(planSet(landed, live.id, 70, 5, 'k-1', -9)).toBe(landed)
   })
 })
 
@@ -438,6 +462,85 @@ describe('skipRest', () => {
     expect(skipRest(payload, now)).toBe(payload)
     const ranOut = { ...resting, session: { ...resting.session, rest_ends_at: '2026-09-24T09:59:00' } }
     expect(skipRest(ranOut, now)).toBe(ranOut)
+  })
+})
+
+describe('removeExercise, drawn while its undo waits (B7 review)', () => {
+  // Shown for the five seconds, the row stayed live and took the next
+  // "Satz geschafft" -- and the set went with the exercise at the commit.
+  const [bench, butterfly] = payload.visible_exercises
+  const two: SessionDetailPayload = {
+    ...payload, visible_exercises: [bench!, { ...butterfly!, skipped: false }],
+  }
+
+  it('drops the row, its sets from the tally, and hands the card to the next', () => {
+    const next = removeExercise(two, bench!.id)
+    expect(next.visible_exercises.map((se) => se.id)).toEqual([butterfly!.id])
+    expect(next.live_id).toBe(butterfly!.id)
+    expect(next.live_index).toBe(1)
+    expect(next.sets_done).toBe(0)
+    expect(next.tick_states).toHaveLength(butterfly!.sets.length)
+  })
+
+  it('ends a rest whose set goes with the row, as the server does', () => {
+    const resting: SessionDetailPayload = {
+      ...two, resting: true, rest_total_seconds: 90,
+      session: { ...two.session, rest_ends_at: '2026-09-24T10:01:00', resting_set_id: doneSet.id },
+    }
+    expect(removeExercise(resting, bench!.id).resting).toBe(false)
+    expect(removeExercise(resting, butterfly!.id).resting).toBe(true)
+  })
+
+  it('leaves a payload without the row as it is', () => {
+    expect(removeExercise(two, 99_999)).toBe(two)
+  })
+})
+
+describe('unswap, drawn while a swap\'s undo is on its way (B7 re-review)', () => {
+  // Left live until the remove landed, the substitute took the next set,
+  // and the remove took the set with it.
+  const [bench, ...rest] = payload.visible_exercises
+  const open = { id: 770, weight: 60, reps: 8, completed: false, base_weight: null, key: null }
+  const swapped: SessionDetailPayload = {
+    ...payload,
+    live_id: 77,
+    live_index: 1,
+    sets_done: payload.sets_done - 1,
+    visible_exercises: [
+      { ...bench!, id: 77, exercise_id: 999, name: 'Ersatz', sets: [open], is_substitute: true },
+      ...rest,
+    ],
+  }
+
+  it('puts the original back in its place, with its sets and the card', () => {
+    const next = unswap(swapped, 77, bench!)
+    expect(next.visible_exercises.map((se) => se.id)).toEqual(payload.visible_exercises.map((se) => se.id))
+    expect(next.live_id).toBe(bench!.id)
+    expect(next.live_index).toBe(1)
+    expect(next.sets_done).toBe(payload.sets_done)
+    expect(next.sets_total).toBe(payload.sets_total)
+    expect(next.tick_states).toEqual(payload.tick_states)
+  })
+
+  it('counts the original back in while the card stays on another lift', () => {
+    // The card does not move, so nothing else recounts: the totals must.
+    const [butterfly] = rest
+    const away: SessionDetailPayload = {
+      ...payload,
+      sets_done: -1,
+      sets_total: -1,
+      tick_states: [],
+      visible_exercises: [bench!, { ...butterfly!, id: 77, sets: [open], is_substitute: true }],
+    }
+    const next = unswap(away, 77, butterfly!)
+    expect(next.live_id).toBe(payload.live_id)
+    expect(next.sets_done).toBe(payload.sets_done)
+    expect(next.sets_total).toBe(payload.sets_total)
+    expect(next.tick_states).toEqual(payload.tick_states)
+  })
+
+  it('leaves an answer without the substitute as it is', () => {
+    expect(unswap(payload, 77, bench!)).toBe(payload)
   })
 })
 

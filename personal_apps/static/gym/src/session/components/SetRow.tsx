@@ -10,6 +10,9 @@ interface Props {
   isRecord: boolean
   /** The one set the steppers are bound to. */
   isNext: boolean
+  /** The steppers' numbers, for the open chip they are bound to: what
+   *  "Satz geschafft" will log, shown in the plan's place (G-054). */
+  now?: { weight: number | null; reps: number | null }
   isUnilateral: boolean
   /** Its write is kept on the phone until the connection is back (B6). A
    *  mark, never a lock: the chip stays tappable, and what it does next is
@@ -27,14 +30,16 @@ interface Props {
  * was logged at, an outlined chip is the plan it is prefilled for -- without
  * the plan the lifter at the machine had to remember last week's numbers just
  * to decide whether to add weight, which is the one thing a tracker exists to
- * do for them.
+ * do for them. The ringed chip, the one the steppers are bound to, shows the
+ * steppers: what the tap on "Satz geschafft" will log (G-054).
  */
 export function SetRow({
-  set, ordinal, isRecord, isNext, isUnilateral, waiting = false, onToggle,
+  set: stored, ordinal, isRecord, isNext, now, isUnilateral, waiting = false, onToggle,
 }: Props) {
   const waitingFor = useWaitingFor()
   const mark = waiting ? ' is-waiting' : ''
   const said = waiting ? ` — ${waitingFor}` : ''
+  const set = isNext && !stored.completed && now !== undefined ? { ...stored, ...now } : stored
   // A planned set still waiting for its numbers (an exercise with no history)
   // is named, not numbered: an invented "20,0 × 8" read as advice. Only ever
   // an open set -- a logged one always has both.

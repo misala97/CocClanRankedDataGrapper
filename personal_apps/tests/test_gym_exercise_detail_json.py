@@ -6,9 +6,12 @@ between them. That rule is ~20 lines (best-performing slot with at least two
 sessions, falling back to the most-used one), and two copies of it would
 disagree the first time either was touched.
 """
+import datetime as dt
+
 import pytest
 
 from conftest import _admin_id, acting_as
+from gym_lifter import lifter  # noqa: F401 -- the fixture
 
 
 def _an_exercise_id():
@@ -160,3 +163,25 @@ def test_every_exercise_page_renders(client):
            for i in _every_exercise_id()]
     assert all(status == 200 for _, status in bad), \
         f'non-200 responses: {[p for p in bad if p[1] != 200]}'
+
+
+def test_the_running_workout_stays_off_the_page(lifter):
+    """A workout still running is not history yet (G-109, Q3), as on
+    Übungen and Start: mid-workout the page already counted it, said "Seit 1
+    Workout kein neuer e1RM-PR" and moved its projection with it."""
+    from app import app as flask_app
+    from extensions import db
+    with flask_app.app_context():
+        press = lifter.exercise('press')
+        done = lifter.workout(dt.timedelta(days=3), finished=True)
+        lifter.row(done, press, 1, done=[(60.0, 8), (60.0, 8)])
+        running = lifter.workout(dt.timedelta(minutes=20))
+        lifter.row(running, press, 1, done=[(80.0, 8)])
+        db.session.commit()
+        press_id = press.id
+    client = lifter.client()
+
+    page = client.get(f'/gym/exercises/{press_id}/detail.json').get_json()
+    assert len(page['table']) == 1
+    glance = client.get(f'/gym/exercises/{press_id}/progress.json').get_json()
+    assert glance['pr_weight']['weight'] == 60.0

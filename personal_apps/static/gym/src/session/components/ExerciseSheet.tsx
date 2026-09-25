@@ -1,10 +1,12 @@
-import { useState } from 'react'
-import type { CatalogueExercise, LiveExercise, LiveSet, RoutinePlan, Suggestion } from '../types'
+import { useEffect, useRef, useState } from 'react'
+import type {
+  CatalogueExercise, LiveBest, LiveExercise, LiveSet, RoutinePlan, Suggestion,
+} from '../types'
 import { useUndo } from '../../undo'
-import { useOutbox, useWaitingFor } from '../stores'
+import { useDeleting, useOutbox, useSheets, useWaitingFor } from '../stores'
 import { setName } from '../setName'
 import {
-  MAX_NOTE_CHARS, MAX_REPS, MAX_WEIGHT_KG, parseSetInput, setInputProblem,
+  MAX_NOTE_CHARS, MAX_REPS, MAX_WEIGHT_KG, parseSetInput, setInputProblem, unlikely,
 } from '../../setInput'
 import { Drawing, movementOf } from './Picture'
 import { RoutinePlanGroup } from './RoutinePlanGroup'
@@ -12,6 +14,9 @@ import { Sheet } from './Sheet'
 import { Icon } from '../../components/Icon'
 import { Choice } from '../../settings/Choice'
 import { REST_MAX, REST_MIN, REST_NUDGE, clock, kg, restChoices } from '../../settings/values'
+
+/** How long a row says "Gespeichert" after it saved itself (G-058). */
+export const SAVED_MS = 2000
 
 export interface ExerciseSheetActions {
   /** "Pause heute". The setting's own value is sent as itself; the server
@@ -24,9 +29,11 @@ export interface ExerciseSheetActions {
   /** Settles once the server has answered; rejects when it refused the
    *  delete. A lost connection is neither: the delete waits on the phone. */
   onSetDelete(setId: number): Promise<unknown>
+  /** "Anhängen": one more set, planned open behind the others (Q2). */
   onAddSet(weight: number, reps: number): void
   onToggleSkip(): void
   onReplace(exerciseId: number): void
+  /** At the tap: the island hides the row and offers the undo (G-067). */
   onRemove(): void
   onShowProgress(): void
   /** Pull this exercise in front of the live one, so it is up next. */
@@ -39,6 +46,8 @@ interface Props extends ExerciseSheetActions {
   exercise: LiveExercise
   /** The whole exercise list, which a replacement comes from. */
   catalogue: CatalogueExercise[]
+  /** The exercises this workout already holds, marked in the replace list. */
+  inWorkout: number[]
   /** What the add-a-set row pre-fills with when the exercise has no set yet.
    *  Null for an exercise with no history to seed from. */
   suggestion: Suggestion | null
@@ -62,7 +71,7 @@ interface Props extends ExerciseSheetActions {
  * down, in a sheet that says they hold for every workout.
  */
 export function ExerciseSheet({
-  exercise, catalogue, suggestion, canMakeLive, routine,
+  exercise, catalogue, inWorkout, suggestion, canMakeLive, routine,
   onRestChange, onOpenSettings, onMetaSave, onSetUpdate, onSetDelete,
   onAddSet, onToggleSkip, onReplace, onRemove, onShowProgress,
   onMakeLive, onRoutinePlanChange,
@@ -72,36 +81,68 @@ export function ExerciseSheet({
   // The sets whose write the phone is holding (B6), marked as on the card.
   const waitingIds = useOutbox((s) => s.setIds)
   const offerUndo = useUndo((s) => s.offer)
-  // Sets hidden while their delete waits out the undo window. By name, not
-  // index: the payload swap after the commit removes them for real. Not by
-  // id either: a set just added changes id when it lands, and came back for
-  // the rest of the window (B6 re-review).
-  const [hidden, setHidden] = useState<string[]>([])
+  const closeSheet = useSheets((s) => s.close)
+  // Sets whose delete waits out the undo window, gone from the whole screen
+  // meanwhile -- the totals too (G-061). By name: see useDeleting.
+  const deleting = useDeleting((s) => s.names)
+  const hideSet = useDeleting((s) => s.hide)
+  const unhideSet = useDeleting((s) => s.unhide)
+  const unit = exercise.is_unilateral ? 'kg je Seite' : 'kg'
 
   const deleteSet = (set: LiveSet, ordinal: number) => {
     const name = setName(set)
-    const unhide = () => setHidden((names) => names.filter((n) => n !== name))
-    setHidden((names) => [...names, name])
+    hideSet(name)
     offerUndo({
       label: `Satz ${ordinal} gelöscht.`,
-      undo: unhide,
+      undo: () => unhideSet(name),
       // Queued on the phone the moment it commits -- a flush on the way out
-      // of the page included (G-062) -- and sent until it lands. A delete
-      // the server refuses brings its row back: this list kept hiding it,
-      // so a refused delete looked like a done one (G-147). A drawn id the
-      // server has named since is sent as the real one.
-      commit: () => { onSetDelete(set.id).catch(unhide) },
+      // of the page included (G-062) -- and drawn gone by the outbox from
+      // then on, until it lands; one the server refuses comes back with its
+      // row (G-147). A drawn id the server has named since is sent as the
+      // real one.
+      commit: () => {
+        onSetDelete(set.id).catch(() => {})
+        unhideSet(name)
+      },
     })
+  }
+
+  // "Gespeichert" under the row that saved itself, by the set's name: the
+  // row is drawn anew with the numbers it saved.
+  const [saved, setSaved] = useState<string | null>(null)
+  const savedTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  useEffect(() => () => {
+    if (savedTimer.current !== null) clearTimeout(savedTimer.current)
+  }, [])
+  const saveSet = (set: LiveSet, weight: number, reps: number) => {
+    onSetUpdate(set.id, weight, reps)
+    const name = setName(set)
+    setSaved(name)
+    if (savedTimer.current !== null) clearTimeout(savedTimer.current)
+    savedTimer.current = setTimeout(() => {
+      setSaved((shown) => (shown === name ? null : shown))
+    }, SAVED_MS)
   }
 
   // The same muscle group first: a replacement is usually "the machine is
   // taken, same muscles another way". That can be empty -- an exercise with
   // no group, or one the list has no neighbour for -- and then the whole list
-  // stands in, since nothing is created here any more.
+  // stands in, since nothing is created here any more. Within it, the ones
+  // the lifter does first (G-068), in the order they do them most.
   const others = catalogue.filter((e) => e.id !== exercise.exercise_id)
   const sameGroup = others.filter((e) => e.muscle_group === exercise.muscle_group)
   const swaps = sameGroup.length > 0 ? sameGroup : others
-  const [replaceWith, setReplaceWith] = useState(swaps[0]?.id ?? 0)
+  const theirs = swaps.filter((e) => e.common)
+    .sort((a, b) => (a.rank ?? Infinity) - (b.rank ?? Infinity))
+  const rest = swaps.filter((e) => !e.common)
+  // Nothing chosen until the lifter chooses: the first of the list stood
+  // preselected, and one tap swapped in an exercise nobody picked (G-068).
+  const [replaceWith, setReplaceWith] = useState<number | null>(null)
+  const option = (e: CatalogueExercise) => (
+    <option value={e.id} key={e.id}>
+      {inWorkout.includes(e.id) ? `${e.name} — schon im Workout` : e.name}
+    </option>
+  )
 
   return (
     <Sheet id={`sheet-ex-${exercise.id}`} title={exercise.name}>
@@ -182,7 +223,7 @@ export function ExerciseSheet({
         <div className="sheet__group-head">
           <span className="label">Sätze</span>
         </div>
-        {exercise.sets.filter((s) => !hidden.includes(setName(s))).map((s, i) => (
+        {exercise.sets.filter((s) => !deleting.includes(setName(s))).map((s, i) => (
           // Keyed on the stored numbers, not on the id alone: an editor holds
           // its fields in local state, so a set rewritten while the sheet is
           // open -- by the partner's phone in a shared workout, or by the
@@ -190,14 +231,21 @@ export function ExerciseSheet({
           // post it back on the next save. The key only moves when the SERVER
           // value moves; typing in the field does not touch it.
           <SetEditor set={s} ordinal={i + 1} key={`${s.key ?? s.id}-${s.weight}-${s.reps}`}
-            waiting={waitingIds.includes(s.id)}
-            onSave={onSetUpdate} onDelete={deleteSet} />
+            idBase={`sset-${exercise.id}-${i + 1}`} unit={unit} best={exercise.best}
+            waiting={waitingIds.includes(s.id)} saved={saved === setName(s)}
+            onSave={saveSet} onDelete={deleteSet} />
         ))}
         {/* Seeded from the last set, not only from the session's opening
             suggestion: appending is usually one more of what you just did.
-            Keyed on that seed so a new last set re-seeds the row. */}
-        <AddSetRow key={lastSetKey(exercise)} seed={addSeed(exercise, suggestion)}
-          onAdd={onAddSet} />
+            Keyed on that seed so a new last set re-seeds the row. A skipped
+            exercise plans nothing: its open sets went with the skip, and one
+            planned now would wait for a card that never shows it. */}
+        {exercise.skipped
+          ? <p className="sheet__note">Übersprungen — neue Sätze erst nach „Nicht mehr überspringen“.</p>
+          : (
+            <AddSetRow key={lastSetKey(exercise)} seed={addSeed(exercise, suggestion)}
+              unit={unit} best={exercise.best} onAdd={onAddSet} />
+          )}
       </div>
 
       <div className="sheet__group">
@@ -246,17 +294,28 @@ export function ExerciseSheet({
               </span>
             </summary>
 
-            <div className="sheet__pane">
-              <div className="field grow">
+            {/* The button beside the list, where the choice is made: under
+                it, it sat below the fold (G-068). */}
+            <div className="sheet__save-row">
+              <div className="field">
                 <label className="label" htmlFor={`replace-select-${exercise.id}`}>Ersatzübung</label>
                 <select id={`replace-select-${exercise.id}`} className="select"
-                  value={replaceWith}
-                  onChange={(e) => setReplaceWith(Number(e.target.value))}>
-                  {swaps.map((e) => <option value={e.id} key={e.id}>{e.name}</option>)}
+                  value={replaceWith ?? ''}
+                  onChange={(e) => setReplaceWith(e.target.value === '' ? null : Number(e.target.value))}>
+                  <option value="" disabled>Übung wählen …</option>
+                  {theirs.length > 0
+                    ? (
+                      <>
+                        <optgroup label="Deine">{theirs.map(option)}</optgroup>
+                        {rest.length > 0 && <optgroup label="Weitere">{rest.map(option)}</optgroup>}
+                      </>
+                    )
+                    : rest.map(option)}
                 </select>
               </div>
               <button type="button" className="btn btn--live btn--sm"
-                onClick={() => onReplace(replaceWith)}>Ersetzen</button>
+                disabled={replaceWith === null}
+                onClick={() => { if (replaceWith !== null) onReplace(replaceWith) }}>Ersetzen</button>
             </div>
           </details>
         )}
@@ -271,11 +330,13 @@ export function ExerciseSheet({
           </p>
         ) : (
           <button type="button" className="sheet-row sheet-row--danger"
-            onClick={() => offerUndo({
-              label: `${exercise.name} wird entfernt.`,
-              undo: () => {},
-              commit: () => onRemove(),
-            })}>
+            onClick={() => {
+              // Closed at the tap, the undo on the toast (G-067): open, it
+              // stayed editable for the whole window, on an exercise about
+              // to go. The island hides the row and keeps the undo.
+              closeSheet()
+              onRemove()
+            }}>
             <span className="sheet-row__lead"><Icon name="trash" /></span>
             <span className="sheet-row__main">
               <span className="sheet-row__name">Übung entfernen</span>
@@ -288,47 +349,88 @@ export function ExerciseSheet({
   )
 }
 
-function SetEditor({ set, ordinal, waiting, onSave, onDelete }: {
-  set: LiveExercise['sets'][number]
+function SetEditor({ set, ordinal, idBase, unit, best, waiting, saved, onSave, onDelete }: {
+  set: LiveSet
   ordinal: number
+  /** Unique on the page: the sheet's exercise and the row. */
+  idBase: string
+  /** "kg", or "kg je Seite" for a one-sided exercise, as on the card (G-057). */
+  unit: string
+  best: LiveBest | null
   /** Its write is kept on the phone until the connection is back (B6). */
   waiting: boolean
-  onSave(setId: number, weight: number, reps: number): void
+  /** It just saved itself. */
+  saved: boolean
+  onSave(set: LiveSet, weight: number, reps: number): void
   onDelete(set: LiveSet, ordinal: number): void
 }) {
   // A blank planned set starts with empty fields, not the text "null".
   const [weight, setWeight] = useState(set.weight === null ? '' : String(set.weight))
   const [reps, setReps] = useState(set.reps === null ? '' : String(set.reps))
+  // The numbers the lifter said "Ja" to, past twice their best (Q5).
+  const [sureOf, setSureOf] = useState<string | null>(null)
   // A cleared field used to save as 0 -- Number('') is 0 -- and overwrite the
   // real numbers. Invalid or unchanged, there is nothing to save.
   const parsed = parseSetInput(weight, reps)
   const changed = parsed !== null
     && (parsed.weight !== set.weight || parsed.reps !== set.reps)
   const problem = setInputProblem(weight, reps)
+  const typed = `${weight}|${reps}`
+  const doubt = changed && sureOf !== typed ? unlikely(parsed, best, unit) : null
   const waitingFor = useWaitingFor()
+
+  // The row saves itself (G-058): as focus leaves it, on Enter, and as it
+  // goes -- the sheet closing, or the row drawn anew. Edits were thrown away
+  // unless the small icon was tapped. What it saves is what is on screen at
+  // that moment, and never the same numbers twice: the row saved, the set
+  // took them, and the row drawn anew for them would have sent them again.
+  const now = useRef({ parsed, changed, doubt })
+  now.current = { parsed, changed, doubt }
+  const sent = useRef<string | null>(null)
+  const save = (sure = false) => {
+    const { parsed: numbers, changed: moved, doubt: asking } = now.current
+    if (numbers === null || !moved || (asking !== null && !sure)) return
+    const said = `${numbers.weight}|${numbers.reps}`
+    if (sent.current === said) return
+    sent.current = said
+    onSave(set, numbers.weight, numbers.reps)
+  }
+  const saveOnUnmount = useRef(save)
+  saveOnUnmount.current = save
+  useEffect(() => () => { saveOnUnmount.current() }, [])
+
+  const state = `${set.completed ? 'erledigt' : 'offen'}${waiting ? `, ${waitingFor}` : ''}`
+  const hint = problem ?? doubt ?? (saved ? 'Gespeichert' : null)
 
   return (
     <>
-    <div className="sset">
-      <span className={waiting ? 'label is-waiting' : 'label'}>
-        {ordinal}
-        {waiting && <span className="sr-only">, {waitingFor}</span>}
+    <div className="sset"
+      onBlur={(e) => { if (!e.currentTarget.contains(e.relatedTarget as Node | null)) save() }}>
+      {/* Done or still open, as the card's chips say it (G-059): the tick,
+          or the number in a ring. Said to a screen reader on both fields. */}
+      <span className={`label sset__ord${set.completed ? ' is-done' : ''}${waiting ? ' is-waiting' : ''}`}>
+        <span aria-hidden="true">{set.completed ? <Icon name="check" /> : ordinal}</span>
+        <span className="sr-only" id={`${idBase}-state`}>{state}</span>
       </span>
       <input type="number" step="0.5" min="0" max={MAX_WEIGHT_KG} className="input input--num"
-        aria-label={`Satz ${ordinal}, Gewicht in kg`} value={weight}
+        aria-label={`Satz ${ordinal}, Gewicht in ${unit}`} value={weight}
+        aria-describedby={`${idBase}-state`}
         aria-invalid={problem?.startsWith('Gewicht') || undefined}
-        onChange={(e) => setWeight(e.target.value)} />
-      <span className="sset__unit">kg</span>
+        onChange={(e) => setWeight(e.target.value)}
+        onKeyDown={(e) => { if (e.key === 'Enter') e.currentTarget.blur() }} />
+      <Unit unit={unit} />
       <span className="sset__unit">×</span>
       <input type="number" min="1" max={MAX_REPS} className="input input--num"
         aria-label={`Satz ${ordinal}, Wiederholungen`} value={reps}
+        aria-describedby={`${idBase}-state`}
         aria-invalid={problem?.startsWith('Wiederholungen') || undefined}
-        onChange={(e) => setReps(e.target.value)} />
+        onChange={(e) => setReps(e.target.value)}
+        onKeyDown={(e) => { if (e.key === 'Enter') e.currentTarget.blur() }} />
       <span className="sset__acts">
         <button type="button" className="icon-btn"
           aria-label={`Satz ${ordinal} speichern`}
-          disabled={!changed}
-          onClick={() => { if (parsed !== null) onSave(set.id, parsed.weight, parsed.reps) }}>
+          disabled={!changed || doubt !== null}
+          onClick={() => save()}>
           <Icon name="save" />
         </button>
         {/* The multiplication-sign delete stays a typographic mark on
@@ -338,16 +440,39 @@ function SetEditor({ set, ordinal, waiting, onSave, onDelete }: {
           onClick={() => onDelete(set, ordinal)}>✕</button>
       </span>
     </div>
-    <SetInputHint problem={problem} />
+    <SetInputHint text={hint} ok={problem === null && doubt === null}
+      sure={problem === null && doubt !== null ? {
+        label: 'Ja, speichern',
+        onSure: () => { setSureOf(typed); save(true) },
+      } : null} />
     </>
   )
 }
 
-/** Why the row's button is off: a disabled save with no reason looked like a
- *  broken button (walkthrough G-070). */
-function SetInputHint({ problem }: { problem: string | null }) {
+/** The unit beside a weight: "je Seite" under "kg", where one line would
+ *  push the row past a phone's width. */
+function Unit({ unit }: { unit: string }) {
+  if (unit === 'kg') return <span className="sset__unit">kg</span>
+  return <span className="sset__unit sset__unit--side">kg<br />je Seite</span>
+}
+
+/** Why the row's button is off -- a disabled save with no reason looked like
+ *  a broken button (walkthrough G-070) -- or the "Sicher?" with its "Ja", or
+ *  that the row saved itself. */
+function SetInputHint({ text, ok, sure }: {
+  text: string | null
+  /** A confirmation, not a problem. */
+  ok: boolean
+  sure: { label: string; onSure(): void } | null
+}) {
   return (
-    <p className="sset__hint" aria-live="polite">{problem}</p>
+    <p className={`sset__hint${ok ? ' sset__hint--ok' : ''}`} aria-live="polite">
+      {text}
+      {sure !== null && (
+        <button type="button" className="btn btn--ghost btn--sm sset__sure"
+          onClick={sure.onSure}>{sure.label}</button>
+      )}
+    </p>
   )
 }
 
@@ -367,24 +492,32 @@ function lastSetKey(exercise: LiveExercise): string {
   return last === undefined ? 'none' : `${last.key ?? last.id}-${last.weight}-${last.reps}`
 }
 
-function AddSetRow({ seed, onAdd }: {
+function AddSetRow({ seed, unit, best, onAdd }: {
   seed: { weight: number; reps: number } | null
+  unit: string
+  best: LiveBest | null
   onAdd(weight: number, reps: number): void
 }) {
   const [weight, setWeight] = useState(seed ? String(seed.weight) : '')
   const [reps, setReps] = useState(seed ? String(seed.reps) : '')
   const parsed = parseSetInput(weight, reps)
   const problem = setInputProblem(weight, reps)
+  // Only numbers the lifter typed are asked about. The row starts from the
+  // last set's, and after "Ja, anhängen" it starts from the very numbers just
+  // said yes to: asked again, a second "Ja" planned the set twice (B7 review).
+  const typed = parsed !== null
+    && (seed === null || parsed.weight !== seed.weight || parsed.reps !== seed.reps)
+  const doubt = typed ? unlikely(parsed, best, unit) : null
 
   return (
     <>
     <div className="sset">
       <span className="label" aria-hidden="true">+</span>
       <input type="number" step="0.5" min="0" max={MAX_WEIGHT_KG} className="input input--num" required
-        aria-label="Neuer Satz, Gewicht in kg" value={weight}
+        aria-label={`Neuer Satz, Gewicht in ${unit}`} value={weight}
         aria-invalid={problem?.startsWith('Gewicht') || undefined}
         onChange={(e) => setWeight(e.target.value)} />
-      <span className="sset__unit">kg</span>
+      <Unit unit={unit} />
       <span className="sset__unit">×</span>
       <input type="number" min="1" max={MAX_REPS} className="input input--num" required
         aria-label="Neuer Satz, Wiederholungen" value={reps}
@@ -393,17 +526,22 @@ function AddSetRow({ seed, onAdd }: {
       <span className="sset__acts">
         {/* Visible text short so the action slot never wraps; the accessible
             name stays the full phrase. Disabled while the fields cannot make a
-            set -- an empty row used to log 0 kg x 0 as done. A double tap is
-            the island's to drop (APPEND_GUARD_MS): waiting for the answer
-            instead held the button for as long as the wifi was gone. */}
+            set -- an empty row used to log 0 kg x 0 as done -- or while the
+            "Sicher?" under it waits for its "Ja". A double tap is the island's
+            to drop (APPEND_GUARD_MS): waiting for the answer instead held the
+            button for as long as the wifi was gone. */}
         <button type="button" className="btn btn--ghost btn--sm" aria-label="Satz anhängen"
-          disabled={parsed === null}
+          disabled={parsed === null || doubt !== null}
           onClick={() => { if (parsed !== null) onAdd(parsed.weight, parsed.reps) }}>
           Anhängen
         </button>
       </span>
     </div>
-    <SetInputHint problem={problem} />
+    <SetInputHint text={problem ?? doubt} ok={false}
+      sure={problem === null && doubt !== null && parsed !== null ? {
+        label: 'Ja, anhängen',
+        onSure: () => onAdd(parsed.weight, parsed.reps),
+      } : null} />
     </>
   )
 }

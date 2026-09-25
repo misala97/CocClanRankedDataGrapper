@@ -22,6 +22,7 @@ const spyOn = (method: Method) =>
 const SAMPLES: Record<string, [Method, unknown[]]> = {
   toggleSet: ['toggleSet', [101, true, 60, 8]],
   addSet: ['addSet', [10, 60, 8, 'k1', -5]],
+  planSet: ['planSet', [10, 60, 8, 'k2', -6]],
   updateSet: ['updateSet', [101, 62.5, 8]],
   deleteSet: ['deleteSet', [101]],
   toggleSkip: ['toggleSkip', [10, true]],
@@ -45,9 +46,20 @@ describe('writeSpecs', () => {
     // which is the server's to decide.
     const specs = writeSpecs(1)
     expect(Object.keys(specs).filter((kind) => specs[kind]!.durable).sort()).toEqual([
-      'addSet', 'deleteSet', 'exerciseMeta', 'reorder', 'routinePlan', 'sessionMeta', 'setRest',
-      'skipRest', 'toggleSet', 'toggleSkip', 'updateSet',
+      'addSet', 'deleteSet', 'exerciseMeta', 'planSet', 'reorder', 'routinePlan', 'sessionMeta',
+      'setRest', 'skipRest', 'toggleSet', 'toggleSkip', 'updateSet',
     ])
+  })
+
+  it('plans an open set through the add route, keyed like an add, and learns its name (Q2, G-060)', async () => {
+    const specs = writeSpecs(7)
+    const spy = spyOn('planSet').mockResolvedValue(payload)
+    await specs.planSet!.send([10, 60, 8, 'k2', -6], 4242)
+    expect(spy).toHaveBeenCalledWith(10, 60, 8, 'k2', 4242)
+    expect(specs.planSet!.key([10, 60, 8, 'k2', -6])).toBe(specs.addSet!.key([10, 60, 8, 'k2', -6]))
+    expect(specs.planSet!.creates).toEqual(specs.addSet!.creates)
+    const drawn = specs.planSet!.apply!(payload, [10, 60, 8, 'k2', -6], 4242)
+    expect(drawn.visible_exercises[0]!.sets.at(-1)).toMatchObject({ id: -6, completed: false })
   })
 
   it('sends every write with the moment it was made, and an add with its key', async () => {

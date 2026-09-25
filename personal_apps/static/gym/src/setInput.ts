@@ -1,3 +1,5 @@
+import { kg1 } from './format'
+
 /**
  * The largest numbers a set can carry -- routes/helpers.py MAX_SET_WEIGHT_KG
  * and MAX_SET_REPS, which refuse anything past them with a 400. A bound on
@@ -67,5 +69,29 @@ export function parseSetInput(
 export function setInputProblem(weight: string, reps: string): string | null {
   if (weight.trim() !== '' && parseWeight(weight) === null) return `Gewicht: ${WEIGHT_HINT}`
   if (reps.trim() !== '' && parseReps(reps) === null) return `Wiederholungen: ${REPS_HINT}`
+  return null
+}
+
+/**
+ * The question to ask before a set more than twice the lifter's best at the
+ * exercise is saved -- its weight or its reps (Q5, G-070) -- or null. A slip
+ * of the finger inside the bounds above still made a record that stayed.
+ *
+ * `best`: LiveExercise.best, null before the first set. The weight is only
+ * judged once a best weighs something: at a bodyweight exercise's 0 kg,
+ * every weight is more than twice it.
+ */
+export function unlikely(
+  set: { weight: number; reps: number },
+  best: { weight: number; reps: number } | null,
+  unit = 'kg',
+): string | null {
+  if (best === null) return null
+  if (best.weight > 0 && set.weight > 2 * best.weight) {
+    return `Sicher? Bisher höchstens ${kg1(best.weight)} ${unit}.`
+  }
+  if (best.reps > 0 && set.reps > 2 * best.reps) {
+    return `Sicher? Bisher höchstens ${best.reps} Wdh.`
+  }
   return null
 }

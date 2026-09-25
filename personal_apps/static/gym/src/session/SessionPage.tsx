@@ -1,6 +1,7 @@
 import type { SessionDetailPayload } from './types'
 import type { SessionMetaPatch } from './api'
 import { useAnnouncer, useSheets } from './stores'
+import { useSheetHistory } from './useSheetHistory'
 import { FinishSheet } from './components/FinishSheet'
 import { SessionHeader } from './components/SessionHeader'
 import { SaveErrorBanner } from './components/SaveErrorBanner'
@@ -84,8 +85,11 @@ interface Props {
 export function SessionPage({
   payload, actions, pushSupported, finishing = false, busyExerciseId = null,
 }: Props) {
+  // Back closes the open sheet instead of leaving the workout (G-066).
+  useSheetHistory()
   const announce = useAnnouncer((s) => s.announce)
   const openSheet = useSheets((s) => s.open)
+  const inWorkout = payload.visible_exercises.map((se) => se.exercise_id)
 
   return (
     // No wrapper element: the mount node in session_detail.html already IS
@@ -169,7 +173,7 @@ export function SessionPage({
       ))}
       {payload.visible_exercises.map((se) => (
         <ExerciseSheet key={se.id} exercise={se}
-          catalogue={payload.exercises}
+          catalogue={payload.exercises} inWorkout={inWorkout}
           suggestion={payload.suggestions[String(se.id)] ?? null}
           routine={routineOf(payload, se.id)}
           // Moving a row is a reorder, which a follower's order refuses (it

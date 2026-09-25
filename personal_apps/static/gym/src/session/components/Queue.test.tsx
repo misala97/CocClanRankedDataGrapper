@@ -150,6 +150,49 @@ describe('Queue', () => {
     expect(live).toHaveTextContent(`${doneCount}/${liveSe.sets.length}`)
   })
 
+  it('says what a skipped row still counts, and strikes out only one with nothing (G-065)', () => {
+    // Struck through with a tick, a skipped row hid a record set it counted.
+    const skipped = exercises.find((se) => se.skipped)!
+    const set = { ...skipped.sets[0]!, completed: true }
+    const one = { ...skipped, sets: [set] }
+    const two = { ...skipped, id: 91, sets: [set, { ...set, id: 104 }] }
+    const none = { ...skipped, id: 92, sets: [] }
+    const { container } = render(
+      <Queue exercises={[one, two, none]} liveId={null} onReorder={noop} />)
+    const row = (id: number) => container.querySelector(`[data-se-id="${id}"]`)!
+    const trail = (id: number) => row(id).querySelector('.queue__load')!.textContent
+    const meta = (id: number) => row(id).querySelector('.queue__meta')?.textContent ?? null
+    expect(trail(one.id)).toBe('1 Satz')
+    expect(meta(one.id)).toBe('Rest übersprungen')
+    expect(row(one.id)).not.toHaveClass('is-skipped')
+    expect(row(one.id)).toHaveClass('is-done')
+    expect(row(one.id).querySelector('.queue__mark')).not.toBeNull()
+    expect(trail(two.id)).toBe('2 Sätze')
+    expect(trail(none.id)).toBe('Übersprungen')
+    expect(meta(none.id)).toBeNull()
+    expect(row(none.id)).toHaveClass('is-skipped')
+  })
+
+  it('says a skip and a twinge on one line', () => {
+    const skipped = exercises.find((se) => se.skipped)!
+    const hurt = {
+      ...skipped, pain: true, notes: 'Knie',
+      sets: [{ ...skipped.sets[0]!, completed: true }],
+    }
+    const { container } = render(<Queue exercises={[hurt]} liveId={null} onReorder={noop} />)
+    expect(container.querySelector('.queue__meta')).toHaveTextContent('Rest übersprungen · Zwicken Knie')
+  })
+
+  it("says today's twinge and note under the name, as the card does (G-073)", () => {
+    const hurt = exercises.map((se, i) => (i === 0 ? { ...se, pain: true, notes: 'linke Schulter' } : se))
+    const { container } = render(<Queue exercises={hurt} liveId={liveId} onReorder={noop} />)
+    const meta = container.querySelectorAll('.queue__meta')
+    expect(meta).toHaveLength(1)
+    expect(meta[0]).toHaveTextContent('Zwicken linke Schulter')
+    // Inside the row's button: heard with its name.
+    expect(meta[0]!.closest('button')).toHaveAccessibleName(`${hurt[0]!.name} Zwicken linke Schulter`)
+  })
+
   it('says "neu" for a row planned blank, not a weight it never had', () => {
     // An exercise with no history waits with no numbers (V2); "3 × 20,0" was
     // the placeholder talking.

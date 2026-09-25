@@ -119,6 +119,16 @@ describe('LivePanel', () => {
     expect(h.onToggleSet).toHaveBeenCalledWith(done.id, false)
   })
 
+  it('never gilds an open set, whatever the record list says (B7 review)', () => {
+    // The list is the server's, drawn beside an un-log still on its way: a
+    // record taken back is open on the card before the list lets go of it.
+    const open = live.sets.find((s) => !s.completed)!
+    render(<LivePanel payload={{ ...payload, record_set_ids: [open.id] }} {...handlers()} />)
+    const chip = screen.getByLabelText(
+      new RegExp(`^Satz ${live.sets.indexOf(open) + 1}, geplant`))
+    expect(chip).not.toHaveClass('is-record')
+  })
+
   it('drops a bounce on "Satz geschafft", and is never held for the connection (G-138)', async () => {
     // Held while a set write was in flight, the button stayed held for as
     // long as the wifi was gone: offline, no set could be logged at all. A
@@ -140,6 +150,126 @@ describe('LivePanel', () => {
     await user.click(go)
     expect(h.onConfirm).toHaveBeenCalledTimes(2)
     now.mockRestore()
+  })
+
+  it('shows on the chip it logs what "Satz geschafft" will log (G-054)', async () => {
+    // The ringed chip kept the plan while the steppers said otherwise.
+    const user = userEvent.setup()
+    render(<LivePanel payload={payload} {...handlers()} />)
+    const [next, later] = live.sets.filter((s) => !s.completed)
+    await user.click(screen.getByLabelText('Gewicht erhöhen'))
+    const bumped = kg1(next!.weight! + payload.live_increment)
+    const chip = screen.getByLabelText(new RegExp(`^Satz ${live.sets.indexOf(next!) + 1}, geplant`))
+    expect(chip).toHaveTextContent(`${bumped} × ${next!.reps}`)
+    expect(chip).toHaveAccessibleName(new RegExp(`geplant ${bumped} kg je Seite mal ${next!.reps}`))
+    // The others keep their plan.
+    expect(screen.getByLabelText(new RegExp(`^Satz ${live.sets.indexOf(later!) + 1}, geplant`)))
+      .toHaveTextContent(`${kg1(later!.weight!)} × ${later!.reps}`)
+  })
+
+  it("says today's twinge and note under the name (G-073)", () => {
+    const { container, unmount } = render(<LivePanel payload={payload} {...handlers()} />)
+    expect(container.querySelector('.live__meta')).toBeNull()
+    unmount()
+
+    const hurt: SessionDetailPayload = {
+      ...payload,
+      visible_exercises: payload.visible_exercises.map((se) =>
+        (se.id === live.id ? { ...se, pain: true, notes: 'linke Schulter' } : se)),
+    }
+    render(<LivePanel payload={hurt} {...handlers()} />)
+    const meta = document.querySelector('.live__meta')!
+    expect(meta).toHaveTextContent('Zwicken')
+    expect(meta).toHaveTextContent('linke Schulter')
+    expect(meta.previousElementSibling).toHaveClass('live__title')
+  })
+
+  describe('"Sicher?" past twice the best (Q5, G-070)', () => {
+    // The fixture's best: 60 kg, 10 reps. The set up next planned at 130.
+    const next = live.sets.find((s) => !s.completed)!
+    const heavy = withLiveSets(live.sets.map((s) => (s.id === next.id ? { ...s, weight: 130 } : s)))
+    const go = () => screen.getByRole('button', { name: /Satz geschafft|Ja, eintragen/ })
+
+    it('asks on the first tap, and logs on the second', async () => {
+      const user = userEvent.setup()
+      const h = handlers()
+      const now = vi.spyOn(Date, 'now').mockReturnValue(1_000_000)
+      render(<LivePanel payload={heavy} {...h} />)
+      expect(document.querySelector('.live__doubt')).toBeEmptyDOMElement()
+
+      await user.click(go())
+      expect(h.onConfirm).not.toHaveBeenCalled()
+      expect(screen.getByRole('status')).toHaveTextContent('Sicher? Bisher höchstens 60,0 kg je Seite.')
+      expect(go()).toHaveTextContent('Ja, eintragen')
+
+      // A bounce is no answer.
+      now.mockReturnValue(1_000_000 + CONFIRM_GUARD_MS - 1)
+      await user.click(go())
+      expect(h.onConfirm).not.toHaveBeenCalled()
+
+      now.mockReturnValue(1_000_000 + CONFIRM_GUARD_MS)
+      await user.click(go())
+      expect(h.onConfirm).toHaveBeenCalledWith(130, next.reps, next.id)
+      expect(go()).toHaveTextContent('Satz geschafft')
+      now.mockRestore()
+    })
+
+    it('asks again once the numbers change', async () => {
+      const user = userEvent.setup()
+      const h = handlers()
+      const now = vi.spyOn(Date, 'now').mockReturnValue(1_000_000)
+      render(<LivePanel payload={heavy} {...h} />)
+      await user.click(go())
+      await user.click(screen.getByLabelText('Gewicht erhöhen'))
+      expect(go()).toHaveTextContent('Satz geschafft')
+      expect(document.querySelector('.live__doubt')).toBeEmptyDOMElement()
+
+      now.mockReturnValue(1_000_000 + CONFIRM_GUARD_MS)
+      await user.click(go())
+      expect(h.onConfirm).not.toHaveBeenCalled()
+      expect(go()).toHaveTextContent('Ja, eintragen')
+      now.mockRestore()
+    })
+
+    it('asks again for the same numbers dialled away and back', async () => {
+      const user = userEvent.setup()
+      const h = handlers()
+      render(<LivePanel payload={heavy} {...h} />)
+      await user.click(go())
+      await user.click(screen.getByLabelText('Gewicht erhöhen'))
+      await user.click(screen.getByLabelText('Gewicht verringern'))
+      expect(go()).toHaveTextContent('Satz geschafft')
+    })
+
+    it('asks again for the next set, whatever it holds', () => {
+      // Logged elsewhere, the set asked about is done and the next one up
+      // holds the same numbers: that is not the answer to the question.
+      const h = handlers()
+      const now = vi.spyOn(Date, 'now').mockReturnValue(1_000_000)
+      const later = live.sets.filter((s) => !s.completed)[1]!
+      const view = render(<LivePanel payload={heavy} {...h} />)
+      fireEvent.click(go())
+      expect(go()).toHaveTextContent('Ja, eintragen')
+      const moved = withLiveSets(live.sets.map((s) => (s.id === next.id
+        ? { ...s, weight: 130, completed: true }
+        : s.id === later.id ? { ...s, weight: 130, reps: next.reps } : s)))
+      view.rerender(<LivePanel payload={moved} {...h} />)
+      expect(go()).toHaveTextContent('Satz geschafft')
+      now.mockRestore()
+    })
+
+    it('asks nothing before the first set of the exercise', async () => {
+      const user = userEvent.setup()
+      const h = handlers()
+      const fresh: SessionDetailPayload = {
+        ...heavy,
+        visible_exercises: heavy.visible_exercises.map((se) =>
+          (se.id === live.id ? { ...se, best: null } : se)),
+      }
+      render(<LivePanel payload={fresh} {...h} />)
+      await user.click(go())
+      expect(h.onConfirm).toHaveBeenCalledWith(130, next.reps, next.id)
+    })
   })
 
   it('marks the chips whose write waits on the phone (B6)', () => {

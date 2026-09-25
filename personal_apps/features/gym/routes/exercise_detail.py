@@ -341,7 +341,7 @@ def _exercise_detail_payload(exercise, raw_position):
     default stays reachable in one click and the URL stays honest about what
     it is showing.
     """
-    rows = load_performed(exercise_ids=[exercise.id], include_active=True)
+    rows = load_performed(exercise_ids=[exercise.id])
 
     default_reason = None
     if raw_position == 'all':
@@ -416,7 +416,7 @@ def gym_exercise_progress_json(exercise_id):
     just because you haven't done this exercise in this position before."""
     exercise = exercise_or_404(exercise_id)
     position = request.args.get('position', type=int)
-    rows = load_performed(exercise_ids=[exercise.id], include_active=True)
+    rows = load_performed(exercise_ids=[exercise.id])
     progress = stats.exercise_progress(rows, position=position)
     if position is not None and not progress['table']:
         progress = stats.exercise_progress(rows, position=None)

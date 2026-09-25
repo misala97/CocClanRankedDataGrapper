@@ -1,5 +1,5 @@
 /**
- * The eleven pieces of state the live workout screen owns and the server
+ * The twelve pieces of state the live workout screen owns and the server
  * cannot know.
  *
  * This file deliberately imports nothing from `./types`. Client state deriving
@@ -72,6 +72,25 @@ export const useWorkoutUi = create<WorkoutUiState>((set) => ({
   reorderUnlocked: false,
   toggleReorder: () => set((state) => ({ reorderUnlocked: !state.reorderUnlocked })),
   setReorder: (reorderUnlocked) => set({ reorderUnlocked }),
+}))
+
+// ---------------------------------------------------------------------------
+// Sets deleted in the sheet and still in their undo window: gone from the
+// whole screen, its totals included (G-061), and back on "Rückgängig".
+// ---------------------------------------------------------------------------
+
+interface DeletingState {
+  /** By the set's name (./setName), not its id: a set just added changes id
+   *  when it lands, and came back for the rest of the window (B6 re-review). */
+  names: string[]
+  hide(name: string): void
+  unhide(name: string): void
+}
+
+export const useDeleting = create<DeletingState>((set) => ({
+  names: [],
+  hide: (name) => set((state) => ({ names: [...state.names, name] })),
+  unhide: (name) => set((state) => ({ names: state.names.filter((n) => n !== name) })),
 }))
 
 // ---------------------------------------------------------------------------

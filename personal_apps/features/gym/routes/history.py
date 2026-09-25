@@ -25,7 +25,7 @@ def done_sets(session_exercise):
     return tuple((s.weight, s.reps) for s in session_exercise.sets if counts(s))
 
 
-def load_performed(exercise_ids=None, since=None, include_active=False):
+def load_performed(exercise_ids=None, since=None):
     """Every exercise-as-performed with at least one completed set, as the
     single flat shape stats.py consumes.
 
@@ -34,14 +34,10 @@ def load_performed(exercise_ids=None, since=None, include_active=False):
     would mean one query per row -- roughly forty on the catalogue page today,
     and worse every time an exercise is added.
 
-    `include_active` also includes the current active (unfinished) session's
-    own completed sets. The exercise-detail page and its live progress modal
-    need this -- a set just logged mid-workout must show up immediately, not
-    only once the workout is finished. Callers building historical
-    comparisons (stagnation checks, past-session averages) must leave this
-    False: an in-progress workout's still-changing numbers must not leak into
-    an average or a "sessions since PR" count before the workout is actually
-    done.
+    Finished workouts only: an in-progress workout's still-changing numbers
+    must not leak into an average or a "sessions since PR" count before it is
+    done, and the exercise page leaves the running workout out too (Q3,
+    G-109) -- that was the last caller that wanted it in.
 
     Only the sets that count (counts()); a replaced-away original's are
     among them, as everywhere (Q1).
@@ -55,9 +51,8 @@ def load_performed(exercise_ids=None, since=None, include_active=False):
         )
         .join(WorkoutSession, SessionExercise.session_id == WorkoutSession.id)
         .filter(WorkoutSession.user_id == current_user_id())
+        .filter(WorkoutSession.finished_at.isnot(None))
     )
-    if not include_active:
-        query = query.filter(WorkoutSession.finished_at.isnot(None))
     if exercise_ids is not None:
         query = query.filter(SessionExercise.exercise_id.in_(exercise_ids))
     if since is not None:

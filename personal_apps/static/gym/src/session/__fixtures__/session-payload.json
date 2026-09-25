@@ -2207,7 +2207,7 @@
     "notes": null,
     "rest_ends_at": null,
     "resting_set_id": null,
-    "started_at": "2026-09-24T22:29:57",
+    "started_at": "2026-09-25T02:42:41",
     "structure_version": 0,
     "template_id": null,
     "template_name": null
@@ -2239,6 +2239,10 @@
   "vapid_public_key": "BIIQUXykM-zucYOPuKEMBuRz2Ba0nysbpuH5gLNc1HCBauYw1UAd5LODCdqjG7hhfumtp_fTTaCfbHTZG26I5vE",
   "visible_exercises": [
     {
+      "best": {
+        "reps": 10,
+        "weight": 60.0
+      },
       "exercise_id": 18045,
       "floor": 2.0,
       "id": 10,
@@ -2253,6 +2257,7 @@
       "position": 1,
       "replaced_sets_done": 0,
       "replaced_volume": 0.0,
+      "is_substitute": false,
       "rest_seconds": null,
       "rest_setting": 150,
       "rest_setting_mine": false,
@@ -2285,6 +2290,10 @@
       "skipped": false
     },
     {
+      "best": {
+        "reps": 11,
+        "weight": 77.0
+      },
       "exercise_id": 18059,
       "floor": 8.0,
       "id": 11,
@@ -2299,6 +2308,7 @@
       "position": 2,
       "replaced_sets_done": 0,
       "replaced_volume": 0.0,
+      "is_substitute": false,
       "rest_seconds": null,
       "rest_setting": 150,
       "rest_setting_mine": true,

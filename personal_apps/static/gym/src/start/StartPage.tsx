@@ -7,6 +7,7 @@ import { UndoToast, useUndo } from '../undo'
 import { recency, sincePr } from '../catalogue/format'
 import { MAX_NAME_CHARS } from '../setInput'
 import { useSheets, usePush } from '../session/stores'
+import { leaveBySubmit, useSheetHistory } from '../session/useSheetHistory'
 import { Sheet } from '../session/components/Sheet'
 import { Icon } from '../components/Icon'
 import { dayMonth, instant, kg1, shortDate } from '../format'
@@ -300,6 +301,8 @@ function FirstRun({
 }
 
 export function StartPage({ payload: initial }: { payload: HeutePayload }) {
+  // Back closes an open sheet, not the page (G-066).
+  useSheetHistory()
   const openSheet = useSheets((s) => s.open)
   const subscribed = usePush((s) => s.subscribed)
   const setSubscribed = usePush((s) => s.setSubscribed)
@@ -759,7 +762,7 @@ export function StartPage({ payload: initial }: { payload: HeutePayload }) {
       )}
 
       <Sheet id="sheet-free" title="Freies Workout" closeLabel="Abbrechen">
-        <form method="post" action="/gym/start">
+        <form method="post" action="/gym/start" onSubmit={leaveBySubmit}>
           <CsrfField />
           <div className="field grow">
             <label className="label" htmlFor="start-name">Name (optional)</label>

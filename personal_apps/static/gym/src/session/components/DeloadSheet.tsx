@@ -60,13 +60,18 @@ export function DeloadSheet({
         </p>
       )}
 
-      <button
-        type="button"
-        className={session.is_deload ? 'sheet__act sheet__act--danger' : 'sheet__act'}
-        onClick={() => onToggle(!session.is_deload, pct)}
-      >
-        {session.is_deload ? 'Deload beenden' : 'Als Deload markieren'}
-      </button>
+      {/* The sheet's one decision, drawn as a button: as a bare text row it
+          read as a line of prose (G-075). Marking is the sheet's purpose;
+          ending one is the quiet way back. */}
+      <div className="sheet__group">
+        <button
+          type="button"
+          className={session.is_deload ? 'btn btn--ghost btn--block' : 'btn btn--live btn--block'}
+          onClick={() => onToggle(!session.is_deload, pct)}
+        >
+          {session.is_deload ? 'Deload beenden' : 'Als Deload markieren'}
+        </button>
+      </div>
     </Sheet>
   )
 }

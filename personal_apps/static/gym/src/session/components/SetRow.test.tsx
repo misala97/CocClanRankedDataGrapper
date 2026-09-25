@@ -141,4 +141,31 @@ describe('SetRow', () => {
     expect(screen.getByRole('button')).not.toHaveClass('is-waiting')
     expect(screen.getByRole('button').getAttribute('aria-label')).not.toContain('wartet')
   })
+
+  describe('the steppers on the chip they are bound to (G-054)', () => {
+    const now = { weight: 57.5, reps: 9 }
+
+    it('shows what "Satz geschafft" will log, not the plan', () => {
+      render(<SetRow {...props} isNext now={now} set={aSet()} />)
+      expect(screen.getByRole('button')).toHaveTextContent('57,5 × 9')
+      expect(screen.getByRole('button')).toHaveAccessibleName(/^Satz 1, geplant 57,5 kg mal 9/)
+    })
+
+    it('fills a blank plan once both numbers are dialled, and names it until then', () => {
+      const { rerender } = render(
+        <SetRow {...props} isNext now={now} set={aSet({ weight: null, reps: null })} />)
+      expect(screen.getByRole('button')).toHaveTextContent('57,5 × 9')
+      rerender(<SetRow {...props} isNext now={{ weight: 57.5, reps: null }}
+        set={aSet({ weight: null, reps: null })} />)
+      expect(screen.getByRole('button')).toHaveTextContent('Satz 1')
+      expect(screen.getByRole('button')).toHaveAccessibleName(/noch ohne Wdh\./)
+    })
+
+    it('leaves a chip it is not bound to, and a logged one, as they are', () => {
+      const { rerender } = render(<SetRow {...props} now={now} set={aSet()} />)
+      expect(screen.getByRole('button')).toHaveTextContent('62,5 × 8')
+      rerender(<SetRow {...props} isNext now={now} set={aSet({ completed: true })} />)
+      expect(screen.getByRole('button')).toHaveTextContent('62,5 × 8')
+    })
+  })
 })

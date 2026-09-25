@@ -31,6 +31,18 @@ describe('DeloadSheet', () => {
     expect(onToggle).toHaveBeenCalledWith(true, 70)
   })
 
+  it('draws its decision as a button, both ways (G-075)', () => {
+    // As a bare text row, "Als Deload markieren" read as a line of prose.
+    const { rerender } = render(<DeloadSheet {...base} session={session} onToggle={vi.fn()} />)
+    open('sheet-deload')
+    expect(screen.getByRole('button', { name: 'Als Deload markieren' }))
+      .toHaveClass('btn', 'btn--live', 'btn--block')
+    rerender(<DeloadSheet {...base} session={{ ...session, is_deload: true, deload_pct: 70 }}
+      onToggle={vi.fn()} />)
+    expect(screen.getByRole('button', { name: 'Deload beenden' }))
+      .toHaveClass('btn', 'btn--ghost', 'btn--block')
+  })
+
   it('offers the depth picker only while nothing is logged', () => {
     // Changing the percentage after a set is logged would rewrite nothing --
     // the weights that were lifted are the weights that were lifted.

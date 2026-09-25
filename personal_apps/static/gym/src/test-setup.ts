@@ -1,10 +1,38 @@
 import '@testing-library/jest-dom/vitest'
-import { beforeEach } from 'vitest'
+import { afterEach, beforeEach, vi } from 'vitest'
+import { useUndo } from './undo'
 
 // The live workout keeps its outbox and the steppers' draft in localStorage
 // (B6, G-009), and jsdom keeps one localStorage per test file: what one test
 // left there would be sent, or restored, by the next.
 beforeEach(() => { localStorage.clear() })
+
+// A sheet's step back (useSheetHistory, leavePage) is a history traversal,
+// and jsdom fires its popstate three chained tasks after history.back(). One
+// still on its way when a test ended landed in the next test, and closed the
+// sheet open there. Counted here, so only a test that stepped back waits.
+let steppedBack = false
+const back = History.prototype.back
+History.prototype.back = function stepBack(this: History) {
+  steppedBack = true
+  back.call(this)
+}
+
+afterEach(async () => {
+  vi.useRealTimers()
+  // An undo offer's timer outlives the store resets between tests: dropped,
+  // not cleared, it fired five seconds on and committed whatever the next
+  // test had on offer then -- a flake that only showed under load.
+  const { timer } = useUndo.getState()
+  if (timer !== null) clearTimeout(timer)
+  useUndo.setState({ pending: null, timer: null })
+  if (!steppedBack) return
+  steppedBack = false
+  // Each task awaited lets every traversal on its way take one step.
+  for (let step = 0; step < 6; step += 1) {
+    await new Promise((resolve) => { setTimeout(resolve, 0) })
+  }
+})
 
 // jsdom does not implement HTMLDialogElement.showModal()/close(). The gym app
 // uses native <dialog> throughout precisely because the platform supplies the

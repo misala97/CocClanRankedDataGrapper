@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import {
   QueryClient, QueryClientProvider, useQuery, useQueryClient,
 } from '@tanstack/react-query'
-import type { SessionDetailPayload } from './types'
+import type { LiveExercise, SessionDetailPayload } from './types'
 import { fetchSession, MutationFailed, sessionKey } from './api'
 import { postNavigate } from '../api'
 import { enablePush, heartbeatSubscription } from '../push'
@@ -12,9 +12,12 @@ import { setName } from './setName'
 import { Outbox, exclusively, localShelf, newId, writeHold } from './outbox'
 import { writeSpecs, type WriteArgs, type WriteKind } from './writes'
 import { clearDraft, sweepDrafts } from './drafts'
-import { failureCheckpoint, useOutbox, usePush, useSaveState, useSheets } from './stores'
+import {
+  failureCheckpoint, useDeleting, useOutbox, usePush, useSaveState, useSheets,
+} from './stores'
 import { useWakeLock } from './useWakeLock'
 import { useFollowerSync } from './useFollowerSync'
+import { leavePage } from './useSheetHistory'
 import { SessionPage, type SessionActions } from './SessionPage'
 import type { ExerciseSheetActions } from './components/ExerciseSheet'
 
@@ -38,6 +41,12 @@ let lastTempId = 0
 function tempId(): number {
   lastTempId = Math.min(lastTempId - 1, -Date.now())
   return lastTempId
+}
+
+/** A swap's undo on its way: the row it brings back, drawn in place. */
+interface Unswap {
+  substituteId: number
+  original: LiveExercise
 }
 
 /**
@@ -198,9 +207,45 @@ function SessionIslandInner({ initial }: { initial: SessionDetailPayload }) {
   const unlogged = pendingUnlog === null
     ? undefined
     : data.visible_exercises.flatMap((se) => se.sets).find((s) => setName(s) === pendingUnlog)
-  const view = unlogged === undefined
+  let view = unlogged === undefined
     ? data
     : optimistic.toggleSet(data, unlogged.id, false, unlogged.weight, unlogged.reps)
+  // A set deleted in the sheet is gone from the totals while its undo runs,
+  // not only from the sheet (G-061): drawn with the delete's own guess.
+  const deleting = useDeleting((s) => s.names)
+  for (const name of deleting) {
+    const doomed = view.visible_exercises.flatMap((se) => se.sets).find((s) => setName(s) === name)
+    if (doomed !== undefined) view = optimistic.deleteSet(view, doomed.id)
+  }
+  // So is an exercise removed from its sheet, and the card moves on (G-067).
+  const [removing, setRemoving] = useState<number[]>([])
+  for (const seId of removing) view = optimistic.removeExercise(view, seId)
+  // And a swap taken back: its original, in the substitute's place, until
+  // the remove's answer has it (G-068, B7 re-review).
+  const [unswapping, setUnswapping] = useState<Unswap[]>([])
+  for (const back of unswapping) view = optimistic.unswap(view, back.substituteId, back.original)
+  // What is a record stays as the server said while an undo can still bring
+  // the set back: dropped and brought back, the takeover played again. An
+  // open chip is never gold (LivePanel), so the id can stay.
+  if (view !== data) {
+    view = { ...view, record_set_ids: data.record_set_ids, record_details: data.record_details }
+  }
+  // The latest payload, for a toast's undo that runs long after its render.
+  const latest = useRef(data)
+  latest.current = data
+  /** The done sets a row shows now: what a remove says it saw. */
+  const doneOn = (seId: number) => latest.current.visible_exercises
+    .find((se) => se.id === seId)?.sets.filter((s) => s.completed).length ?? 0
+
+  // The substitute whose swap the toast can still undo. A set logged on it
+  // takes the undo away: undone, the swap took the set with it (B7 review).
+  const swapOn = useRef<number | null>(null)
+  useEffect(() => {
+    const seId = swapOn.current
+    if (seId === null) return
+    const substitute = data.visible_exercises.find((se) => se.id === seId)
+    if (substitute?.sets.some((s) => s.completed)) useUndo.getState().commitNow()
+  }, [data])
 
   const [finishing, setFinishing] = useState(false)
   // An add has no optimistic path, so its row is the only place that can say
@@ -228,7 +273,7 @@ function SessionIslandInner({ initial }: { initial: SessionDetailPayload }) {
       useUndo.getState().commitNow()
       await outbox.clear()
       clearDraft(sessionId)
-      postNavigate(url)
+      leavePage(() => postNavigate(url))
       return
     }
     const failedSince = failureCheckpoint()
@@ -243,16 +288,18 @@ function SessionIslandInner({ initial }: { initial: SessionDetailPayload }) {
       return
     }
     clearDraft(sessionId)
-    postNavigate(url)
+    leavePage(() => postNavigate(url))
   }
 
   // Per exercise: when its last add went out (APPEND_GUARD_MS).
   const lastAppend = useRef(new Map<number, number>())
-  const appendSet = (seId: number, weight: number, reps: number) => {
+  /** Whether an add to `seId` may go out now: a second tap inside the guard
+   *  is dropped. */
+  const mayAppend = (seId: number) => {
     const now = Date.now()
-    if (now - (lastAppend.current.get(seId) ?? -Infinity) < APPEND_GUARD_MS) return
+    if (now - (lastAppend.current.get(seId) ?? -Infinity) < APPEND_GUARD_MS) return false
     lastAppend.current.set(seId, now)
-    send('addSet', seId, weight, reps, newId(), tempId())
+    return true
   }
 
   const actions: SessionActions = {
@@ -262,7 +309,7 @@ function SessionIslandInner({ initial }: { initial: SessionDetailPayload }) {
       // gym_add_set creates one already completed -- which is what "Satz
       // geschafft" means everywhere else on this screen.
       if (setId === null) {
-        appendSet(live.id, weight, reps)
+        if (mayAppend(live.id)) send('addSet', live.id, weight, reps, newId(), tempId())
         return
       }
       if (unlogged !== undefined && unlogged.id === setId) {
@@ -315,9 +362,10 @@ function SessionIslandInner({ initial }: { initial: SessionDetailPayload }) {
     onShiftRest: (seconds) => send('shiftRest', seconds),
     // A navigation, not an in-place write: the invite has its own page.
     // postNavigate carries the csrf_token the hand-built form here forgot,
-    // which the blueprint gate has 403'd since it closed.
-    onInvite: (partnerId) => postNavigate(
-      `/gym/session/${sessionId}/invite`, { partner_id: String(partnerId) }),
+    // which the blueprint gate has 403'd since it closed. Left from a sheet,
+    // by leavePage, as every way off this page is: no dead step behind it.
+    onInvite: (partnerId) => leavePage(() => postNavigate(
+      `/gym/session/${sessionId}/invite`, { partner_id: String(partnerId) })),
     onEnablePush: () => { void enablePush(data.vapid_public_key) },
     onToggleDeload: (on, pct) => { send('toggleDeload', on, pct); close() },
     onAddExercise: (exerciseId) => {
@@ -326,8 +374,8 @@ function SessionIslandInner({ initial }: { initial: SessionDetailPayload }) {
         .catch(() => {})
         .finally(() => setAddingExerciseId((id) => (id === exerciseId ? null : id)))
     },
-    onSaveTemplate: (name) => postNavigate(
-      `/gym/session/${sessionId}/save_as_template`, { template_name: name }),
+    onSaveTemplate: (name) => leavePage(() => postNavigate(
+      `/gym/session/${sessionId}/save_as_template`, { template_name: name })),
     exerciseActions: (seId: number): ExerciseSheetActions => ({
       onRestChange: (seconds) => send('setRest', seId, seconds),
       onRoutinePlanChange: (plan) => send('routinePlan', seId, plan),
@@ -338,7 +386,26 @@ function SessionIslandInner({ initial }: { initial: SessionDetailPayload }) {
       onSetUpdate: (setId, weight, reps) => send('updateSet', setId, weight, reps),
       // The promise, so the sheet can bring the row back if it is refused.
       onSetDelete: (setId) => write('deleteSet', setId),
-      onAddSet: (weight, reps) => appendSet(seId, weight, reps),
+      // Planned open behind the others, ticked on the card when it is
+      // lifted (Q2, G-060). Planned on a row the card has left behind, while
+      // another lift is under way, the row first moves in behind that one:
+      // first in line again, it took the card from the exercise in progress,
+      // and the next "Satz geschafft" logged on the wrong lift (B7 review).
+      onAddSet: (weight, reps) => {
+        if (!mayAppend(seId)) return
+        const order = data.visible_exercises.map((se) => se.id)
+        const live = data.visible_exercises.find((se) => se.id === data.live_id)
+        // Not for a follower: the order is the leader's (the server refuses
+        // the reorder), and the lift a follower started stays live anyway.
+        const underWay = live !== undefined && live.id !== seId && !data.session_is_shared
+          && live.sets.some((s) => s.completed) && !live.sets.every((s) => s.completed)
+        if (underWay && order.indexOf(seId) < order.indexOf(live.id)) {
+          const moved = order.filter((id) => id !== seId)
+          moved.splice(moved.indexOf(live.id) + 1, 0, seId)
+          send('reorder', moved)
+        }
+        send('planSet', seId, weight, reps, newId(), tempId())
+      },
       // In front of the live exercise, which is how the live rule reads a
       // step away from a busy machine (_live_context).
       onMakeLive: () => {
@@ -354,11 +421,67 @@ function SessionIslandInner({ initial }: { initial: SessionDetailPayload }) {
         if (se !== undefined) send('toggleSkip', seId, !se.skipped)
         close()
       },
-      onReplace: (exerciseId) => { send('replaceExercise', seId, exerciseId); close() },
-      onRemove: () => { send('removeExercise', seId); close() },
+      // Once it lands, the toast keeps a way back (G-068): the undo removes
+      // the substitute, which shows the original again. The substitute is
+      // the row the answer has that the screen had not, of the exercise
+      // picked.
+      onReplace: (exerciseId) => {
+        close()
+        const before = new Set(data.visible_exercises.map((se) => se.id))
+        // The row as it stands, for the undo to draw back: hidden behind the
+        // substitute, it does not change meanwhile.
+        const original = data.visible_exercises.find((se) => se.id === seId)
+        write('replaceExercise', seId, exerciseId)
+          .then((fresh) => {
+            const substitute = fresh.visible_exercises.find(
+              (se) => !before.has(se.id) && se.exercise_id === exerciseId)
+            if (substitute === undefined) return
+            // The undo says what it saw, so a remove that lands late leaves
+            // what was logged since (api.removeExercise). The original is
+            // drawn back at once: left live until the remove landed, the
+            // substitute took a set the remove then took with it.
+            offerUndo({
+              label: `Ersetzt durch ${substitute.name}.`,
+              undo: () => {
+                swapOn.current = null
+                const back = original === undefined ? null
+                  : { substituteId: substitute.id, original }
+                if (back !== null) setUnswapping((all) => [...all, back])
+                write('removeExercise', substitute.id, doneOn(substitute.id))
+                  .catch(() => {})
+                  .finally(() => setUnswapping((all) => all.filter((b) => b !== back)))
+              },
+              commit: () => { swapOn.current = null },
+            })
+            // After the offer: making it commits the one before, which may
+            // be another swap's and clears this.
+            swapOn.current = substitute.id
+          })
+          .catch(() => {})
+      },
+      // At the tap, from a sheet that closed: the row leaves the screen and
+      // the card moves on while the toast keeps a way back; sent when the
+      // window ends, with the done sets the lifter saw (G-067, B7 review).
+      // Hidden until the answer, which draws the workout without the row --
+      // or with it, when the server keeps it for a set logged since.
+      onRemove: () => {
+        const se = data.visible_exercises.find((row) => row.id === seId)
+        if (se === undefined) return
+        const done = doneOn(seId)
+        const unhide = () => setRemoving((ids) => ids.filter((id) => id !== seId))
+        offerUndo({
+          label: `${se.name} wird entfernt.`,
+          undo: unhide,
+          commit: () => { write('removeExercise', seId, done).catch(() => {}).finally(unhide) },
+        })
+        // Not a substitute: removed, it brings back its original, a row this
+        // screen does not have to draw. It stays until the answer (B7
+        // re-review); a set logged on it meanwhile keeps it (the count).
+        if (!se.is_substitute) setRemoving((ids) => [...ids, seId])
+      },
       onShowProgress: () => {
         const se = data.visible_exercises.find((row) => row.id === seId)
-        if (se) window.location.href = `/gym/exercises/${se.exercise_id}`
+        if (se) leavePage(() => { window.location.href = `/gym/exercises/${se.exercise_id}` })
       },
     }),
   }

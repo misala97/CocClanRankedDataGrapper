@@ -167,11 +167,26 @@ export function toggleSet(
   return payload.session.resting_set_id === setId ? endRest(open) : open
 }
 
-/** A set appended already done: "Satz geschafft" with no open set left, or
- *  the sheet's add row. `tempId` names it until the server does -- negative,
- *  so it is never a real id -- and `key` is how the outbox finds the real one
- *  in the answer (SessionSet.client_key). A payload already holding the key
- *  has the set: the server answered a copy of this write first. */
+/** `added` appended to its row, or null when the payload already holds its
+ *  key: the server answered a copy of the write first. */
+function append(
+  payload: SessionDetailPayload,
+  sessionExerciseId: number,
+  added: LiveSet,
+): SessionDetailPayload | null {
+  const se = payload.visible_exercises.find((row) => row.id === sessionExerciseId)
+  if (se === undefined || se.sets.some((s) => s.key === added.key)) return null
+  return retally({
+    ...payload,
+    visible_exercises: payload.visible_exercises.map((row) =>
+      row.id === sessionExerciseId ? { ...row, sets: [...row.sets, added] } : row),
+  })
+}
+
+/** A set appended already done: "Satz geschafft" with no open set left.
+ *  `tempId` names it until the server does -- negative, so it is never a
+ *  real id -- and `key` is how the outbox finds the real one in the answer
+ *  (SessionSet.client_key). */
 export function addSet(
   payload: SessionDetailPayload,
   sessionExerciseId: number,
@@ -181,15 +196,26 @@ export function addSet(
   tempId: number,
   at: number = Date.now(),
 ): SessionDetailPayload {
-  const se = payload.visible_exercises.find((row) => row.id === sessionExerciseId)
-  if (se === undefined || se.sets.some((s) => s.key === key)) return payload
-  const added: LiveSet = { id: tempId, weight, reps, completed: true, base_weight: null, key }
-  const next = retally({
-    ...payload,
-    visible_exercises: payload.visible_exercises.map((row) =>
-      row.id === sessionExerciseId ? { ...row, sets: [...row.sets, added] } : row),
-  })
+  const next = append(payload, sessionExerciseId,
+    { id: tempId, weight, reps, completed: true, base_weight: null, key })
+  if (next === null) return payload
+  const se = payload.visible_exercises.find((row) => row.id === sessionExerciseId)!
   return startRest(next, se, tempId, at)
+}
+
+/** The sheet's "Anhängen" (Q2, G-060): a set planned open behind the others,
+ *  ticked on the card when it is lifted. Nothing was lifted, so no rest
+ *  starts; named as addSet's. */
+export function planSet(
+  payload: SessionDetailPayload,
+  sessionExerciseId: number,
+  weight: number,
+  reps: number,
+  key: string,
+  tempId: number,
+): SessionDetailPayload {
+  return append(payload, sessionExerciseId,
+    { id: tempId, weight, reps, completed: false, base_weight: null, key }) ?? payload
 }
 
 /** Correcting a logged set's numbers without changing whether it is done. */
@@ -333,6 +359,47 @@ export function relive(payload: SessionDetailPayload): SessionDetailPayload {
     live_increment: live?.increment ?? payload.live_increment,
     live_floor: live?.floor ?? null,
   })
+}
+
+/** An exercise removed while its undo runs (G-067): gone from the queue and
+ *  every total, and the card on the next one by the live rule -- it stayed
+ *  live for the five seconds, and a set logged on it then went with it (B7
+ *  review). Not a write's guess -- the remove is sent when the window ends,
+ *  and not drawn then (writes.ts) -- so the live rule is applied here as
+ *  offline (`relive`). */
+export function removeExercise(
+  payload: SessionDetailPayload,
+  sessionExerciseId: number,
+): SessionDetailPayload {
+  const doomed = payload.visible_exercises.find((se) => se.id === sessionExerciseId)
+  if (doomed === undefined) return payload
+  let next = retally({
+    ...payload,
+    visible_exercises: payload.visible_exercises.filter((se) => se !== doomed),
+  })
+  // The server clears a rest whose set goes with the row.
+  if (doomed.sets.some((s) => s.id === payload.session.resting_set_id)) next = endRest(next)
+  next = relive(next)
+  const index = next.visible_exercises.findIndex((se) => se.id === next.live_id)
+  return { ...next, live_index: index + 1 }
+}
+
+/** A swap taken back (G-068): the original in its substitute's place, as the
+ *  server puts it back, while the remove is on its way. Nothing once the
+ *  answer has the original: the substitute is gone from it. */
+export function unswap(
+  payload: SessionDetailPayload,
+  substituteId: number,
+  original: LiveExercise,
+): SessionDetailPayload {
+  const at = payload.visible_exercises.findIndex((se) => se.id === substituteId)
+  if (at === -1) return payload
+  const next = relive(retally({
+    ...payload,
+    visible_exercises: payload.visible_exercises.map((se, i) => (i === at ? original : se)),
+  }))
+  const index = next.visible_exercises.findIndex((se) => se.id === next.live_id)
+  return { ...next, live_index: index + 1 }
 }
 
 /** "Pause heute". The setting's own value is stored as nothing -- the row

@@ -119,7 +119,7 @@ def test_matches_real_chart_geometry():
     with acting_as(_admin_id()):
         geometry = None
         for exercise in touched_exercises(_admin_id()):
-            rows = load_performed(exercise_ids=[exercise.id], include_active=True)
+            rows = load_performed(exercise_ids=[exercise.id])
             progress = stats.exercise_progress(rows, position=None)
             candidate = _chart_geometry(progress['series'])
             if candidate:

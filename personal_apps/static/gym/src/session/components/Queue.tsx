@@ -18,7 +18,10 @@ interface Props {
 function loadSummary(se: LiveExercise, isLive: boolean): string {
   const done = se.sets.filter((s) => s.completed).length
   const total = se.sets.length
-  if (se.skipped) return 'Übersprungen'
+  // What was lifted stays said: struck through, a skipped row hid a record
+  // set it still counted (G-065). The rest being skipped is said under the
+  // name -- in this column it cut the name down to a word at 390px.
+  if (se.skipped) return done === 0 ? 'Übersprungen' : `${done} ${done === 1 ? 'Satz' : 'Sätze'}`
   if (isLive) return `${done}/${total}`
   if (total > 0 && done === total) return `${done}/${total}`
   if (total > 0) {
@@ -323,6 +326,7 @@ export function Queue({ exercises, liveId, deloadHints = {}, onReorder }: Props)
         const total = se.sets.length
         const isLive = se.id === liveId
         const isDone = total > 0 && done === total
+        const restSkipped = se.skipped && done > 0
         // Not on the live row: the card above says it there.
         const deloadHint = isLive ? undefined : deloadHints[String(se.id)]
 
@@ -331,7 +335,7 @@ export function Queue({ exercises, liveId, deloadHints = {}, onReorder }: Props)
           isLive ? 'is-now' : '',
           isLive && handedTo === se.id ? 'just-now' : '',
           isDone ? 'is-done' : '',
-          se.skipped ? 'is-skipped' : '',
+          se.skipped && done === 0 ? 'is-skipped' : '',
           draggedId === se.id ? 'is-dragging' : '',
         ].filter(Boolean).join(' ')
 
@@ -380,6 +384,16 @@ export function Queue({ exercises, liveId, deloadHints = {}, onReorder }: Props)
               {...(isLive ? { 'aria-current': 'step' as const } : {})}
               onClick={() => openSheet(`sheet-ex-${se.id}`)}>
               <span className="row__name">{se.name}</span>
+              {/* A skip after a set, and today's twinge and note, as on the
+                  card (G-065, G-073). */}
+              {(restSkipped || se.pain || Boolean(se.notes)) && (
+                <span className="row__meta row__meta--clip queue__meta">
+                  {restSkipped && 'Rest übersprungen'}
+                  {restSkipped && (se.pain || Boolean(se.notes)) && ' · '}
+                  {se.pain && <span className="chip chip--pain">Zwicken</span>}
+                  {Boolean(se.notes) && ` ${se.notes}`}
+                </span>
+              )}
             </button>
 
             {/* D4: the plan stays what it was -- nothing rescales once a set

@@ -41,6 +41,13 @@ export interface LiveSet {
   key: string | null
 }
 
+/** LiveBest, in schemas.py: each apart -- the most reps need not be at the
+ *  heaviest weight. */
+export interface LiveBest {
+  weight: number
+  reps: number
+}
+
 export interface LiveExercise {
   /** The SessionExercise. `suggestions` and `stagnation_counts` are keyed by
    *  this; history and records go by `exercise_id`. */
@@ -72,6 +79,10 @@ export interface LiveExercise {
    *  default, so never null -- typed as a string once and the endpoint
    *  rejected its own payload. */
   pain: boolean
+  /** The heaviest weight and the most reps the lifter has done on the
+   *  exercise, in any finished workout and in this one so far; null before
+   *  the first. What a typed number is checked against ("Sicher?", G-070). */
+  best: LiveBest | null
   /** Where the exercise's drawing loads from, or null while it has none
    *  (off the list, or not drawn yet): the page shows the placeholder. */
   picture: string | null
@@ -79,6 +90,9 @@ export interface LiveExercise {
    *  they count in place (Q1), so the retally adds them. Zero otherwise. */
   replaced_sets_done: number
   replaced_volume: number
+  /** Stands in for a hidden original: removed, it brings the original back,
+   *  a row this screen does not have to draw. */
+  is_substitute: boolean
   sets: LiveSet[]
 }
 

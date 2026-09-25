@@ -269,6 +269,15 @@ class LiveSet(_Model):
     key: str | None
 
 
+class LiveBest(_Model):
+    """The heaviest weight and the most reps an exercise has seen in the
+    lifter's other finished workouts, raised by this one's counted sets: past
+    twice either, a typed number gets a "Sicher?" before it is kept (Q5,
+    G-070). The debrief carries it too (workout._typed_bests)."""
+    weight: float
+    reps: int
+
+
 class LiveExercise(_Model):
     """One row of the queue. `id` is the SessionExercise, `exercise_id` the
     catalogue entry -- suggestions and stagnation_counts are keyed by the
@@ -300,6 +309,9 @@ class LiveExercise(_Model):
     # default, so never None. Typed str here first and the endpoint rejected
     # its own payload the moment a real session was fed through it.
     pain: bool
+    #: LiveBest, or None before the exercise's first set: nothing to measure
+    #: a typo against.
+    best: LiveBest | None
     #: Where the exercise's drawing loads from (art.picture_url), or None
     #: while it has none -- off the list, or not drawn yet: the placeholder.
     picture: str | None
@@ -308,6 +320,9 @@ class LiveExercise(_Model):
     #: where nothing was replaced.
     replaced_sets_done: int
     replaced_volume: float
+    #: Stands in for a hidden original (replaces_id): removed, it brings that
+    #: original back rather than leaving a gap.
+    is_substitute: bool
     sets: list[LiveSet]
 
 
@@ -774,6 +789,8 @@ class UnloggedExercise(_Model):
     correction sheet can still add a set to it."""
     session_exercise_id: int
     name: str
+    #: What a typed set is judged against, or None: no history (Q5).
+    best: LiveBest | None
 
 
 class FinishedExercise(_Model):
@@ -809,6 +826,9 @@ class FinishedExercise(_Model):
     session_exercise_id: int | None
     notes: str | None
     pain: bool
+    #: What a correction or "Nachtragen" is judged against, or None: no
+    #: history (Q5).
+    best: LiveBest | None
 
 
 class SessionRecord(_Model):

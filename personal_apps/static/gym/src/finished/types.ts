@@ -1,5 +1,7 @@
 // Mirrors the finished-workout models in features/gym/schemas.py.
 
+import type { LiveBest } from '../session/types'
+
 export interface FinishedSession {
   id: number
   name: string | null
@@ -43,6 +45,9 @@ export interface FinishedExercise {
   session_exercise_id: number | null
   notes: string | null
   pain: boolean
+  /** What a correction or "Nachtragen" is judged against ("Sicher?", Q5), or
+   *  null: no history. */
+  best: LiveBest | null
 }
 
 /** A record is e1RM only (D3). */
@@ -95,7 +100,7 @@ export interface FinishedPayload {
   set_pace_seconds: number | null
   /** Exercises of this workout with nothing logged, so the correction sheet
    *  can still add a set to them. */
-  unlogged: { session_exercise_id: number; name: string }[]
+  unlogged: { session_exercise_id: number; name: string; best: LiveBest | null }[]
   weekday_short: string[]
   just_finished: boolean
   /** The update prompt's diff, both halves: the template's current list, and

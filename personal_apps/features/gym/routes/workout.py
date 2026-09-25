@@ -507,6 +507,37 @@ def _replaced_done(session_, visible_exercises):
     return carried
 
 
+def _typed_bests(history, session_):
+    """The heaviest weight and the most reps each exercise has seen, as
+    {exercise_id: {'weight', 'reps'}}: past twice either, a typed number gets
+    a "Sicher?" before it is kept (Q5, G-070) -- a fat-fingered 9999 kg used
+    to stay the record for good.
+
+    From the lifter's other finished workouts (`history`, this workout's own
+    rows left out), then raised by this workout's counted sets: a jump the
+    lifter already said yes to is not asked about again. Only raised, never
+    set -- with no history the first set of the day, a 20 kg warm-up, was the
+    bar the 50 after it was asked about (B7 review). No history, no question.
+    """
+    bests = {}
+    for row in history:
+        if row.session_id == session_.id:
+            continue
+        for weight, reps in row.sets:
+            best = bests.setdefault(row.exercise_id, {'weight': 0.0, 'reps': 0})
+            best['weight'] = max(best['weight'], weight)
+            best['reps'] = max(best['reps'], reps)
+    for se in session_.exercises:
+        best = bests.get(se.exercise_id)
+        if best is None:
+            continue
+        for s in se.sets:
+            if counts(s):
+                best['weight'] = max(best['weight'], s.weight)
+                best['reps'] = max(best['reps'], s.reps)
+    return bests
+
+
 def _live_data(session_):
     """Every value session_detail.html renders from, ORM objects included.
 
@@ -545,6 +576,7 @@ def _live_data(session_):
     by_exercise = {}
     for row in stats.earlier_rows(history, session_.started_at, session_.id):
         by_exercise.setdefault(row.exercise_id, []).append(row)
+    bests = _typed_bests(history, session_)
     stagnation_counts = {}
     record_set_ids = set()
     record_details = {}
@@ -741,6 +773,7 @@ def _live_data(session_):
         next_targets=next_targets,
         deload_hints=deload_hints,
         routine_plans=routine_plans,
+        bests=bests,
         record_set_ids=record_set_ids,
         record_details=record_details,
         first_time=first_time,
@@ -816,11 +849,15 @@ def _session_payload(session_):
             'floor': _weight_floor(setup, se.exercise),
             'notes': se.notes,
             'pain': se.pain,
+            'best': data['bests'].get(se.exercise_id),
             'picture': art.picture_url(se.exercise.library_key),
             # The done sets of the hidden originals this row replaced, so the
             # client's retally can count them in place (Q1).
             'replaced_sets_done': data['replaced_done'][se.id]['sets'],
             'replaced_volume': data['replaced_done'][se.id]['volume'],
+            # Removed, a substitute brings its original back: the screen
+            # cannot draw that row, so it does not draw the removal at all.
+            'is_substitute': se.replaces_id is not None,
             'sets': [{
                 'id': s.id, 'weight': s.weight, 'reps': s.reps,
                 'completed': s.completed, 'base_weight': s.base_weight,
@@ -1093,11 +1130,19 @@ def _finished_payload(session_):
     # every row, like _live_context -- se.replaced_by would lazy-load a query
     # per row.
     replaced_ids = {se.replaces_id for se in session_.exercises if se.replaces_id}
+    # "Nachtragen" and a correction are typed numbers too, and counted the
+    # moment they land: the same "Sicher?" as the live screen's (Q5, B7
+    # review). `history` above holds only the exercises with a counted set.
+    bests = _typed_bests(
+        load_performed(exercise_ids=[se.exercise_id for se in session_.exercises]), session_)
     data['unlogged'] = [
-        {'session_exercise_id': se.id, 'name': se.exercise.name}
+        {'session_exercise_id': se.id, 'name': se.exercise.name,
+         'best': bests.get(se.exercise_id)}
         for se in sorted(session_.exercises, key=lambda row: row.position)
         if se.id not in replaced_ids and not done_sets(se)
     ]
+    for entry in data['exercises']:
+        entry['best'] = bests.get(entry['exercise_id'])
     for entry, se in zip(data['exercises'], reported_session_exercises):
         entry['set_rows'] = [{'id': s.id, 'weight': s.weight, 'reps': s.reps}
                              for s in se.sets if counts(s)]
@@ -1435,18 +1480,25 @@ def gym_add_set(session_exercise_id):
         next_position = max([s.position for s in session_exercise.sets], default=0) + 1
         session_ = session_exercise.session
         finished = session_.finished_at is not None
+        # "Anhängen" in the live sheet plans one more set, open, ticked on the
+        # card like the rest (Q2, G-060): added done, it jumped the open sets,
+        # started a rest and was judged a record before anyone lifted it.
+        # "Satz geschafft" with nothing open and the debrief's "Nachtragen"
+        # still add a set done.
+        planned = not finished and request.form.get('open') == '1'
         new_set = SessionSet(
             session_exercise_id=session_exercise.id,
             position=next_position,
             weight=weight,
             reps=reps,
-            completed=True,  # logged live via this form, so it's inherently just-performed
+            completed=not planned,
             # Added from the debrief, it was lifted at some unknown point during
             # the workout. A stamp of "now" would read as a rest of hours after
             # the last real set; no stamp is the honest answer, and every rest
             # measurement already treats NULL as silence. Live, it is the moment
-            # the lifter tapped (B6).
-            completed_at=None if finished else (_write_time(session_) or dt.datetime.utcnow()),
+            # the lifter tapped (B6); planned, it has not been lifted yet.
+            completed_at=None if finished or planned
+            else (_write_time(session_) or dt.datetime.utcnow()),
             client_key=key,
         )
         db.session.add(new_set)
@@ -1457,7 +1509,8 @@ def gym_add_set(session_exercise_id):
             # by the copy racing this one.
             db.session.rollback()
         else:
-            _schedule_rest(new_set)
+            if not planned:
+                _schedule_rest(new_set)
             db.session.commit()
 
     return _mutation_response(
@@ -1483,6 +1536,19 @@ def gym_delete_session_exercise(session_exercise_id):
     if session_exercise.mirrors_id is not None and sharing.is_live_follower(session_id):
         return _mutation_response(
             _doomed_session, 'gym.session_detail', session_id=session_id)
+    # `done`: the done sets the screen showed when the lifter asked. A remove
+    # that lands later -- a swap's undo sent again once the connection came
+    # back -- took every set logged on the row since with it (B7 review). The
+    # screen answers a 409 by asking the server, and draws the row it gets.
+    shown = request.form.get('done')
+    if shown is not None:
+        shown = _to_int(shown)
+        if shown is None:
+            raise InvalidInput('Übung entfernen: die Zahl der Sätze fehlt.')
+        if sum(1 for s in session_exercise.sets if s.completed) > shown:
+            if _wants_json():
+                return jsonify({'changed': True}), 409
+            return redirect(url_for('gym.session_detail', session_id=session_id))
     # If the currently-resting set belongs to this exercise, clear the
     # reference first -- otherwise deleting it (cascades to its sets) would
     # violate the WorkoutSession.resting_set_id foreign key.

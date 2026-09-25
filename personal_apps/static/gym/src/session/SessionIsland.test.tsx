@@ -30,7 +30,8 @@ beforeEach(() => {
 
 afterEach(() => {
   // Unmounted while the stubs still stand: a refetch landing late re-runs
-  // the totals' count-up, which asks matchMedia.
+  // the totals' count-up, which asks matchMedia. A sheet's step back still
+  // on its way lands before the next test (test-setup.ts).
   cleanup()
   vi.unstubAllGlobals()
   vi.restoreAllMocks()
@@ -205,8 +206,8 @@ describe('SessionIsland', () => {
     render(<SessionIsland initial={payload} />)
     act(() => { useSheets.getState().open('sheet-ex-10') })
     const sheet = within(document.querySelector(SHEET) as HTMLElement)
-    await user.clear(sheet.getByLabelText('Neuer Satz, Gewicht in kg'))
-    await user.type(sheet.getByLabelText('Neuer Satz, Gewicht in kg'), '60')
+    await user.clear(sheet.getByLabelText('Neuer Satz, Gewicht in kg je Seite'))
+    await user.type(sheet.getByLabelText('Neuer Satz, Gewicht in kg je Seite'), '60')
     await user.clear(sheet.getByLabelText('Neuer Satz, Wiederholungen'))
     await user.type(sheet.getByLabelText('Neuer Satz, Wiederholungen'), '8')
     await user.click(sheet.getByLabelText('Satz anhängen'))
@@ -222,12 +223,41 @@ describe('SessionIsland', () => {
     expect(keys[1]).toBe(keys[0])
   })
 
+  it('plans the set "Anhängen" adds, open on the card, and starts no rest (Q2, G-060)', async () => {
+    // It logged the set as done: a set the lifter meant to do next was
+    // counted lifted, and its rest ran.
+    const user = userEvent.setup()
+    const calls = network(() => offline())
+    render(<SessionIsland initial={payload} />)
+    act(() => { useSheets.getState().open('sheet-ex-10') })
+    const sheet = within(document.querySelector(SHEET) as HTMLElement)
+    await user.clear(sheet.getByLabelText('Neuer Satz, Wiederholungen'))
+    await user.type(sheet.getByLabelText('Neuer Satz, Wiederholungen'), '5')
+    await user.click(sheet.getByLabelText('Satz anhängen'))
+    act(() => { useSheets.getState().close() })
+
+    expect(await screen.findByLabelText(/^Satz 4, geplant/)).toBeInTheDocument()
+    expect(screen.queryByRole('group', { name: 'Pause' })).toBeNull()
+    await waitFor(() => expect(calls.some((c) => c.url.endsWith('/sets/add'))).toBe(true))
+    const add = calls.find((c) => c.url === '/gym/session-exercise/10/sets/add')!
+    expect((add.init.body as FormData).get('open')).toBe('1')
+    expect(kept()).toHaveLength(1)
+    expect(kept()[0]!.kind).toBe('planSet')
+    expect(kept()[0]!.args.slice(0, 3)).toEqual([10, 62.5, 5])
+  })
+
   it('keeps a set just added open while its un-log waits, as the set gets its real id (B6 re-review)', async () => {
     // Held by its drawn id, the chip showed done again the moment the add
-    // landed, until the undo window closed.
+    // landed, until the undo window closed. Added done: "Satz geschafft"
+    // with every set of the row logged.
     const user = userEvent.setup()
+    const logged = {
+      ...payload,
+      visible_exercises: payload.visible_exercises.map((se) => (se.id === 10
+        ? { ...se, sets: se.sets.map((s) => ({ ...s, completed: true })) } : se)),
+    }
     let online = false
-    let server = payload
+    let server = logged
     const calls: string[] = []
     vi.stubGlobal('fetch', vi.fn((url: string, init: RequestInit = {}) => {
       calls.push(url)
@@ -238,15 +268,8 @@ describe('SessionIsland', () => {
       }
       return json(server)
     }))
-    render(<SessionIsland initial={payload} />)
-    act(() => { useSheets.getState().open('sheet-ex-10') })
-    const sheet = within(document.querySelector(SHEET) as HTMLElement)
-    await user.clear(sheet.getByLabelText('Neuer Satz, Gewicht in kg'))
-    await user.type(sheet.getByLabelText('Neuer Satz, Gewicht in kg'), '60')
-    await user.clear(sheet.getByLabelText('Neuer Satz, Wiederholungen'))
-    await user.type(sheet.getByLabelText('Neuer Satz, Wiederholungen'), '8')
-    await user.click(sheet.getByLabelText('Satz anhängen'))
-    act(() => { useSheets.getState().close() })
+    render(<SessionIsland initial={logged} />)
+    await user.click(screen.getByText('Satz geschafft'))
     await screen.findByText('Wartet auf Verbindung')
 
     await user.click(screen.getByLabelText(/^Satz 4 erledigt/))
@@ -271,8 +294,8 @@ describe('SessionIsland', () => {
     render(<SessionIsland initial={payload} />)
     act(() => { useSheets.getState().open('sheet-ex-10') })
     const sheet = within(document.querySelector(SHEET) as HTMLElement)
-    await user.clear(sheet.getByLabelText('Neuer Satz, Gewicht in kg'))
-    await user.type(sheet.getByLabelText('Neuer Satz, Gewicht in kg'), '60')
+    await user.clear(sheet.getByLabelText('Neuer Satz, Gewicht in kg je Seite'))
+    await user.type(sheet.getByLabelText('Neuer Satz, Gewicht in kg je Seite'), '60')
     await user.clear(sheet.getByLabelText('Neuer Satz, Wiederholungen'))
     await user.type(sheet.getByLabelText('Neuer Satz, Wiederholungen'), '8')
     const add = () => sheet.getByLabelText('Satz anhängen')
@@ -281,8 +304,19 @@ describe('SessionIsland', () => {
     await user.click(add())
     now += 700
     await user.click(add())
-    await waitFor(() => expect(kept().filter((e) => e.kind === 'addSet')).toHaveLength(2))
+    await waitFor(() => expect(kept().filter((e) => e.kind === 'planSet')).toHaveLength(2))
   })
+
+  async function replace(user: ReturnType<typeof userEvent.setup>) {
+    act(() => { useSheets.getState().open('sheet-ex-10') })
+    const sheet = within(document.querySelector(SHEET) as HTMLElement)
+    await user.click(sheet.getByText('Übung ersetzen'))
+    const select = sheet.getByLabelText('Ersatzübung') as HTMLSelectElement
+    const choice = [...select.options].find((o) => !o.disabled)!
+    await user.selectOptions(select, choice.value)
+    await user.click(sheet.getByText('Ersetzen'))
+    return Number(choice.value)
+  }
 
   it('fails a swap at once while writes wait, and says so', async () => {
     const user = userEvent.setup()
@@ -291,10 +325,332 @@ describe('SessionIsland', () => {
     await user.click(screen.getByText('Satz geschafft'))
     await screen.findByText('Wartet auf Verbindung')
 
-    act(() => { useSheets.getState().open('sheet-ex-10') })
-    await user.click(within(document.querySelector(SHEET) as HTMLElement).getByText('Ersetzen'))
+    await replace(user)
     expect(await screen.findByText('Nicht gespeichert')).toBeInTheDocument()
     expect(calls.some((c) => c.url.endsWith('/replace'))).toBe(false)
+  })
+
+  it('closes the sheet at the swap, and offers to take it back once it lands (G-068)', async () => {
+    // The undo removes the substitute, which shows the original again.
+    const user = userEvent.setup()
+    let swapped = payload
+    const calls = network((url) => {
+      if (url.endsWith('/replace')) return json(swapped)
+      return json(payload)
+    })
+    render(<SessionIsland initial={payload} />)
+    act(() => { useSheets.getState().open('sheet-ex-10') })
+    const select = document.querySelector('#replace-select-10') as HTMLSelectElement
+    const picked = Number([...select.options].find((o) => !o.disabled)!.value)
+    const name = [...select.options].find((o) => Number(o.value) === picked)!.textContent!
+    // The answer: row 10 hidden behind its substitute, row 77, of the pick.
+    swapped = {
+      ...payload,
+      visible_exercises: [
+        { ...payload.visible_exercises[0]!, id: 77, exercise_id: picked, name, sets: [] },
+        ...payload.visible_exercises.slice(1),
+      ],
+    }
+    act(() => { useSheets.getState().close() })
+
+    await replace(user)
+    expect(useSheets.getState().openId).toBeNull()
+    await waitFor(() => expect(useUndo.getState().pending?.label).toBe(`Ersetzt durch ${name}.`))
+    act(() => { useUndo.getState().undoNow() })
+    await waitFor(() => {
+      expect(calls.some((c) => c.url === '/gym/session-exercise/77/delete')).toBe(true)
+    })
+    // It says what it saw: nothing done on the substitute (B7 review).
+    const undo = calls.find((c) => c.url === '/gym/session-exercise/77/delete')!
+    expect((undo.init.body as FormData).get('done')).toBe('0')
+  })
+
+  describe('a swap taken back (B7 re-review)', () => {
+    // Left live until its remove landed, the substitute took the next set,
+    // and the remove took the set with it.
+    const open = { id: 770, weight: 60, reps: 8, completed: false, base_weight: null, key: null }
+    const original = payload.visible_exercises[0]!
+
+    async function swapBack(deleteAnswer: () => Promise<Response>) {
+      const user = userEvent.setup()
+      let swapped = payload
+      const calls = network((url) => {
+        if (url.endsWith('/delete')) return deleteAnswer()
+        return json(swapped)
+      })
+      render(<SessionIsland initial={payload} />)
+      act(() => { useSheets.getState().open('sheet-ex-10') })
+      const select = document.querySelector('#replace-select-10') as HTMLSelectElement
+      const picked = Number([...select.options].find((o) => !o.disabled)!.value)
+      const name = [...select.options].find((o) => Number(o.value) === picked)!.textContent!
+      swapped = {
+        ...payload,
+        live_id: 77,
+        visible_exercises: [
+          { ...original, id: 77, exercise_id: picked, name, sets: [open], is_substitute: true },
+          ...payload.visible_exercises.slice(1),
+        ],
+      }
+      act(() => { useSheets.getState().close() })
+      await replace(user)
+      await waitFor(() => expect(useUndo.getState().pending?.label).toBe(`Ersetzt durch ${name}.`))
+      expect(document.querySelector('.queue__row[data-se-id="77"]')).not.toBeNull()
+      act(() => { useUndo.getState().undoNow() })
+      return calls
+    }
+
+    it('draws the original back at once, the card with it, until the answer', async () => {
+      let land: (answer: Response) => void = () => {}
+      const calls = await swapBack(() => new Promise<Response>((resolve) => { land = resolve }))
+      expect(document.querySelector('.queue__row[data-se-id="77"]')).toBeNull()
+      expect(document.querySelector('.queue__row[data-se-id="10"]')).not.toBeNull()
+      expect(document.querySelector('.live__name')).toHaveTextContent(original.name)
+
+      await waitFor(() => {
+        expect(calls.some((c) => c.url === '/gym/session-exercise/77/delete')).toBe(true)
+      })
+      await act(async () => {
+        land(new Response(JSON.stringify(payload), {
+          status: 200, headers: { 'Content-Type': 'application/json' },
+        }))
+      })
+      await waitFor(() => expect(useOutbox.getState().count).toBe(0))
+      await act(async () => {})
+      expect(document.querySelector('.queue__row[data-se-id="77"]')).toBeNull()
+      expect(document.querySelector('.queue__row[data-se-id="10"]')).not.toBeNull()
+    })
+
+    it.each([
+      ['the server keeps it: a set was logged on it since (409)', () => json({ changed: true }, 409)],
+      ['the remove does not get through', () => offline()],
+    ])('shows the substitute again when %s', async (_, answer) => {
+      await swapBack(answer)
+      await waitFor(() => expect(document.querySelector('.queue__row[data-se-id="77"]')).not.toBeNull())
+      expect(document.querySelector('.queue__row[data-se-id="10"]')).toBeNull()
+    })
+  })
+
+  it('keeps a removed substitute on screen until its answer (B7 re-review)', async () => {
+    // Removed, a substitute brings back its original, which the screen does
+    // not have: hidden, it drew the opposite of what the server does.
+    const user = userEvent.setup()
+    network(() => offline())
+    render(<SessionIsland initial={{
+      ...payload,
+      visible_exercises: [
+        { ...payload.visible_exercises[0]!, is_substitute: true },
+        ...payload.visible_exercises.slice(1),
+      ],
+    }} />)
+    act(() => { useSheets.getState().open('sheet-ex-10') })
+    await user.click(within(document.querySelector(SHEET) as HTMLElement).getByText('Übung entfernen'))
+    expect(useUndo.getState().pending?.label).toContain('wird entfernt')
+    expect(document.querySelector('.queue__row[data-se-id="10"]')).not.toBeNull()
+  })
+
+  it('takes the swap\'s undo away once a set is logged on the substitute (B7 review)', async () => {
+    // Undone after that, the swap took the set with it.
+    const user = userEvent.setup()
+    let swapped = payload
+    let logged = payload
+    const calls = network((url) => {
+      if (url.endsWith('/replace')) return json(swapped)
+      return json(url.endsWith('/toggle_complete') ? logged : swapped)
+    })
+    render(<SessionIsland initial={payload} />)
+    act(() => { useSheets.getState().open('sheet-ex-10') })
+    const select = document.querySelector('#replace-select-10') as HTMLSelectElement
+    const picked = Number([...select.options].find((o) => !o.disabled)!.value)
+    const name = [...select.options].find((o) => Number(o.value) === picked)!.textContent!
+    const open = { id: 770, weight: 60, reps: 8, completed: false, base_weight: null, key: null }
+    swapped = {
+      ...payload,
+      live_id: 77,
+      visible_exercises: [
+        { ...payload.visible_exercises[0]!, id: 77, exercise_id: picked, name, sets: [open] },
+        ...payload.visible_exercises.slice(1),
+      ],
+    }
+    logged = {
+      ...swapped,
+      visible_exercises: [
+        { ...swapped.visible_exercises[0]!, sets: [{ ...open, completed: true }] },
+        ...swapped.visible_exercises.slice(1),
+      ],
+    }
+    act(() => { useSheets.getState().close() })
+    await replace(user)
+    await waitFor(() => expect(useUndo.getState().pending?.label).toBe(`Ersetzt durch ${name}.`))
+
+    await user.click(screen.getByText('Satz geschafft'))
+    await waitFor(() => expect(useUndo.getState().pending).toBeNull())
+    expect(calls.some((c) => c.url === '/gym/session-exercise/77/delete')).toBe(false)
+  })
+
+  it('marks what the workout already holds in the replace list (G-068)', () => {
+    // Row 11, the butterfly, is in row 10's muscle group.
+    network(() => offline())
+    render(<SessionIsland initial={payload} />)
+    act(() => { useSheets.getState().open('sheet-ex-10') })
+    const sheet = within(document.querySelector(SHEET) as HTMLElement)
+    expect(sheet.getByText('Butterfly (Maschine) — schon im Workout')).toBeInTheDocument()
+    expect(sheet.getByText('Bankdrücken (Langhantel)')).toBeInTheDocument()
+  })
+
+  it('draws a set whose delete waits gone from every total, not only the sheet (G-061)', async () => {
+    const user = userEvent.setup()
+    network(() => offline())
+    render(<SessionIsland initial={payload} />)
+    const ticks = () => document.querySelectorAll('.ticks .tick').length
+    const before = ticks()
+    act(() => { useSheets.getState().open('sheet-ex-10') })
+    const sheet = within(document.querySelector(SHEET) as HTMLElement)
+    await user.click(sheet.getByLabelText('Satz 1 löschen'))
+    act(() => { useSheets.getState().close() })
+    expect(ticks()).toBe(before - 1)
+    expect(screen.queryByLabelText(/^Satz 3/)).toBeNull()
+
+    act(() => { useUndo.getState().undoNow() })
+    expect(ticks()).toBe(before)
+  })
+
+  it('sends a remove as its undo runs out, and leaves whatever sheet is open then alone (G-067)', async () => {
+    const user = userEvent.setup()
+    const calls = network(() => json(payload))
+    render(<SessionIsland initial={payload} />)
+    act(() => { useSheets.getState().open('sheet-ex-10') })
+    await user.click(within(document.querySelector(SHEET) as HTMLElement).getByText('Übung entfernen'))
+    expect(useSheets.getState().openId).toBeNull()
+    expect(useUndo.getState().pending?.label).toContain('wird entfernt')
+
+    act(() => { useSheets.getState().open('sheet-finish') })
+    act(() => { useUndo.getState().commitNow() })
+    await waitFor(() => {
+      expect(calls.some((c) => c.url === '/gym/session-exercise/10/delete')).toBe(true)
+    })
+    expect(useSheets.getState().openId).toBe('sheet-finish')
+    // With the done sets the lifter saw: a set logged since keeps the row.
+    const remove = calls.find((c) => c.url === '/gym/session-exercise/10/delete')!
+    expect((remove.init.body as FormData).get('done')).toBe('1')
+  })
+
+  it('moves the card on while a remove waits, and brings the row back on undo (B7 review)', async () => {
+    // Live for the five seconds, it took the next "Satz geschafft" -- and
+    // the set went with the exercise at the commit.
+    const user = userEvent.setup()
+    const calls = network(() => offline())
+    const [bench, butterfly] = payload.visible_exercises
+    render(<SessionIsland initial={{
+      ...payload, visible_exercises: [bench!, { ...butterfly!, skipped: false }],
+    }} />)
+    act(() => { useSheets.getState().open('sheet-ex-10') })
+    await user.click(within(document.querySelector(SHEET) as HTMLElement).getByText('Übung entfernen'))
+
+    expect(document.querySelector('.queue__row[data-se-id="10"]')).toBeNull()
+    await user.click(screen.getByText('Satz geschafft'))
+    await waitFor(() => expect(kept()).toMatchObject([{ kind: 'toggleSet', args: [103, true, 40, 10] }]))
+
+    act(() => { useUndo.getState().undoNow() })
+    expect(document.querySelector('.queue__row[data-se-id="10"]')).not.toBeNull()
+    expect(calls.some((c) => c.url.endsWith('/delete'))).toBe(false)
+  })
+
+  it('brings the row back when the server finds more sets on it than the remove saw (B7 review)', async () => {
+    // A 409: the row holds a set logged since. It stays, and shows again.
+    const user = userEvent.setup()
+    network((url) => (url.endsWith('/delete') ? json({ changed: true }, 409) : json(payload)))
+    render(<SessionIsland initial={payload} />)
+    act(() => { useSheets.getState().open('sheet-ex-10') })
+    await user.click(within(document.querySelector(SHEET) as HTMLElement).getByText('Übung entfernen'))
+    expect(document.querySelector('.queue__row[data-se-id="10"]')).toBeNull()
+
+    await act(async () => { useUndo.getState().commitNow() })
+    await waitFor(() => expect(document.querySelector('.queue__row[data-se-id="10"]')).not.toBeNull())
+  })
+
+  it('does not play a record again when its set\'s delete is undone (B7 review)', async () => {
+    // Set 100 is a record. Drawn out of the ids while its delete waited, it
+    // came back as a record never seen.
+    const user = userEvent.setup()
+    network(() => offline())
+    render(<SessionIsland initial={payload} />)
+    act(() => { useSheets.getState().open('sheet-ex-10') })
+    await user.click(within(document.querySelector(SHEET) as HTMLElement).getByLabelText('Satz 1 löschen'))
+    act(() => { useSheets.getState().close() })
+    act(() => { useUndo.getState().undoNow() })
+    expect(screen.queryByText('Neuer e1RM-Rekord')).toBeNull()
+  })
+
+  it('brings a set back when the server refuses its delete (G-147)', async () => {
+    const user = userEvent.setup()
+    network((url) => (url === '/gym/set/100/delete'
+      ? json({ error: 'Löschen abgelehnt.' }, 400) : json(payload)))
+    render(<SessionIsland initial={payload} />)
+    act(() => { useSheets.getState().open('sheet-ex-10') })
+    await user.click(within(document.querySelector(SHEET) as HTMLElement).getByLabelText('Satz 1 löschen'))
+    act(() => { useSheets.getState().close() })
+    expect(screen.queryByLabelText(/^Satz 1 /)).toBeNull()
+
+    act(() => { useUndo.getState().commitNow() })
+    expect(await screen.findByText('Löschen abgelehnt.')).toBeInTheDocument()
+    expect(screen.getByLabelText(/^Satz 1 /)).toBeInTheDocument()
+  })
+
+  describe('a set planned on a row the card has left (B7 review)', () => {
+    // Row 9 is done; row 10 is under way, one set in. First in line again,
+    // row 9 took the card from row 10.
+    const done = { id: 90, weight: 100, reps: 5, completed: true, base_weight: null, key: null }
+    const withDone = (live: typeof payload.visible_exercises[number]) => ({
+      ...payload,
+      visible_exercises: [
+        { ...payload.visible_exercises[0]!, id: 9, exercise_id: 9, name: 'Kniebeuge', sets: [done] },
+        live,
+        ...payload.visible_exercises.slice(1),
+      ],
+    })
+
+    async function plan(initial: typeof payload) {
+      const user = userEvent.setup()
+      network(() => offline())
+      render(<SessionIsland initial={initial} />)
+      act(() => { useSheets.getState().open('sheet-ex-9') })
+      const sheet = within(document.querySelector('#sheet-ex-9') as HTMLElement)
+      await user.click(sheet.getByLabelText('Satz anhängen'))
+      await waitFor(() => expect(kept().some((e) => e.kind === 'planSet')).toBe(true))
+    }
+
+    it('moves the row in behind the lift under way first', async () => {
+      await plan(withDone(payload.visible_exercises[0]!))
+      expect(kept().map((e) => e.kind)).toEqual(['reorder', 'planSet'])
+      expect(kept()[0]!.args).toEqual([[10, 9, 11]])
+    })
+
+    it('leaves the order alone when the live row has not started', async () => {
+      const fresh = payload.visible_exercises[0]!
+      await plan(withDone({ ...fresh, sets: fresh.sets.map((s) => ({ ...s, completed: false })) }))
+      expect(kept().map((e) => e.kind)).toEqual(['planSet'])
+    })
+
+    it("leaves a follower's order to the leader", async () => {
+      // The server refuses a follower's reorder, and the lift a follower
+      // started stays live without one.
+      await plan({ ...withDone(payload.visible_exercises[0]!), session_is_shared: true })
+      expect(kept().map((e) => e.kind)).toEqual(['planSet'])
+    })
+  })
+
+  it('closes the sheet on back, not the workout (G-066)', async () => {
+    history.replaceState(null, '')
+    network(() => offline())
+    render(<SessionIsland initial={payload} />)
+    await userEvent.click(screen.getByRole('button', { name: 'Workout beenden' }))
+    expect(useSheets.getState().openId).toBe('sheet-finish')
+    const popped = new Promise<void>((resolve) => {
+      window.addEventListener('popstate', () => resolve(), { once: true })
+    })
+    history.back()
+    await act(() => popped)
+    expect(useSheets.getState().openId).toBeNull()
   })
 
   it('shows what the server refused, and draws it no more', async () => {
@@ -324,6 +680,23 @@ describe('SessionIsland', () => {
     expect(calls.filter((c) => c.url === '/gym/set/101/toggle_complete')).toHaveLength(2)
     expect((submit.mock.contexts[0] as HTMLFormElement).getAttribute('action'))
       .toBe(`/gym/session/${payload.session.id}/finish`)
+  })
+
+  it("leaves from the finish sheet without leaving the sheet's entry behind (B7 review)", async () => {
+    // Back from the debrief landed on that entry: one dead step, after every
+    // finish.
+    // The sheet stays up meanwhile: closed by the step, it left the live
+    // page open to taps for the whole round trip (B7 re-review).
+    const user = userEvent.setup()
+    history.replaceState({ page: 'workout' }, '')
+    const states: unknown[] = []
+    vi.spyOn(HTMLFormElement.prototype, 'submit')
+      .mockImplementation(() => { states.push([history.state, useSheets.getState().openId]) })
+    network(() => json(payload))
+    render(<SessionIsland initial={payload} />)
+    await finish(user)
+    await waitFor(() => expect(states).toHaveLength(1))
+    expect(states[0]).toEqual([{ page: 'workout' }, 'sheet-finish'])
   })
 
   it('stays while what it holds cannot get through, and says why', async () => {

@@ -1,6 +1,6 @@
-import { act, render, screen, within } from '@testing-library/react'
+import { act, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { FinishedPage } from './FinishedPage'
 import type { FinishedExercise, FinishedPayload, SessionRecord } from './types'
 import { useSheets } from '../session/stores'
@@ -17,7 +17,7 @@ const exercise = (over: Partial<FinishedExercise> = {}): FinishedExercise => ({
   volume_delta_pct: 7, is_record: false,
   sessions_since_pr: 2, verdict: null,
   set_rows: [{ id: 501, weight: 60, reps: 8 }, { id: 502, weight: 60, reps: 8 }],
-  session_exercise_id: 90, notes: null, pain: false, ...over,
+  session_exercise_id: 90, notes: null, pain: false, best: null, ...over,
 })
 
 const record = (over: Partial<SessionRecord> = {}): SessionRecord => ({
@@ -331,15 +331,126 @@ describe('FinishedPage', () => {
       expect(diff.textContent).toContain('Entfällt: Dips.')
     })
 
-    it('names a pure reorder as such', () => {
+    it('names what moves in a reorder (G-077)', () => {
       mount({
         just_finished: true,
-        session: { ...base.session, template_id: 3, template_name: 'Push' },
-        template_exercises: ['Dips', 'Bankdrücken'],
-        template_next_exercises: ['Bankdrücken', 'Dips'],
+        session: { ...base.session, template_id: 3, template_name: 'Pull' },
+        template_exercises: ['Bizepscurls', 'Hammercurls', 'Rudern'],
+        template_next_exercises: ['Hammercurls', 'Bizepscurls', 'Rudern'],
       })
       expect(document.querySelector('.prompt__diff')!.textContent)
-        .toBe('Nur die Reihenfolge ändert sich.')
+        .toBe('Reihenfolge: Hammercurls jetzt vor Bizepscurls.')
+    })
+
+    it('names one exercise moved back as that one, not each it passed (G-077)', () => {
+      mount({
+        just_finished: true,
+        session: { ...base.session, template_id: 3, template_name: 'Pull' },
+        template_exercises: ['Latzug', 'Rudern', 'Face Pulls', 'Bizepscurls'],
+        template_next_exercises: ['Rudern', 'Face Pulls', 'Bizepscurls', 'Latzug'],
+      })
+      expect(document.querySelector('.prompt__diff')!.textContent)
+        .toBe('Reihenfolge: Latzug jetzt nach Bizepscurls.')
+    })
+
+    it('says an order change beside a list change (G-077)', () => {
+      // The walkthrough's "Nur die Reihenfolge ändert sich." stood where the
+      // list had changed; with a change in the list, the order went unsaid.
+      mount({
+        just_finished: true,
+        session: { ...base.session, template_id: 3, template_name: 'Pull' },
+        template_exercises: ['Bizepscurls', 'Hammercurls', 'Face Pulls'],
+        template_next_exercises: ['Hammercurls', 'Bizepscurls', 'Rudern'],
+      })
+      expect(document.querySelector('.prompt__diff')!.textContent).toBe(
+        'Neu: Rudern. Entfällt: Face Pulls. Reihenfolge: Hammercurls jetzt vor Bizepscurls.')
+    })
+
+    it('keeps the update in the menu when the workout is opened again (G-077, Q6)', async () => {
+      // The offer used to exist only on ?just_finished: reopened from
+      // Verlauf, the workout had no way to update its routine at all.
+      mount({
+        session: { ...base.session, template_id: 3, template_name: 'Pull' },
+        template_exercises: ['Bizepscurls', 'Hammercurls'],
+        template_next_exercises: ['Hammercurls', 'Bizepscurls'],
+      })
+      expect(document.querySelector('.prompt')).toBeNull()
+      await userEvent.click(screen.getByRole('button', { name: 'Routine „Pull“ aktualisieren …' }))
+      const sheet = screen.getByRole('dialog')
+      expect(within(sheet).getByText('Reihenfolge: Hammercurls jetzt vor Bizepscurls.'))
+        .toBeInTheDocument()
+      expect(within(sheet).getByRole('button', { name: 'Routine aktualisieren' }).closest('form'))
+        .toHaveAttribute('action', '/gym/session/42/update_template')
+    })
+
+    it("updates the routine from its sheet without leaving the sheet's entry behind (B7 re-review)", async () => {
+      // Back from the page the update lands on found that entry: a dead step.
+      const user = userEvent.setup()
+      history.replaceState({ page: 'debrief' }, '')
+      const sent: unknown[] = []
+      const submit = vi.spyOn(HTMLFormElement.prototype, 'submit')
+        .mockImplementation(function record(this: HTMLFormElement) {
+          sent.push([this.getAttribute('action'), history.state])
+        })
+      mount({
+        session: { ...base.session, template_id: 3, template_name: 'Pull' },
+        template_exercises: ['Bizepscurls', 'Hammercurls'],
+        template_next_exercises: ['Hammercurls', 'Bizepscurls'],
+      })
+      await user.click(screen.getByRole('button', { name: 'Routine „Pull“ aktualisieren …' }))
+      const sheet = screen.getByRole('dialog')
+      await user.click(within(sheet).getByRole('button', { name: 'Routine aktualisieren' }))
+      await waitFor(() => expect(sent).toHaveLength(1))
+      expect(sent[0]).toEqual(['/gym/session/42/update_template', { page: 'debrief' }])
+      submit.mockRestore()
+    })
+
+    it('closes the sheet on back, not the debrief (G-066)', async () => {
+      history.replaceState(null, '')
+      mount({
+        session: { ...base.session, template_id: 3, template_name: 'Pull' },
+        template_exercises: ['Bizepscurls', 'Hammercurls'],
+        template_next_exercises: ['Hammercurls', 'Bizepscurls'],
+      })
+      await userEvent.click(screen.getByRole('button', { name: 'Routine „Pull“ aktualisieren …' }))
+      expect((history.state as { gymSheet?: boolean } | null)?.gymSheet).toBe(true)
+      const popped = new Promise<void>((resolve) => {
+        window.addEventListener('popstate', () => resolve(), { once: true })
+      })
+      history.back()
+      await act(() => popped)
+      expect(useSheets.getState().openId).toBeNull()
+    })
+
+    it('offers the update once on arrival: in the prompt, not the menu (G-077)', () => {
+      mount({
+        just_finished: true,
+        session: { ...base.session, template_id: 3, template_name: 'Pull' },
+        template_exercises: ['Bizepscurls', 'Hammercurls'],
+        template_next_exercises: ['Hammercurls', 'Bizepscurls'],
+      })
+      expect(screen.getAllByRole('button', { name: /aktualisieren/ })).toHaveLength(1)
+      expect(document.querySelector('.prompt')).not.toBeNull()
+    })
+
+    it('keeps no update in the menu that would change nothing (G-077)', () => {
+      mount({
+        session: { ...base.session, template_id: 3, template_name: 'Pull' },
+        template_exercises: ['Bizepscurls'],
+        template_next_exercises: ['Bizepscurls'],
+      })
+      expect(screen.queryByRole('button', { name: /aktualisieren/ })).toBeNull()
+    })
+
+    it('lists the new order when much of it moves (G-077)', () => {
+      mount({
+        just_finished: true,
+        session: { ...base.session, template_id: 3, template_name: 'Pull' },
+        template_exercises: ['A', 'B', 'C', 'D'],
+        template_next_exercises: ['D', 'C', 'B', 'A'],
+      })
+      expect(document.querySelector('.prompt__diff')!.textContent)
+        .toBe('Neue Reihenfolge: D, C, B, A.')
     })
 
     it('disappears when the update would change nothing', () => {
@@ -422,6 +533,30 @@ describe('FinishedPage', () => {
         vi.unstubAllGlobals()
       }
     })
+})
+
+it("leaves a deleted workout from an open sheet without the sheet's entry (B7 review)", async () => {
+  // The delete lands when its undo window closes, sheet open or not: the
+  // entry left behind was a dead step back from Verlauf.
+  history.replaceState({ page: 'debrief' }, '')
+  const states: unknown[] = []
+  const replace = vi.fn(() => { states.push(history.state) })
+  vi.stubGlobal('location', { ...window.location, replace, assign: vi.fn() })
+  vi.stubGlobal('fetch', vi.fn(async () => ({
+    ok: true, redirected: false, url: '/gym/session/1/delete',
+    json: async () => ({ deleted: true }),
+  } as unknown as Response)))
+  try {
+    const user = userEvent.setup()
+    mount()
+    await user.click(screen.getByRole('button', { name: 'Workout löschen' }))
+    await user.click(screen.getByRole('button', { name: /Sätze & Notizen/ }))
+    await act(async () => { useUndo.getState().commitNow() })
+    await waitFor(() => expect(replace).toHaveBeenCalledWith('/gym/verlauf'))
+    expect(states).toEqual([{ page: 'debrief' }])
+  } finally {
+    vi.unstubAllGlobals()
+  }
 })
 
 describe('saving without a reload', () => {
@@ -513,7 +648,7 @@ describe('saving without a reload', () => {
   it('adds a set -- also to an exercise with nothing logged', async () => {
     const fetchMock = fetchPayload({})
     vi.stubGlobal('fetch', fetchMock)
-    mount({ unlogged: [{ session_exercise_id: 91, name: 'Butterfly' }] })
+    mount({ unlogged: [{ session_exercise_id: 91, name: 'Butterfly', best: null }] })
     await userEvent.click(screen.getByRole('button', { name: /Sätze & Notizen/ }))
     const sheet = screen.getByRole('dialog')
 
@@ -534,10 +669,105 @@ describe('saving without a reload', () => {
     vi.unstubAllGlobals()
   })
 
+  describe('"Sicher?" past twice the best (Q5, B7 review)', () => {
+    // A fat-fingered 600 kg counted the moment it landed, records and all.
+    const best = { weight: 60, reps: 10 }
+    const openSheet = async () => {
+      await userEvent.click(screen.getByRole('button', { name: /Sätze & Notizen/ }))
+      return within(screen.getByRole('dialog'))
+    }
+    const retype = async (field: HTMLElement, value: string) => {
+      await userEvent.clear(field)
+      await userEvent.type(field, value)
+    }
+    afterEach(() => { vi.unstubAllGlobals() })
+
+    it('asks before a correction saves, and saves on "Ja, speichern"', async () => {
+      const fetchMock = fetchPayload({})
+      vi.stubGlobal('fetch', fetchMock)
+      mount({ exercises: [exercise({ best })] })
+      const sheet = await openSheet()
+      await retype(sheet.getByLabelText('Bankdrücken, Satz 1, Gewicht in kg'), '600')
+      await userEvent.click(sheet.getByRole('button', { name: 'Satz 1 speichern' }))
+      expect(sheet.getByText('Sicher? Bisher höchstens 60,0 kg.')).toBeInTheDocument()
+      expect(fetchMock).not.toHaveBeenCalled()
+
+      await userEvent.click(sheet.getByRole('button', { name: 'Ja, speichern' }))
+      const [url, init] = fetchMock.mock.calls[0] as unknown as [string, RequestInit]
+      expect(url).toBe('/gym/set/501/update')
+      expect((init.body as FormData).get('weight')).toBe('600')
+    })
+
+    it('takes the question away as the numbers are typed again', async () => {
+      const fetchMock = fetchPayload({})
+      vi.stubGlobal('fetch', fetchMock)
+      mount({ exercises: [exercise({ best })] })
+      const sheet = await openSheet()
+      const weight = sheet.getByLabelText('Bankdrücken, Satz 1, Gewicht in kg')
+      await retype(weight, '600')
+      await userEvent.click(sheet.getByRole('button', { name: 'Satz 1 speichern' }))
+      await retype(weight, '65')
+      expect(sheet.queryByText(/Sicher\?/)).toBeNull()
+      expect(sheet.queryByRole('button', { name: 'Ja, speichern' })).toBeNull()
+      await userEvent.click(sheet.getByRole('button', { name: 'Satz 1 speichern' }))
+      expect(fetchMock).toHaveBeenCalledOnce()
+    })
+
+    it('asks nothing about numbers the row already held', async () => {
+      // 60 x 8 against a best of 20 x 3: logged so, and said yes to then.
+      const fetchMock = fetchPayload({})
+      vi.stubGlobal('fetch', fetchMock)
+      mount({ exercises: [exercise({ best: { weight: 20, reps: 3 } })] })
+      const sheet = await openSheet()
+      await userEvent.click(sheet.getByRole('button', { name: 'Satz 1 speichern' }))
+      expect(sheet.queryByText(/Sicher\?/)).toBeNull()
+      expect(fetchMock).toHaveBeenCalledOnce()
+    })
+
+    it('saves past twice the best at once without a history', async () => {
+      const fetchMock = fetchPayload({})
+      vi.stubGlobal('fetch', fetchMock)
+      mount()
+      const sheet = await openSheet()
+      await retype(sheet.getByLabelText('Bankdrücken, Satz 1, Gewicht in kg'), '600')
+      await userEvent.click(sheet.getByRole('button', { name: 'Satz 1 speichern' }))
+      expect(sheet.queryByText(/Sicher\?/)).toBeNull()
+      expect(fetchMock).toHaveBeenCalledOnce()
+    })
+
+    it("asks before a logged exercise's \"Nachtragen\" too", async () => {
+      const fetchMock = fetchPayload({})
+      vi.stubGlobal('fetch', fetchMock)
+      mount({ exercises: [exercise({ best })] })
+      const sheet = await openSheet()
+      await retype(sheet.getByLabelText('Bankdrücken, neuer Satz, Gewicht in kg'), '130')
+      await userEvent.click(sheet.getByRole('button', { name: 'Bankdrücken, Satz nachtragen' }))
+      expect(sheet.getByText('Sicher? Bisher höchstens 60,0 kg.')).toBeInTheDocument()
+      expect(fetchMock).not.toHaveBeenCalled()
+    })
+
+    it('asks before "Nachtragen" adds reps past twice the best, and adds on "Ja, nachtragen"', async () => {
+      const fetchMock = fetchPayload({})
+      vi.stubGlobal('fetch', fetchMock)
+      mount({ unlogged: [{ session_exercise_id: 91, name: 'Butterfly', best: { weight: 30, reps: 12 } }] })
+      const sheet = await openSheet()
+      await userEvent.type(sheet.getByLabelText('Butterfly, neuer Satz, Gewicht in kg'), '30')
+      await userEvent.type(sheet.getByLabelText('Butterfly, neuer Satz, Wiederholungen'), '25')
+      await userEvent.click(sheet.getByRole('button', { name: 'Butterfly, Satz nachtragen' }))
+      expect(sheet.getByText('Sicher? Bisher höchstens 12 Wdh.')).toBeInTheDocument()
+      expect(fetchMock).not.toHaveBeenCalled()
+
+      await userEvent.click(sheet.getByRole('button', { name: 'Ja, nachtragen' }))
+      const [url, init] = fetchMock.mock.calls[0] as unknown as [string, RequestInit]
+      expect(url).toBe('/gym/session-exercise/91/sets/add')
+      expect((init.body as FormData).get('reps')).toBe('25')
+    })
+  })
+
   it('will not add an empty set', async () => {
     const fetchMock = fetchPayload({})
     vi.stubGlobal('fetch', fetchMock)
-    mount({ unlogged: [{ session_exercise_id: 91, name: 'Butterfly' }] })
+    mount({ unlogged: [{ session_exercise_id: 91, name: 'Butterfly', best: null }] })
     await userEvent.click(screen.getByRole('button', { name: /Sätze & Notizen/ }))
     const sheet = screen.getByRole('dialog')
     await userEvent.click(within(sheet).getByRole('button', { name: 'Butterfly, Satz nachtragen' }))

@@ -32,8 +32,8 @@ def _minimal():
             'mirrored': False,
             'is_unilateral': False, 'rest_seconds': 90, 'rest_setting': 150,
             'rest_setting_mine': True, 'increment': 2.5, 'floor': 20.0,
-            'notes': None, 'pain': False, 'picture': None,
-            'replaced_sets_done': 0, 'replaced_volume': 0.0,
+            'notes': None, 'pain': False, 'best': {'weight': 62.5, 'reps': 10}, 'picture': None,
+            'replaced_sets_done': 0, 'replaced_volume': 0.0, 'is_substitute': False,
             'sets': [{
                 'id': 100, 'weight': 60.0, 'reps': 8, 'completed': False,
                 'base_weight': None, 'key': None,

@@ -1766,6 +1766,23 @@ button.pic { cursor: zoom-in; }
 /* Beside a 72px tile a long German compound ("Negativbankdrücken") is wider
    than what is left at 320px: without these it pushed out of the card. */
 .live__title .live__name { margin-top: 0; min-inline-size: 0; overflow-wrap: anywhere; hyphens: auto; }
+/* Today's twinge and note under the name (G-073): said, not flagged -- no
+   hue, as a deload's chip; the note two lines at most, whole in the sheet. */
+.live__meta {
+  margin-top: var(--sp-2); display: flex; align-items: baseline; gap: var(--sp-2);
+  font-size: var(--t-sm); color: var(--dim); min-inline-size: 0;
+}
+.live__note {
+  min-inline-size: 0; overflow: hidden; overflow-wrap: anywhere;
+  display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; line-clamp: 2;
+}
+.chip--pain { flex: none; border-color: var(--edge-hi); color: var(--ink); background: transparent; }
+/* "Sicher?" beside the button that answers it (Q5, G-070). Empty, it takes
+   no room and stays in the tree, so it is heard the moment it asks. */
+.live__doubt {
+  margin: var(--sp-3) 0 0; font-size: var(--t-sm); font-weight: var(--w-semi); color: var(--live-ink);
+}
+.live__doubt:empty { margin: 0; }
 .pic-full {
   aspect-ratio: 1; margin-block: 0 var(--sp-2); overflow: hidden;
   border-radius: var(--r-control); background: var(--art-plate);
@@ -2223,6 +2240,10 @@ button.pic { cursor: zoom-in; }
 .queue__row.is-skipped .pic { opacity: .5; }
 .queue__row .row__main { min-inline-size: 0; text-align: start; }
 .queue__row .row__name { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+/* The card's twinge and note, on one line under the name (G-073). In the
+   dim ink, not the meta line's unlit: that is 4.3:1 on the dark chassis. */
+.queue__meta { display: block; color: var(--dim); }
+.queue__meta .chip { padding-block: 0.1em; }
 .queue__load {
   font-size: var(--t-meta); font-weight: var(--w-semi); color: var(--unlit);
   font-variant-numeric: tabular-nums; white-space: nowrap;
@@ -2571,34 +2592,53 @@ button.pic { cursor: zoom-in; }
    a bold tabular numeral -- so the sheet's sets read as the same objects the
    stepper edits, not as a settings form about them. */
 .sheet .sheet__row { min-inline-size: 0; }
+/* The number cells are narrow, with a narrow gutter inside, so a one-sided
+   exercise's "kg je Seite" fits beside them at 390px -- the add row's
+   "Anhängen" too (G-057). "102,5" still fits. */
+.sset, .sset__hint { --sset-ord: 1.5rem; }
 .sset {
   display: grid;
-  grid-template-columns: 1.1rem 5.2rem auto auto 5.2rem 1fr;
+  grid-template-columns: var(--sset-ord) 4.5rem auto auto 4.5rem 1fr;
   align-items: center; column-gap: var(--sp-2);
   padding-block: var(--sp-1);
 }
 .sset .label { text-align: start; }
-/* The set's write is kept on the phone (B6): the waiting chip's dashed edge. */
-.sset .label.is-waiting {
-  justify-self: start; padding-inline: 5px; border-radius: var(--r-inset);
-  outline: 1.5px dashed currentColor; outline-offset: 1px;
+/* Done or still open, in the card chips' own colours (G-059): the open
+   chip's raised cell around the set's number, the done chip's tint around
+   a tick. */
+.sset__ord {
+  display: grid; place-items: center;
+  block-size: 1.5rem; border-radius: var(--r-control);
+  background: var(--raised); color: var(--unlit);
+  font-variant-numeric: tabular-nums;
 }
+.sset .label.sset__ord { text-align: center; }
+.sset__ord.is-done { background: color-mix(in oklab, var(--done) 13%, var(--chassis)); color: var(--done-ink); }
+.sset__ord .icon { inline-size: 13px; block-size: 13px; stroke-width: 2.2; }
+/* The set's write is kept on the phone (B6): the waiting chip's dashed edge,
+   inside the cell as on the chip. */
+.sset__ord.is-waiting { outline: 1.5px dashed currentColor; outline-offset: -3px; }
 .sset .input--num {
-  inline-size: 100%; min-block-size: 44px; text-align: center;
+  inline-size: 100%; min-block-size: 44px; text-align: center; padding-inline: var(--sp-1);
   font-variant-numeric: tabular-nums; font-weight: var(--w-bold); font-size: var(--t-name);
   background: var(--raised); border: 0; box-shadow: none; border-radius: var(--r-control);
   color: var(--ink);
 }
 .sset__unit { font-size: var(--t-meta); color: var(--unlit); }
+/* "kg" over "je Seite": on one line the row ran past a phone's width. */
+.sset__unit--side { font-size: var(--t-micro); line-height: 1.15; text-align: center; white-space: nowrap; }
 .sset__acts { display: flex; justify-content: flex-end; align-items: center; gap: var(--sp-1); }
-/* Why a row's button is off. Empty, it takes no room; it stays in the tree
-   so a screen reader hears the reason the moment there is one. Indented to
-   start under the numbers, past the ordinal column. */
+/* Why a row's button is off, the "Sicher?" with its "Ja", or that the row
+   saved itself. Empty, it takes no room; it stays in the tree so a screen
+   reader hears it the moment there is one. Indented to start under the
+   numbers, past the ordinal column. */
 .sset__hint {
-  margin: 0 0 var(--sp-1); padding-inline-start: calc(1.1rem + var(--sp-2));
+  display: flex; flex-wrap: wrap; align-items: center; gap: var(--sp-1) var(--sp-2);
+  margin: 0 0 var(--sp-1); padding-inline-start: calc(var(--sset-ord) + var(--sp-2));
   font-size: var(--t-meta); font-weight: var(--w-semi); color: var(--live-ink);
 }
 .sset__hint:empty { margin: 0; }
+.sset__hint--ok { color: var(--done-ink); }
 .sset__acts .icon-btn { inline-size: 40px; block-size: 40px; }
 .sheet .sheet__row .load__unit,
 .sheet .sheet__row .load__x,
@@ -2618,31 +2658,8 @@ button.pic { cursor: zoom-in; }
   font-size: var(--t-sm); font-weight: var(--w-semi); color: var(--dim);
 }
 .sheet__body { padding: 0 var(--sp-4) calc(var(--sp-4) + env(safe-area-inset-bottom, 0px)); }
-/* a sheet's actions are full-width text rows, not a grid of buttons */
-.sheet__act {
-  inline-size: 100%; min-block-size: 52px;
-  display: flex; align-items: center; gap: var(--sp-3);
-  font-size: var(--t-body); font-weight: var(--w-semi); color: var(--ink);
-  text-align: start;
-}
-/* full-bleed rows need a full-bleed press: the negative inline margin puts the
-   highlight under the sheet's own padding, so a tap lights the row, not a
-   floating rectangle inside it */
-.sheet__act {
-  inline-size: calc(100% + var(--sp-4) * 2);      /* 100% is the padded content box */
-  margin-inline: calc(var(--sp-4) * -1); padding-inline: var(--sp-4);
-  transition: background var(--dur-1) var(--ease);
-}
-.sheet__act:active { background: var(--raised); }
 .sheet__pick:active { background: var(--raised); }
-.sheet__act + .sheet__act, .sheet__group + .sheet__group { border-top: 1px solid var(--edge); }
-.sheet__act svg { flex: none; inline-size: 18px; block-size: 18px; color: var(--unlit); }
-/* Destructive is not NOW. --live-ink is reserved for the one thing happening
-   right now (4.2: "only ever one thing at a time on screen"), and spending it
-   on a delete row put two oranges on screen meaning different things. The word
-   is already explicit ("Übung entfernen") and the action is confirmed; what it
-   needs is separation from the rows above, not a hue. */
-.sheet__act--danger { color: var(--ink); box-shadow: inset 0 1px 0 var(--edge-hi); }
+.sheet__group + .sheet__group { border-top: 1px solid var(--edge); }
 .sheet__note { font-size: var(--t-meta); color: var(--unlit); line-height: 1.5; padding-block: var(--sp-2); }
 .sheet__group { padding-block: var(--sp-2); }
 
@@ -2667,7 +2684,9 @@ button.pic { cursor: zoom-in; }
 /* Menu rows in the app's own .row grammar: raised icon tile, strong name,
    quiet meta line under it -- the anatomy every list on Heute and Verlauf
    uses, so the menus stop reading as a settings page from another app.
-   Full-bleed press for the same reason .sheet__act is. */
+   Full-bleed rows need a full-bleed press: the negative inline margin puts
+   the highlight under the sheet's own padding, so a tap lights the row, not
+   a floating rectangle inside it. */
 .sheet-row {
   display: flex; align-items: center; gap: var(--sp-3);
   inline-size: calc(100% + var(--sp-4) * 2);
@@ -2689,8 +2708,11 @@ button.pic { cursor: zoom-in; }
 .sheet-row__main { flex: 1; min-inline-size: 0; }
 .sheet-row__name { display: block; font-size: var(--t-body); font-weight: var(--w-semi); color: var(--ink); }
 .sheet-row__meta { display: block; font-size: var(--t-meta); color: var(--dim); margin-block-start: 1px; }
-/* Destructive rings its tile instead of filling it -- separation, not a hue
-   (same reasoning as .sheet__act--danger). */
+/* Destructive rings its tile instead of filling it -- separation, not a hue.
+   --live-ink is reserved for the one thing happening right now (4.2: "only
+   ever one thing at a time on screen"), and spending it on a delete row put
+   two oranges on screen meaning different things. The word is explicit
+   ("Übung entfernen") and the action has its undo. */
 .sheet-row--danger .sheet-row__lead { background: transparent; box-shadow: inset 0 0 0 1px var(--edge-hi); }
 /* As a <summary>, the row keeps its grammar and drops the marker. */
 summary.sheet-row { cursor: pointer; list-style: none; }

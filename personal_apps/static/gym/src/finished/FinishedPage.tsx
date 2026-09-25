@@ -1,4 +1,4 @@
-import { useState, type FormEvent } from 'react'
+import { useId, useState, type FormEvent, type ReactNode } from 'react'
 import { CsrfField } from '../csrf'
 import type {
   FinishedExercise, FinishedPayload, RecordKind, SessionRecord,
@@ -7,9 +7,12 @@ import { postForm, MutationFailed } from '../api'
 import { dayMonth, instant, kg1, localParts, shortDate, volume as de } from '../format'
 import {
   BODYWEIGHT_MAX_KG, BODYWEIGHT_MIN_KG, MAX_NAME_CHARS, MAX_NOTE_CHARS, MAX_REPS, MAX_WEIGHT_KG,
+  parseSetInput, unlikely,
 } from '../setInput'
 import { UndoToast, useUndo } from '../undo'
 import { useSheets } from '../session/stores'
+import type { LiveBest } from '../session/types'
+import { leaveBySubmit, leavePage, useSheetHistory } from '../session/useSheetHistory'
 import { Sheet } from '../session/components/Sheet'
 import { Icon } from '../components/Icon'
 
@@ -96,6 +99,8 @@ function RecordRow({ record }: { record: SessionRecord }) {
 }
 
 export function FinishedPage({ payload: initial }: { payload: FinishedPayload }) {
+  // Back closes an open sheet, not the debrief (G-066).
+  useSheetHistory()
   const openSheet = useSheets((s) => s.open)
   // The server's answer to every save IS the next payload (_mutation_response
   // returns FinishedPayload for a finished session), so a correction re-renders
@@ -103,6 +108,9 @@ export function FinishedPage({ payload: initial }: { payload: FinishedPayload })
   // the sheet you saved from stays open.
   const [payload, setPayload] = useState(initial)
   const [saveError, setSaveError] = useState<string | null>(null)
+  // What "Routine aktualisieren" would change; null: nothing, so no offer.
+  const routineDiff = payload.session.template_id !== null && payload.total_sets > 0
+    ? templateDiff(payload) : null
   const { session } = payload
   const offerUndo = useUndo((s) => s.offer)
   // Sets hidden while their delete waits out the undo window.
@@ -383,16 +391,9 @@ export function FinishedPage({ payload: initial }: { payload: FinishedPayload })
           change, and disappears entirely when it would change nothing. */}
       {payload.just_finished && payload.total_sets > 0 && (
         session.template_id !== null ? (
-          templateDiff(payload) !== null && (
+          routineDiff !== null && (
             <section className="prompt">
-              Routine <b>{session.template_name}</b> mit dieser Übungsliste und Reihenfolge aktualisieren?
-              <p className="prompt__diff">{templateDiff(payload)}</p>
-              <form method="post" action={`/gym/session/${session.id}/update_template`}>
-                <CsrfField />
-                <button type="submit" className="btn btn--ghost btn--block">
-                  Routine aktualisieren
-                </button>
-              </form>
+              <RoutineUpdate payload={payload} diff={routineDiff} />
             </section>
           )
         ) : (
@@ -446,6 +447,14 @@ export function FinishedPage({ payload: initial }: { payload: FinishedPayload })
             {session.is_deload ? 'Deload-Markierung entfernen' : 'Als Deload markieren'}
           </button>
         </form>
+        {/* The offer above shows only on arrival; a workout opened again from
+            Verlauf keeps it here (G-077, Q6). */}
+        {!payload.just_finished && routineDiff !== null && (
+          <button type="button" className="quiet-acts__btn"
+            onClick={() => openSheet('sheet-routine')}>
+            {`Routine „${session.template_name}“ aktualisieren …`}
+          </button>
+        )}
         {/* Delayed-commit undo instead of "unwiderruflich" + confirm(): five
             seconds to take it back, then the POST fires and the page moves on
             to Verlauf -- also when the window was closed by the app going to
@@ -458,7 +467,7 @@ export function FinishedPage({ payload: initial }: { payload: FinishedPayload })
             commit: (keepalive) => {
               postForm<{ deleted: boolean }>(
                 `/gym/session/${session.id}/delete`, {}, { keepalive })
-                .then(() => { window.location.replace('/gym/verlauf') })
+                .then(() => { leavePage(() => { window.location.replace('/gym/verlauf') }) })
                 .catch((error) => setSaveError(error instanceof MutationFailed
                   ? error.germanMessage
                   : 'Löschen fehlgeschlagen.'))
@@ -468,6 +477,14 @@ export function FinishedPage({ payload: initial }: { payload: FinishedPayload })
           Workout löschen
         </button>
       </div>
+
+      {routineDiff !== null && (
+        <Sheet id="sheet-routine" title="Routine aktualisieren" closeLabel="Abbrechen">
+          <div className="sheet__group">
+            <RoutineUpdate payload={payload} diff={routineDiff} />
+          </div>
+        </Sheet>
+      )}
 
       {/* Bodyweight and the session note: editable "at any point during or
           after the workout" per spec, but this screen -- the ONLY one a
@@ -520,34 +537,39 @@ export function FinishedPage({ payload: initial }: { payload: FinishedPayload })
             {entry.set_rows.filter((s) => !hiddenSetIds.includes(s.id)).map((s, i) => (
               // .sset, the live sheet's set grid: with a delete beside the save
               // the old flex row outgrew a phone and pushed the sheet sideways.
-              <form method="post" action={`/gym/set/${s.id}/update`} className="sset"
-                key={s.id} onSubmit={saves(`/gym/set/${s.id}/update`)}>
-                <CsrfField />
-                <span className="label">{i + 1}</span>
-                {/* required + min: the browser refuses an empty or zero-rep
-                    row before the submit handler ever runs. */}
-                <input type="number" name="weight" step="0.5" min="0" max={MAX_WEIGHT_KG} required
-                  className="input input--num" defaultValue={s.weight}
-                  aria-label={`${entry.name}, Satz ${i + 1}, Gewicht in kg`} />
-                <span className="sset__unit">kg</span><span className="sset__unit">×</span>
-                <input type="number" name="reps" min="1" max={MAX_REPS} required
-                  className="input input--num" defaultValue={s.reps}
-                  aria-label={`${entry.name}, Satz ${i + 1}, Wiederholungen`} />
-                <span className="sset__acts">
-                  <button type="submit" className="icon-btn"
-                    aria-label={`Satz ${i + 1} speichern`}>
-                    <Icon name="save" />
-                  </button>
-                  <button type="button" className="icon-btn"
-                    aria-label={`${entry.name}, Satz ${i + 1} löschen`}
-                    onClick={() => deleteSet(s.id, `${entry.name}, Satz ${i + 1}`)}>✕</button>
-                </span>
-              </form>
+              <Sure key={s.id} was={s} best={entry.best} yes="Ja, speichern"
+                onSubmit={saves(`/gym/set/${s.id}/update`)}>
+                {(formId, ask) => (
+                  <form method="post" action={`/gym/set/${s.id}/update`} className="sset"
+                    id={formId} {...ask}>
+                    <CsrfField />
+                    <span className="label">{i + 1}</span>
+                    {/* required + min: the browser refuses an empty or zero-rep
+                        row before the submit handler ever runs. */}
+                    <input type="number" name="weight" step="0.5" min="0" max={MAX_WEIGHT_KG}
+                      required className="input input--num" defaultValue={s.weight}
+                      aria-label={`${entry.name}, Satz ${i + 1}, Gewicht in kg`} />
+                    <span className="sset__unit">kg</span><span className="sset__unit">×</span>
+                    <input type="number" name="reps" min="1" max={MAX_REPS} required
+                      className="input input--num" defaultValue={s.reps}
+                      aria-label={`${entry.name}, Satz ${i + 1}, Wiederholungen`} />
+                    <span className="sset__acts">
+                      <button type="submit" className="icon-btn"
+                        aria-label={`Satz ${i + 1} speichern`}>
+                        <Icon name="save" />
+                      </button>
+                      <button type="button" className="icon-btn"
+                        aria-label={`${entry.name}, Satz ${i + 1} löschen`}
+                        onClick={() => deleteSet(s.id, `${entry.name}, Satz ${i + 1}`)}>✕</button>
+                    </span>
+                  </form>
+                )}
+              </Sure>
             ))}
             {entry.session_exercise_id !== null && (
               <AddSetForm key={`add-${entry.session_exercise_id}-${entry.set_rows.length}`}
                 sessionExerciseId={entry.session_exercise_id} name={entry.name}
-                seed={entry.set_rows[entry.set_rows.length - 1] ?? null}
+                seed={entry.set_rows[entry.set_rows.length - 1] ?? null} best={entry.best}
                 onSubmit={saves(`/gym/session-exercise/${entry.session_exercise_id}/sets/add`)} />
             )}
             {/* The opposite lifetime to the sets above: a twinge and a note
@@ -583,6 +605,7 @@ export function FinishedPage({ payload: initial }: { payload: FinishedPayload })
             <p className="sheet__note">Nichts erfasst.</p>
             <AddSetForm key={`add-${entry.session_exercise_id}-0`}
               sessionExerciseId={entry.session_exercise_id} name={entry.name} seed={null}
+              best={entry.best}
               onSubmit={saves(`/gym/session-exercise/${entry.session_exercise_id}/sets/add`)} />
           </div>
         ))}
@@ -596,31 +619,92 @@ export function FinishedPage({ payload: initial }: { payload: FinishedPayload })
  *  the set count, so a successful add remounts it -- empty of what was just
  *  typed and seeded from the new last set. The server files it as logged
  *  without starting a rest: the workout is over. */
-function AddSetForm({ sessionExerciseId, name, seed, onSubmit }: {
+function AddSetForm({ sessionExerciseId, name, seed, best, onSubmit }: {
   sessionExerciseId: number
   name: string
   seed: { weight: number; reps: number } | null
+  best: LiveBest | null
   onSubmit(event: FormEvent<HTMLFormElement>): void
 }) {
   return (
-    <form method="post" action={`/gym/session-exercise/${sessionExerciseId}/sets/add`}
-      className="sset" onSubmit={onSubmit}>
-      <CsrfField />
-      <span className="label" aria-hidden="true">+</span>
-      <input type="number" name="weight" step="0.5" min="0" max={MAX_WEIGHT_KG} required
-        className="input input--num" defaultValue={seed?.weight ?? ''}
-        aria-label={`${name}, neuer Satz, Gewicht in kg`} />
-      <span className="sset__unit">kg</span><span className="sset__unit">×</span>
-      <input type="number" name="reps" min="1" max={MAX_REPS} required
-        className="input input--num" defaultValue={seed?.reps ?? ''}
-        aria-label={`${name}, neuer Satz, Wiederholungen`} />
-      <span className="sset__acts">
-        {/* Short visible text so the action track never wraps, like the live
-            sheet's "Anhängen"; the accessible name carries the full phrase. */}
-        <button type="submit" className="btn btn--ghost btn--sm"
-          aria-label={`${name}, Satz nachtragen`}>Nachtragen</button>
-      </span>
-    </form>
+    <Sure was={seed} best={best} yes="Ja, nachtragen" onSubmit={onSubmit}>
+      {(formId, ask) => (
+        <form method="post" action={`/gym/session-exercise/${sessionExerciseId}/sets/add`}
+          className="sset" id={formId} {...ask}>
+          <CsrfField />
+          <span className="label" aria-hidden="true">+</span>
+          <input type="number" name="weight" step="0.5" min="0" max={MAX_WEIGHT_KG} required
+            className="input input--num" defaultValue={seed?.weight ?? ''}
+            aria-label={`${name}, neuer Satz, Gewicht in kg`} />
+          <span className="sset__unit">kg</span><span className="sset__unit">×</span>
+          <input type="number" name="reps" min="1" max={MAX_REPS} required
+            className="input input--num" defaultValue={seed?.reps ?? ''}
+            aria-label={`${name}, neuer Satz, Wiederholungen`} />
+          <span className="sset__acts">
+            {/* Short visible text so the action track never wraps, like the
+                live sheet's "Anhängen"; the accessible name carries the full
+                phrase. */}
+            <button type="submit" className="btn btn--ghost btn--sm"
+              aria-label={`${name}, Satz nachtragen`}>Nachtragen</button>
+          </span>
+        </form>
+      )}
+    </Sure>
+  )
+}
+
+/**
+ * "Sicher?" before a typed set is kept (Q5), as on the live screen:
+ * "Nachtragen" and a correction count the moment they land, and a
+ * fat-fingered 600 kg went straight into the records (B7 review). Only
+ * numbers the lifter changed are asked about; typing again takes the question
+ * away, and its "Ja" -- or the same numbers sent again -- sends the form as it
+ * stands.
+ */
+function Sure({ was, best, yes, onSubmit, children }: {
+  /** The numbers the row started from, which are not asked about. */
+  was: { weight: number; reps: number } | null
+  best: LiveBest | null
+  yes: string
+  onSubmit(event: FormEvent<HTMLFormElement>): void
+  children(formId: string, ask: {
+    onSubmit(event: FormEvent<HTMLFormElement>): void
+    onInput(): void
+  }): ReactNode
+}) {
+  const formId = useId()
+  const [doubt, setDoubt] = useState<{ typed: string; text: string } | null>(null)
+  const ask = {
+    onSubmit: (event: FormEvent<HTMLFormElement>) => {
+      const fields = new FormData(event.currentTarget)
+      const parsed = parseSetInput(
+        String(fields.get('weight') ?? ''), String(fields.get('reps') ?? ''))
+      const changed = parsed !== null
+        && (was === null || parsed.weight !== was.weight || parsed.reps !== was.reps)
+      const text = changed ? unlikely(parsed, best) : null
+      const typed = parsed === null ? '' : `${parsed.weight}|${parsed.reps}`
+      if (text !== null && doubt?.typed !== typed) {
+        event.preventDefault()
+        setDoubt({ typed, text })
+        return
+      }
+      setDoubt(null)
+      onSubmit(event)
+    },
+    onInput: () => { setDoubt(null) },
+  }
+  return (
+    <>
+      {children(formId, ask)}
+      <p className="sset__hint" aria-live="polite">
+        {doubt?.text}
+        {doubt !== null && (
+          <button type="submit" form={formId} className="btn btn--ghost btn--sm sset__sure">
+            {yes}
+          </button>
+        )}
+      </p>
+    </>
   )
 }
 
@@ -636,13 +720,82 @@ function templateDiff(payload: FinishedPayload): string | null {
   const next = payload.template_next_exercises ?? []
   const added = next.filter((name) => !current.includes(name))
   const removed = current.filter((name) => !next.includes(name))
-  const reordered = added.length === 0 && removed.length === 0 &&
-    current.join(' ') !== next.join(' ')
+  // The order of the exercises that stay, said even beside a list change:
+  // "Nur die Reihenfolge ändert sich" once stood where a removal and a
+  // replacement had changed the list too (G-077).
+  const moves = orderMoves(
+    current.filter((name) => next.includes(name)),
+    next.filter((name) => current.includes(name)))
 
-  if (added.length === 0 && removed.length === 0 && !reordered) return null
   const parts: string[] = []
   if (added.length > 0) parts.push(`Neu: ${added.join(', ')}.`)
   if (removed.length > 0) parts.push(`Entfällt: ${removed.join(', ')}.`)
-  if (reordered) parts.push('Nur die Reihenfolge ändert sich.')
-  return parts.join(' ')
+  if (moves !== null) {
+    parts.push(moves.length <= 2
+      ? `Reihenfolge: ${moves.join(', ')}.`
+      : `Neue Reihenfolge: ${next.join(', ')}.`)
+  }
+  return parts.length === 0 ? null : parts.join(' ')
+}
+
+/**
+ * How the exercises in `before` moved to stand as in `after` (the same names),
+ * one phrase per exercise that moved: "Hammercurls jetzt vor Bizepscurls".
+ * Null when none did.
+ *
+ * What stayed is the longest run still in its old order, so one exercise
+ * pulled forward names that one, not every exercise it passed. Each moved
+ * one is placed against a neighbour that stayed: no such run holds a gap it
+ * could have stayed in, so it is before the next one now and was after it,
+ * or the other way round. Between equals, the run keeps the earlier
+ * exercises, so a pull forward reads as one.
+ */
+function orderMoves(before: string[], after: string[]): string[] | null {
+  const was = after.map((name) => before.indexOf(name))
+  const length = was.map(() => 1)
+  const previous = was.map(() => -1)
+  let end = -1
+  was.forEach((index, i) => {
+    for (let j = 0; j < i; j += 1) {
+      if (was[j]! >= index) continue
+      const longer = length[j]! + 1 > length[i]!
+      const earlier = length[j]! + 1 === length[i]! && was[j]! < was[previous[i]!]!
+      if (longer || earlier) { length[i] = length[j]! + 1; previous[i] = j }
+    }
+    if (end === -1 || length[i]! > length[end]!
+      || (length[i] === length[end] && index < was[end]!)) end = i
+  })
+  const stayed = new Set<number>()
+  for (let i = end; i !== -1; i = previous[i]!) stayed.add(i)
+  if (stayed.size === after.length) return null
+
+  return after.flatMap((name, i) => {
+    if (stayed.has(i)) return []
+    const behind = after.findIndex((_, k) => k > i && stayed.has(k))
+    if (behind !== -1 && was[behind]! < was[i]!) return [`${name} jetzt vor ${after[behind]}`]
+    let ahead = i - 1
+    while (ahead >= 0 && !stayed.has(ahead)) ahead -= 1
+    if (ahead >= 0) return [`${name} jetzt nach ${after[ahead]}`]
+    // Only with a name twice in the list, which no run can place.
+    return behind === -1 ? [] : [`${name} jetzt vor ${after[behind]}`]
+  })
+}
+
+/** "Routine aktualisieren", with what it would change: offered on arrival
+ *  and kept in the workout's menu (G-077). */
+function RoutineUpdate({ payload, diff }: { payload: FinishedPayload; diff: string }) {
+  const { session } = payload
+  return (
+    <>
+      Routine <b>{session.template_name}</b> mit dieser Übungsliste und Reihenfolge aktualisieren?
+      <p className="prompt__diff">{diff}</p>
+      <form method="post" action={`/gym/session/${session.id}/update_template`}
+        onSubmit={leaveBySubmit}>
+        <CsrfField />
+        <button type="submit" className="btn btn--ghost btn--block">
+          Routine aktualisieren
+        </button>
+      </form>
+    </>
+  )
 }

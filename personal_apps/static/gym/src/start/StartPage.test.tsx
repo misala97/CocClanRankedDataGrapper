@@ -1,4 +1,4 @@
-import { act, render, screen, within } from '@testing-library/react'
+import { act, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { StartPage } from './StartPage'
@@ -53,6 +53,38 @@ const mount = (over: Partial<HeutePayload> = {}) =>
  * grep for is asserted here.
  */
 describe('StartPage', () => {
+  it('closes the sheet on back, not the page (G-066)', async () => {
+    history.replaceState(null, '')
+    mount()
+    await userEvent.click(screen.getByRole('button', { name: /Freies Workout starten/ }))
+    expect(useSheets.getState().openId).toBe('sheet-free')
+    expect((history.state as { gymSheet?: boolean } | null)?.gymSheet).toBe(true)
+    const popped = new Promise<void>((resolve) => {
+      window.addEventListener('popstate', () => resolve(), { once: true })
+    })
+    history.back()
+    await act(() => popped)
+    expect(useSheets.getState().openId).toBeNull()
+  })
+
+  it("starts a free workout without leaving the sheet's entry behind (B7 re-review)", async () => {
+    // Back from the workout landed on that entry: one dead step.
+    const user = userEvent.setup()
+    history.replaceState({ page: 'heute' }, '')
+    const sent: unknown[] = []
+    const submit = vi.spyOn(HTMLFormElement.prototype, 'submit')
+      .mockImplementation(function record(this: HTMLFormElement) {
+        sent.push([this.getAttribute('action'), history.state])
+      })
+    mount()
+    await user.click(screen.getByRole('button', { name: /Freies Workout starten/ }))
+    const sheet = within(document.querySelector('#sheet-free') as HTMLElement)
+    await user.click(sheet.getByRole('button', { name: 'Workout starten' }))
+    await waitFor(() => expect(sent).toHaveLength(1))
+    expect(sent[0]).toEqual(['/gym/start', { page: 'heute' }])
+    submit.mockRestore()
+  })
+
   it('names the lead routine and offers to start it', () => {
     mount()
     expect(screen.getByRole('heading', { name: 'Am längsten her' })).toBeInTheDocument()
