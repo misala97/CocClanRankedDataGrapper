@@ -56,7 +56,9 @@ const json = (body: unknown, status = 200) => Promise.resolve(new Response(JSON.
   status, headers: { 'Content-Type': 'application/json' },
 }))
 const offline = () => Promise.reject(new TypeError('Failed to fetch'))
-const kept = () => Object.keys(localStorage).filter((key) => key.startsWith(KEPT))
+// The writes, not the sets named so far, which the shelf keeps beside them.
+const kept = () => Object.keys(localStorage)
+  .filter((key) => key.startsWith(KEPT) && key !== `${KEPT}names`)
   .map((key) => JSON.parse(localStorage.getItem(key)!) as { kind: string; args: unknown[] })
 const headersOf = (init: RequestInit) => init.headers as Record<string, string>
 
@@ -100,6 +102,26 @@ describe('SessionIsland', () => {
     await user.click(within(banner).getByRole('button', { name: 'Ausblenden' }))
     expect(screen.queryByRole('alert')).toBeNull()
     expect(kept()).toMatchObject([{ kind: 'toggleSet', args: [101, true, 60, 8] }])
+  })
+
+  it('puts what the server refused back on the phone before it reloads (B6 third review)', async () => {
+    // Refused and off the phone, a set waited for "Erneut versuchen" -- a
+    // tap nothing offered once only a fresh page could send.
+    const user = userEvent.setup()
+    const reload = vi.fn()
+    vi.stubGlobal('location', { ...window.location, reload })
+    network(() => json({ error: 'CSRF' }, 403))
+    render(<SessionIsland initial={payload} />)
+    await user.click(screen.getByText('Satz geschafft'))
+    await screen.findByText('Wartet auf Neuladen')
+    const refused = vi.fn()
+    act(() => { useSaveState.getState().fail('add-k1', 'Serverfehler', refused, 'manual') })
+
+    const status = document.querySelector('.outbox') as HTMLElement
+    await user.click(within(status).getByRole('button', { name: 'Neu laden' }))
+    expect(refused).toHaveBeenCalledOnce()
+    expect(reload).toHaveBeenCalled()
+    expect(refused.mock.invocationCallOrder[0]).toBeLessThan(reload.mock.invocationCallOrder[0]!)
   })
 
   it('starts the rest on the tap, not on the answer (G-072)', async () => {

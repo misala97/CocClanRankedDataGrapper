@@ -78,6 +78,13 @@ export interface Shelf {
   /** When the oldest write kept for the workout by any tab was made;
    *  undefined when the phone cannot say. */
   oldest(): number | null | undefined
+  /** A set the server named: `temp` is the id the screen drew it with. For
+   *  every tab: a write about the set made in one tab is sent from another,
+   *  and the name lived only in the tab that saw it (B6 third review). */
+  name(temp: number, real: number): void
+  /** What a drawn set id became, as any tab of the workout saw it named;
+   *  null while none has. undefined when the phone cannot say. */
+  named(temp: number): number | null | undefined
 }
 
 export interface OutboxHooks {
@@ -107,6 +114,11 @@ export interface OutboxHooks {
   /** Runs one send with no other tab of the workout sending (exclusively). */
   exclusive(run: () => Promise<void>): Promise<void>
   now(): number
+  /** Milliseconds on a clock that never steps back -- performance.now when
+   *  not given: how long the server has been failing a write. By the wall
+   *  clock, one stepped back by minutes held every later write that long
+   *  (B6 third review). */
+  elapsed?(): number
   newId(): string
 }
 
@@ -276,7 +288,7 @@ export class Outbox {
    *  Another tab's kept writes count: finishing here went ahead without the
    *  sets a tab put away had not sent yet (B6 re-review). */
   flush(): Promise<boolean> {
-    this.gather(this.busy ? 1 : 0)
+    this.gather(this.out ? 1 : 0)
     if (this.queue.length === 0 && !this.busy) return Promise.resolve(true)
     if (this.state === 'blocked') return Promise.resolve(false)
     return new Promise((resolve) => {
@@ -287,10 +299,14 @@ export class Outbox {
 
   /** The workout is being thrown away: its writes are moot. Resolves once no
    *  write is out, so the one in flight cannot land after the discard. A
-   *  turn only waited for is not one: it finds the queue empty and sends
-   *  nothing, and another tab can hold the turn for as long as it likes. Nor
-   *  is a question to the server: it changes nothing there. */
+   *  turn only waited for is not one, and another tab can hold the turn for
+   *  as long as it likes; nor is a question to the server: it changes
+   *  nothing there. Stopped: whatever comes back meanwhile -- that turn,
+   *  that answer, the one waited out -- sends nothing more from here. It
+   *  took in the writes another tab keeps, and one that landed first had
+   *  the discard refused (B6 third review). Every caller leaves the page. */
   async clear(): Promise<void> {
+    this.stopped = true
     if (this.timer !== null) clearTimeout(this.timer)
     this.timer = null
     for (const entry of this.queue) this.unkeep(entry)
@@ -336,6 +352,8 @@ export class Outbox {
       // As the phone has it: another tab may have named its set.
       if (now !== undefined) head.args = now.args
     }
+    // Made in another tab before the set was named, and named since by any.
+    head.args = this.resolve(spec, head.args)
     this.hooks.begin()
     this.out = true
     let fresh: SessionDetailPayload
@@ -411,7 +429,7 @@ export class Outbox {
         // as it was: made when it was made, with the writes about its set.
         // Queued anew, a set logged at 10:00 was stamped at the tap, and a
         // correction to it was gone (B6 re-review).
-        const now = this.hooks.now()
+        const now = this.hooks.elapsed?.() ?? performance.now()
         const again = this.strikes.id === head.id
         this.strikes = again
           ? { ...this.strikes, count: this.strikes.count + 1 }
@@ -449,10 +467,15 @@ export class Outbox {
     this.afterAnswer()
   }
 
-  /** Writes back in line where they were made, and on the phone again. */
+  /** Writes back in line where they were made, and on the phone again. The
+   *  write out keeps its turn: only a request in flight, not a turn waited
+   *  for -- ahead of an older write, the retry went out after it (B6 third
+   *  review). Tried again on the lifter's tap, a write gets its three tries
+   *  again: its old ones refused it at its next server error. */
   private requeue(entries: Entry[]): void {
+    this.strikes = { id: '', count: 0, since: 0 }
     for (const entry of entries) {
-      this.insert(entry, this.busy ? 1 : 0)
+      this.insert(entry, this.out ? 1 : 0)
       if (this.hooks.specs[entry.kind]!.durable) this.keep(entry)
     }
     this.publish()
@@ -471,7 +494,9 @@ export class Outbox {
     const known = new Set(this.queue.map((entry) => entry.id))
     let took = false
     for (const entry of kept) {
-      if (known.has(entry.id) || this.hooks.specs[entry.kind] === undefined) continue
+      const spec = this.hooks.specs[entry.kind]
+      if (known.has(entry.id) || spec === undefined) continue
+      entry.args = this.resolve(spec, entry.args)
       this.insert(entry, from)
       this.onShelf.add(entry.id)
       took = true
@@ -586,6 +611,7 @@ export class Outbox {
       return
     }
     this.resolved.set(temp, made.id)
+    this.hooks.shelf.name(temp, made.id)
     for (const entry of this.queue) {
       const at = this.hooks.specs[entry.kind]!.setArg
       if (at === undefined || entry.args[at] !== temp) continue
@@ -613,11 +639,15 @@ export class Outbox {
     return dropped
   }
 
-  /** A set id captured by the screen before its set was named. */
+  /** A set id captured by the screen before its set was named: the real one,
+   *  once this tab or any other has seen it named. Sent drawn, it met no
+   *  set -- a 404, dropped as moot, and the un-log was lost (B6 third
+   *  review). */
   private resolve(spec: WriteSpec, args: unknown[]): unknown[] {
     if (spec.setArg === undefined) return args
     const id = args[spec.setArg]
-    const real = typeof id === 'number' ? this.resolved.get(id) : undefined
+    if (typeof id !== 'number' || id >= 0) return args
+    const real = this.resolved.get(id) ?? this.hooks.shelf.named(id) ?? undefined
     return real === undefined ? args : args.map((arg, i) => (i === spec.setArg ? real : arg))
   }
 
@@ -699,12 +729,27 @@ export function exclusively(name: string): OutboxHooks['exclusive'] {
 // ---------------------------------------------------------------------------
 
 const PREFIX = 'gym-outbox:'
+/** The sets named so far, `{drawn: real}`, under the workout's own prefix:
+ *  swept with its writes. Never a write's id, which is a uuid. */
+const NAMES = 'names'
 
 /** One key per write -- `gym-outbox:v1:<session>:<id>` -- so two tabs never
  *  overwrite each other's list. localStorage can throw (a private window, a
  *  full disk): the screen then works as a screen with no memory. */
 export function localShelf(sessionId: number, storage: Storage = window.localStorage): Shelf {
   const mine = `${PREFIX}v${OUTBOX_VERSION}:${sessionId}:`
+  const namesKey = `${mine}${NAMES}`
+  // Storage that throws throws on; a value that cannot be read is named
+  // afresh.
+  const names = (): Record<string, unknown> => {
+    const raw = storage.getItem(namesKey)
+    try {
+      const parsed: unknown = JSON.parse(raw ?? '{}')
+      return typeof parsed === 'object' && parsed !== null ? parsed as Record<string, unknown> : {}
+    } catch {
+      return {}
+    }
+  }
   return {
     read() {
       const entries: Entry[] = []
@@ -726,6 +771,7 @@ export function localShelf(sessionId: number, storage: Storage = window.localSto
             storage.removeItem(key)
             continue
           }
+          if (key === namesKey) continue
           const entry = parseEntry(storage.getItem(key))
           if (entry === null) {
             stale += 1
@@ -784,6 +830,19 @@ export function localShelf(sessionId: number, storage: Storage = window.localSto
           if (entry !== null && (oldest === null || entry.at < oldest)) oldest = entry.at
         }
         return oldest
+      } catch {
+        return undefined
+      }
+    },
+    name(temp, real) {
+      try {
+        storage.setItem(namesKey, JSON.stringify({ ...names(), [temp]: real }))
+      } catch { /* no memory: this tab's own still holds */ }
+    },
+    named(temp) {
+      try {
+        const real = names()[String(temp)]
+        return typeof real === 'number' ? real : null
       } catch {
         return undefined
       }

@@ -140,16 +140,16 @@ describe('useSaveState', () => {
     expect(useSaveState.getState().errors.map((e) => e.key)).toEqual(['b'])
   })
 
-  it('lets a fresh page answer every failure when one needs it (B4 review)', () => {
-    // A stale token or a lapsed login fails every write alike: resending
-    // the others first only raced the reload.
-    const resend = vi.fn()
-    const reload = vi.fn()
-    useSaveState.getState().fail('a', 'Keine Antwort vom Server', resend)
-    useSaveState.getState().fail('b', 'Bitte neu anmelden', reload, 'reload')
+  it('puts every other failure back before a fresh page answers them (B6 third review)', () => {
+    // A stale token or a lapsed login fails every write alike, and the
+    // outbox sends nothing then: a retry only puts its write back on the
+    // phone for the fresh page. The reload alone lost a refused set that
+    // was already off it. (Before the outbox, resending raced the reload.)
+    const calls: string[] = []
+    useSaveState.getState().fail('a', 'Keine Antwort vom Server', () => calls.push('resend'), 'manual')
+    useSaveState.getState().fail('b', 'Bitte neu anmelden', () => calls.push('reload'), 'reload')
     useSaveState.getState().retryAll()
-    expect(reload).toHaveBeenCalledOnce()
-    expect(resend).not.toHaveBeenCalled()
+    expect(calls).toEqual(['resend', 'reload'])
   })
 
   it('resends only what resending can fix, and leaves the reload to the lifter (B4 review)', () => {

@@ -116,10 +116,11 @@ interface SaveStateStore {
    *  ones only a fresh page mends -- the connection coming back must not
    *  reload the page under the lifter (B4 review). */
   resendAll(): void
-  /** "Erneut versuchen", the lifter's tap: a fresh page when any failure
-   *  needs one -- it answers all of them, and resending the rest first only
-   *  raced it (B4 review) -- else every failure with a retry, 'manual' ones
-   *  included. */
+  /** "Erneut versuchen", the lifter's tap: every failure with a retry,
+   *  'manual' ones included -- and a fresh page last when any failure needs
+   *  one. The outbox sends nothing then, so the retries only put their
+   *  writes back on the phone for that page; before the outbox, resending
+   *  them raced the reload (B4 review). */
   retryAll(): void
   dismissErrors(): void
 }
@@ -167,8 +168,16 @@ export const useSaveState = create<SaveStateStore>((set, get) => ({
   retryAll: () => {
     const errors = get().errors
     const reload = errors.find((e) => e.remedy === 'reload' && e.retry !== null)
-    if (reload !== undefined) { reload.retry!(); return }
-    const resends = errors.flatMap((e) => (e.retry !== null ? [e.retry] : []))
+    const resends = errors.flatMap((e) => (e.retry !== null && e !== reload ? [e.retry] : []))
+    if (reload !== undefined) {
+      // The rest first, which only puts them back on the phone: while only
+      // a fresh page can send, the outbox sends nothing and keeps them for
+      // it. The reload alone lost a refused set that was already off the
+      // phone (B6 third review).
+      for (const resend of resends) resend()
+      reload.retry!()
+      return
+    }
     set((state) => ({ errors: state.errors.filter((e) => e.retry === null) }))
     for (const resend of resends) resend()
   },

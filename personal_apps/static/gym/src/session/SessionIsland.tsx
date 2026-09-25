@@ -300,7 +300,12 @@ function SessionIslandInner({ initial }: { initial: SessionDetailPayload }) {
     onFinish: () => { void leaveAfterWrites(`/gym/session/${sessionId}/finish`) },
     onDiscard: () => { void leaveAfterWrites(`/gym/session/${sessionId}/discard`, true) },
     onSendNow: () => { outbox.kick() },
-    onReload: () => { window.location.reload() },
+    // What the server refused goes back on the phone first, for the fresh
+    // page to send: the reload alone lost it (B6 third review).
+    onReload: () => {
+      useSaveState.getState().retryAll()
+      window.location.reload()
+    },
     onReorder: (order) => send('reorder', order),
     // Saved per field as it is left, so the sheet stays open: leaving the
     // bodyweight for the note must not close it under the lifter.

@@ -88,11 +88,15 @@ function specsFor(server: Server): Record<string, WriteSpec> {
  *  kept -- a private window, a full disk. */
 function memoryShelf(start: Entry[] = [], stale = 0, full = false) {
   const kept = new Map<string, Entry>()
+  const names = new Map<number, number>()
   const copy = (entry: Entry) => JSON.parse(JSON.stringify(entry)) as Entry
   for (const entry of start) kept.set(entry.id, copy(entry))
   return {
     kept,
+    names,
     shelf: {
+      name: (temp: number, real: number) => { if (!full) names.set(temp, real) },
+      named: (temp: number) => names.get(temp) ?? null,
       read: () => ({
         entries: [...kept.values()].map(copy).sort((a, b) => a.order - b.order),
         stale,
@@ -132,6 +136,8 @@ function harness(stored = memoryShelf(), tab: {
   server?: Server
   exclusive?: OutboxHooks['exclusive']
   now?: () => number
+  /** The clock that never steps back; `now` unless given. */
+  elapsed?: () => number
   /** Its writes' id prefix: two tabs never make the same id. */
   name?: string
 } = {}) {
@@ -146,6 +152,7 @@ function harness(stored = memoryShelf(), tab: {
   }
   let clock = FIRST_AT - 1000
   let ids = 0
+  const now = tab.now ?? (() => (clock += 1000))
   const hooks: OutboxHooks = {
     specs: specsFor(server),
     shelf: stored.shelf,
@@ -165,7 +172,8 @@ function harness(stored = memoryShelf(), tab: {
     // only has to show WHEN it is applied.
     relive: (p) => ({ ...p, live_index: 99 }),
     exclusive: tab.exclusive ?? ((run) => run()),
-    now: tab.now ?? (() => (clock += 1000)),
+    now,
+    elapsed: tab.elapsed ?? now,
     newId: () => `${tab.name ?? 'w'}${++ids}`,
   }
   const outbox = new Outbox(payload, hooks)
@@ -558,6 +566,74 @@ describe('Outbox', () => {
     out.open()
     await settle()
     expect(server.calls.slice(3).map((c) => c.kind)).toEqual(['note', 'add'])
+  })
+
+  it('gives up after a minute of server errors when the phone\'s clock steps back (B6 third review)', async () => {
+    // By the wall clock, ten minutes back held the writes behind it ten
+    // minutes longer.
+    let wall = 1000
+    let steady = 0
+    const { outbox, server, seen } = harness(undefined, { now: () => wall, elapsed: () => steady })
+    const broken = () => new MutationFailed('server')
+    server.outcomes = [broken(), broken(), broken()]
+    const refused = outbox.enqueue('tick', [101, true])
+    refused.catch(() => {})
+    await settle()
+    await vi.advanceTimersByTimeAsync(BACKOFF_MS[0]!)
+    wall -= 10 * 60_000
+    steady += SERVER_SPAN_MS
+    await vi.advanceTimersByTimeAsync(BACKOFF_MS[1]!)
+
+    await expect(refused).rejects.toMatchObject({ reason: 'server' })
+    expect(seen.failures).toMatchObject([{ key: 'set-101:done', remedy: 'manual' }])
+  })
+
+  it('gives a write tried again on the lifter\'s tap its three tries again (B6 third review)', async () => {
+    // Its old tries counted on: refused again at its next server error.
+    let now = 1000
+    const { outbox, server, seen } = harness(undefined, { now: () => now })
+    const broken = () => new MutationFailed('server')
+    server.outcomes = [broken(), broken(), broken()]
+    void outbox.enqueue('tick', [101, true]).catch(() => {})
+    await settle()
+    await vi.advanceTimersByTimeAsync(BACKOFF_MS[0]!)
+    now += SERVER_SPAN_MS
+    await vi.advanceTimersByTimeAsync(BACKOFF_MS[1]!)
+    expect(seen.failures).toHaveLength(1)
+
+    server.outcomes = [broken()]
+    seen.failures[0]!.retry!()
+    await settle()
+    await vi.advanceTimersByTimeAsync(Math.max(...BACKOFF_MS))
+    expect(seen.failures).toHaveLength(1)
+    expect(setOf(server.state, 101)?.completed).toBe(true)
+  })
+
+  it('puts a refused write back ahead of a later one only waiting for its turn (B6 third review)', async () => {
+    // Waiting for the lock is no write out: the retry went in behind the
+    // un-log tapped after it, and the set ended logged.
+    let now = 1000
+    const lock = sharedLock()
+    const { outbox, server, seen } = harness(undefined, { now: () => now, exclusive: lock })
+    const broken = () => new MutationFailed('server')
+    server.outcomes = [broken(), broken(), broken()]
+    void outbox.enqueue('tick', [101, true]).catch(() => {})
+    await settle()
+    await vi.advanceTimersByTimeAsync(BACKOFF_MS[0]!)
+    now += SERVER_SPAN_MS
+    await vi.advanceTimersByTimeAsync(BACKOFF_MS[1]!)
+    expect(seen.failures).toHaveLength(1)
+
+    let release!: () => void
+    void lock(() => new Promise<void>((resolve) => { release = resolve }))
+    now = 400_000
+    void outbox.enqueue('tick', [101, false])
+    await settle()
+    seen.failures[0]!.retry!()
+    release()
+    await settle()
+    expect(server.calls.slice(3).map((c) => c.args)).toEqual([[101, true], [101, false]])
+    expect(setOf(server.state, 101)?.completed).toBe(false)
   })
 
   it('keeps trying a write through a server error that passes', async () => {
@@ -1091,6 +1167,92 @@ describe('two tabs of one workout (B6 review)', () => {
     await settle()
     expect(server.calls).toEqual([])
   })
+
+  it('sends nothing more once the workout is thrown away, another tab\'s writes neither (B6 third review)', async () => {
+    // The answer it waited out pumped again and took in what another tab
+    // kept: a set that landed first had the discard refused.
+    const tab = harness()
+    const out = gate()
+    tab.server.outcomes = [out.closed]
+    void tab.outbox.enqueue('note', ['x']).catch(() => {})
+    await settle()
+    tab.kept.set('x', entry({ id: 'x', kind: 'tick', args: [101, true] }))
+    let cleared = false
+    void tab.outbox.clear().then(() => { cleared = true })
+    out.open()
+    await vi.advanceTimersByTimeAsync(200)
+    expect(cleared).toBe(true)
+    expect(tab.server.calls.map((c) => c.kind)).toEqual(['note'])
+    expect(tab.kept.has('x')).toBe(true)
+  })
+
+  it('sends another tab\'s older write ahead of one only waiting for its turn (B6 third review)', async () => {
+    // Waiting for the lock is no write out: filed behind the un-log tapped
+    // last, the older log went to the server after it.
+    const lock = sharedLock()
+    let release!: () => void
+    void lock(() => new Promise<void>((resolve) => { release = resolve }))
+    const tab = harness(memoryShelf(), { exclusive: lock, now: () => 5000 })
+    void tab.outbox.enqueue('tick', [101, false])
+    await settle()
+    tab.kept.set('x', entry({ id: 'x', kind: 'tick', args: [101, true], order: 1000, at: 1000 }))
+    const drained = tab.outbox.flush()
+    release()
+    await settle()
+    expect(await drained).toBe(true)
+    expect(tab.server.calls.map((c) => c.args)).toEqual([[101, true], [101, false]])
+    expect(setOf(tab.server.state, 101)?.completed).toBe(false)
+  })
+
+  it('sends a write another tab made about a set by the name it learnt here (B6 third review)', async () => {
+    // Made there while the set was drawn, after it landed from here: sent
+    // with the drawn id, it met no set -- a 404, dropped as moot -- and the
+    // set stayed logged.
+    const stored = memoryShelf()
+    const server = new Server()
+    const here = harness(stored, { server, name: 'h' })
+    here.outbox.start()
+    void here.outbox.enqueue('add', [10, 'k1', -5])
+    await settle()
+    stored.kept.set('t1', entry({ id: 't1', kind: 'tick', args: [-5, false], order: 9_000_000 }))
+    here.outbox.kick()
+    await settle()
+    expect(server.calls.at(-1)).toMatchObject({ kind: 'tick', args: [500, false] })
+    expect(setOf(server.state, 500)?.completed).toBe(false)
+  })
+
+  it('draws a write it takes in from another tab on the set it names now (B6 third review)', async () => {
+    const stored = memoryShelf()
+    const server = new Server()
+    const here = harness(stored, { server })
+    here.outbox.start()
+    void here.outbox.enqueue('add', [10, 'k1', -5])
+    await settle()
+    server.outcomes = [new MutationFailed('unauthorized')]
+    void here.outbox.enqueue('note', ['x'])
+    await settle()
+    stored.kept.set('t1', entry({ id: 't1', kind: 'tick', args: [-5, false], order: 9_000_000 }))
+
+    expect(await here.outbox.flush()).toBe(false)
+    expect(setOf(here.seen.shown!, 500)?.completed).toBe(false)
+  })
+
+  it('knows the name after a reload too: every tab of the workout keeps it (B6 third review)', async () => {
+    const stored = memoryShelf()
+    const server = new Server()
+    const first = harness(stored, { server })
+    first.outbox.start()
+    void first.outbox.enqueue('add', [10, 'k1', -5])
+    await settle()
+    first.outbox.stop()
+    expect(stored.names.get(-5)).toBe(500)
+    stored.kept.set('t1', entry({ id: 't1', kind: 'tick', args: [-5, false], order: 9_000_000 }))
+
+    const reloaded = harness(stored, { server })
+    reloaded.outbox.start()
+    await settle()
+    expect(server.calls.at(-1)).toMatchObject({ kind: 'tick', args: [500, false] })
+  })
 })
 
 describe('exclusively', () => {
@@ -1171,6 +1333,35 @@ describe('localShelf', () => {
     expect(shelf.list()!.map((e) => e.id)).toEqual(['unlog', 'relog'])
     expect(localStorage.getItem(`gym-outbox:v${OUTBOX_VERSION}:6:x`)).not.toBeNull()
     expect(localStorage.getItem(`gym-outbox:v${OUTBOX_VERSION}:7:z`)).not.toBeNull()
+  })
+
+  it('keeps the sets named for the workout, swept with its writes (B6 third review)', () => {
+    const shelf = localShelf(7, localStorage)
+    expect(shelf.named(-5)).toBeNull()
+    shelf.name(-5, 500)
+    shelf.name(-6, 501)
+    shelf.put(entry({ id: 'a' }))
+    expect([shelf.named(-5), shelf.named(-6)]).toEqual([500, 501])
+    // No write, and nothing it cannot read.
+    expect(shelf.read()).toEqual({ entries: [entry({ id: 'a' })], stale: 0 })
+    expect(shelf.list()!.map((e) => e.id)).toEqual(['a'])
+    expect(localShelf(7, localStorage).named(-5)).toBe(500)
+
+    localShelf(8, localStorage).read()
+    expect(localShelf(7, localStorage).named(-5)).toBeNull()
+  })
+
+  it('names afresh over a value it cannot read, and cannot say when storage throws', () => {
+    localStorage.setItem(`gym-outbox:v${OUTBOX_VERSION}:7:names`, 'not json')
+    const shelf = localShelf(7, localStorage)
+    expect(shelf.named(-5)).toBeNull()
+    shelf.name(-5, 500)
+    expect(shelf.named(-5)).toBe(500)
+
+    const denied = new Proxy({}, { get() { throw new DOMException('denied', 'SecurityError') } })
+    const none = localShelf(7, denied as Storage)
+    expect(() => { none.name(-5, 500) }).not.toThrow()
+    expect(none.named(-5)).toBeUndefined()
   })
 
   it('says what it has of one write, and when the oldest of the workout\'s was made', () => {

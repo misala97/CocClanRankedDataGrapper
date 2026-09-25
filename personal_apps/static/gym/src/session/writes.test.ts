@@ -92,6 +92,7 @@ function hooks(): OutboxHooks {
     shelf: {
       read: () => ({ entries: [], stale: 0 }), put: () => true, drop: () => {},
       get: () => undefined, oldest: () => null, list: () => [],
+      name: () => {}, named: () => null,
     },
     show: () => {},
     status: () => {},
