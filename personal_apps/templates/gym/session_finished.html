@@ -1,8 +1,9 @@
 {% extends 'gym/_base.html' %}
 {% set island = 'finished' %}
 
-{# The finished workout (Puls). The last thing seen after every session, so it
-   answers "war das ein gutes Workout?" before it shows a single raw number.
+{# The finished workout (Puls). The last thing seen after every session: what
+   was done, the one comparison with the routine's earlier workouts, and the
+   plan for next time (D10).
 
    The page body is a React island -- see static/gym/src/finished/. This shell
    only mounts it.

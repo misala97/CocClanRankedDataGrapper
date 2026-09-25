@@ -396,11 +396,12 @@ def test_session_report_marks_a_first_ever_exercise_as_neu_not_as_a_record():
     assert report['record_count'] == 0
     assert report['exercises'][0]['verdict'] == 'neu'
     assert report['exercises'][0]['has_history'] is False
-    assert report['exercises'][0]['avg_volume'] is None
-    assert report['exercises'][0]['volume_delta_pct'] is None
+    assert report['exercises'][0]['record'] is None
 
 
-def test_session_report_advises_on_a_stagnating_exercise():
+def test_session_report_marks_a_stagnating_exercise_and_prescribes_nothing():
+    # The advice box's "auf 82,5 kg gehen" was a second answer to what to
+    # lift beside the row's "Nächstes Mal" (D10), and could disagree with it.
     history = [perf([(85.0, 8)], started_at=day(0), session_id=1)]
     history += [
         perf([(80.0, 8)], started_at=day(7 * n), session_id=n + 1)
@@ -410,37 +411,95 @@ def test_session_report_advises_on_a_stagnating_exercise():
     report = stats.session_report(current, history)
 
     assert report['exercises'][0]['verdict'] == 'stagniert'
-    assert len(report['advice']) == 1
-    assert report['advice'][0]['stuck_at'] == 80.0
-    assert report['advice'][0]['suggested_weight'] == 82.5
+    assert report['exercises'][0]['sessions_since_pr'] == 4
+    assert 'advice' not in report
 
 
-def test_session_report_suggests_a_smaller_jump_for_unilateral_work():
-    history = [perf([(22.5, 8)], is_unilateral=True, started_at=day(0), session_id=1)]
-    history += [
-        perf([(20.0, 8)], is_unilateral=True, started_at=day(7 * n), session_id=n + 1)
-        for n in range(1, 4)
-    ]
-    current = [perf([(20.0, 8)], is_unilateral=True, started_at=day(28), session_id=9)]
+def test_session_report_judges_no_volume_any_more():
+    # "+12 % Vol." against a mean nobody saw is gone (D10): more volume than
+    # before is no verdict, and the whole workout is compared elsewhere.
+    history = [perf([(80.0, 8)], started_at=day(0), session_id=1)]
+    current = [perf([(80.0, 8)] * 2, started_at=day(7), session_id=2)]
     report = stats.session_report(current, history)
 
-    assert report['advice'][0]['suggested_weight'] == 21.25
+    assert report['exercises'][0]['verdict'] is None
+    assert not {'avg_volume', 'volume_delta_pct'} & set(report['exercises'][0])
+    assert not {'avg_total_volume', 'total_volume_delta_pct'} & set(report)
 
 
-def test_session_report_compares_against_the_template_cohort_when_given_one():
-    current = [perf([(80.0, 10)], started_at=day(21), session_id=9)]
-    report = stats.session_report(current, [], comparable_session_volumes=[400.0, 400.0])
+def test_session_report_says_what_each_record_row_beat_and_which_set_made_it():
+    history = [perf([(80.0, 8)], started_at=day(0), session_id=1)]
+    current = [perf([(70.0, 12), (85.0, 6), (82.5, 7)], started_at=day(7), session_id=2)]
+    report = stats.session_report(current, history)
 
-    assert report['avg_total_volume'] == 400.0
-    assert report['total_volume_delta_pct'] == 100
+    value = stats.judged_best(current[0])
+    assert report['exercises'][0]['record'] == {
+        'value': value, 'previous': stats.judged_e1rm(80.0, 8)}
+    # The set whose own e1RM is the record -- not the heaviest nor the first:
+    # the flare's "aus 85,0 kg × 6".
+    assert (report['records'][0]['weight'], report['records'][0]['reps']) == (85.0, 6)
+    assert stats.record_set(current[0], value) == (85.0, 6)
+    assert report['records'][0]['value'] == value
 
 
-def test_session_report_omits_the_whole_workout_comparison_for_freeform_sessions():
-    current = [perf([(80.0, 10)], started_at=day(21), session_id=9)]
-    report = stats.session_report(current, [])
+class TestVolumeComparison:
+    """D10: one line, against the mean of the last two FULL workouts."""
 
-    assert report['avg_total_volume'] is None
-    assert report['total_volume_delta_pct'] is None
+    @staticmethod
+    def workout(id, volume, counted=10, planned=10, is_deload=False):
+        return {'id': id, 'started_at': day(id), 'volume': volume, 'counted': counted,
+                'planned': planned, 'is_deload': is_deload}
+
+    def test_it_takes_the_mean_of_the_two_newest(self):
+        own = self.workout(9, 10600.0)
+        earlier = [self.workout(8, 10218.0), self.workout(7, 10498.0), self.workout(6, 1.0)]
+        assert stats.volume_comparison(own, earlier) == {
+            'pct': 2, 'against': [{'id': 8, 'started_at': day(8), 'volume': 10218.0},
+                                  {'id': 7, 'started_at': day(7), 'volume': 10498.0}]}
+
+    def test_it_passes_over_deloads_workouts_cut_short_and_empty_ones(self):
+        own = self.workout(10, 900.0)
+        earlier = [self.workout(9, 400.0, is_deload=True),
+                   self.workout(8, 500.0, counted=7, planned=10),
+                   self.workout(7, 0.0, counted=0, planned=None),
+                   self.workout(5, 1000.0),
+                   self.workout(4, 1000.0, counted=8, planned=10)]
+        result = stats.volume_comparison(own, earlier)
+        assert [other['id'] for other in result['against']] == [5, 4]
+        assert result['pct'] == -10
+
+    def test_it_reads_no_further_than_it_takes(self):
+        read = []
+
+        def earlier():
+            for workout in (self.workout(8, 100.0), self.workout(7, 100.0), self.workout(6, 100.0)):
+                read.append(workout['id'])
+                yield workout
+        stats.volume_comparison(self.workout(9, 100.0), earlier())
+        assert read == [8, 7]
+
+    @pytest.mark.parametrize('own', [
+        {'is_deload': True}, {'counted': 7, 'planned': 10}, {'volume': 0.0, 'counted': 0},
+    ], ids=['deload', 'cut short', 'empty'])
+    def test_it_has_none_for_a_workout_that_is_no_fair_measure(self, own):
+        mine = {**self.workout(9, 1000.0), **own}
+        assert stats.volume_comparison(mine, [self.workout(8, 900.0),
+                                              self.workout(7, 900.0)]) is None
+
+    def test_it_needs_two(self):
+        assert stats.volume_comparison(self.workout(9, 900.0), [self.workout(8, 900.0)]) is None
+
+    def test_it_rounds_to_a_whole_percent_either_way(self):
+        pair = [self.workout(8, 1000.0), self.workout(7, 1000.0)]
+        assert stats.volume_comparison(self.workout(9, 834.0), pair)['pct'] == -17
+        assert stats.volume_comparison(self.workout(9, 1004.0), pair)['pct'] == 0
+
+
+@pytest.mark.parametrize('counted, planned, full', [
+    (8, 10, True), (7, 10, False), (4, 5, True), (3, 5, False), (0, None, True), (12, 10, True),
+])
+def test_a_workout_is_full_from_four_in_five_of_its_sets(counted, planned, full):
+    assert stats.is_full(counted, planned) is full
 
 
 def test_muscle_group_volume_lists_untrained_catalogue_groups_at_zero():
@@ -851,58 +910,6 @@ def test_next_weight_adds_the_exercises_own_increment():
     assert stats._next_weight(80.0, 2.5) == 82.5
 
 
-def test_session_report_suggests_the_exercises_own_increment():
-    # Same stagnation setup as the 82.5 case above, but on a 9 kg stack: the
-    # advice has to name a weight the machine can actually make.
-    history = [perf([(72.0, 8)], weight_increment=9.0, started_at=day(0), session_id=1)]
-    history += [
-        perf([(63.0, 8)], weight_increment=9.0, started_at=day(7 * n), session_id=n + 1)
-        for n in range(1, 4)
-    ]
-    current = [perf([(63.0, 8)], weight_increment=9.0, started_at=day(28), session_id=9)]
-    report = stats.session_report(current, history)
-
-    assert report['advice'][0]['stuck_at'] == 63.0
-    assert report['advice'][0]['suggested_weight'] == 72.0
-
-
-def test_session_report_suggests_a_real_stack_stop_not_an_invented_position():
-    # Same stagnation setup, but on a stack with uneven stops: weight + increment
-    # (63 + 9 = 72) happens to land on a real stop here by coincidence, so use
-    # a stack where the naive sum is NOT a stop -- 63 + 9 = 72 is not one of
-    # these steps, and the honest "go heavier" answer is the nearest stop AT
-    # OR ABOVE it, 77.
-    steps = (5, 13, 21, 29, 37, 45, 53, 61, 69, 77)
-    history = [perf([(72.0, 8)], weight_increment=9.0, stack_kg=steps, started_at=day(0), session_id=1)]
-    history += [
-        perf([(63.0, 8)], weight_increment=9.0, stack_kg=steps, started_at=day(7 * n), session_id=n + 1)
-        for n in range(1, 4)
-    ]
-    current = [perf([(63.0, 8)], weight_increment=9.0, stack_kg=steps, started_at=day(28), session_id=9)]
-    report = stats.session_report(current, history)
-
-    assert report['advice'][0]['stuck_at'] == 63.0
-    assert report['advice'][0]['suggested_weight'] == 77.0
-
-
-def test_session_report_drops_advice_when_already_topped_out_on_the_stack():
-    """Same stagnation setup again, but stuck on the HEAVIEST stop this stack
-    has. snap_to_stack('up') clamps a jump past the top back down to it, so
-    the naive advice would tell the lifter to "go heavier" and then name the
-    exact weight they are already stuck at -- worse than no advice. The right
-    answer is no advice entry at all, not a same-number one."""
-    steps = (5, 13, 21, 29, 37, 45, 53, 61, 69, 77)
-    history = [
-        perf([(77.0, 8)], weight_increment=9.0, stack_kg=steps, started_at=day(7 * n), session_id=n + 1)
-        for n in range(4)
-    ]
-    current = [perf([(77.0, 8)], weight_increment=9.0, stack_kg=steps, started_at=day(28), session_id=9)]
-    report = stats.session_report(current, history)
-
-    assert report['exercises'][0]['verdict'] == 'stagniert'
-    assert report['advice'] == []
-
-
 def test_deload_row_does_not_count_as_a_session_without_a_pr():
     # Without the exclusion this is 2 sessions since the PR; the deload in the
     # middle is not a failed attempt at one.
@@ -979,17 +986,6 @@ def test_exercise_state_is_neu_when_every_row_is_a_deload():
     assert stats.exercise_state(rows) == 'neu'
 
 
-def test_session_report_excludes_deloads_from_the_volume_average():
-    current = [perf([(80.0, 10)], started_at=day(21))]                       # 800
-    history = [
-        perf([(80.0, 10)], started_at=day(0)),                               # 800
-        perf([(40.0, 10)], started_at=day(7), is_deload=True),               # 400, ignored
-    ]
-    report = stats.session_report(current, history)
-    assert report['exercises'][0]['avg_volume'] == 800.0
-    assert report['exercises'][0]['volume_delta_pct'] == 0
-
-
 def test_session_report_keeps_the_records_of_a_deload_session():
     # G-078: marking the workout a deload took back records already
     # celebrated in it (D3 b-A).
@@ -1001,12 +997,11 @@ def test_session_report_keeps_the_records_of_a_deload_session():
     assert report['exercises'][0]['verdict'] == 'rekord'
 
 
-def test_session_report_gives_no_stagnation_advice_on_a_deload():
+def test_session_report_gives_no_stall_verdict_on_a_deload():
     current = [perf([(60.0, 8)], started_at=day(35), is_deload=True)]
     history = [perf([(85.0, 8)], started_at=day(0))]
     history += [perf([(80.0, 8)], started_at=day(7 * n)) for n in range(1, 5)]
     report = stats.session_report(current, history)
-    assert report['advice'] == []
     assert report['exercises'][0]['verdict'] != 'stagniert'
 
 

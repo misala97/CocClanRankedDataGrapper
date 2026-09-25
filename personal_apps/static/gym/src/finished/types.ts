@@ -21,6 +21,14 @@ export interface CorrectableSet {
   id: number
   weight: number
   reps: number
+  /** Its own e1RM beat every earlier workout's (D3): its reps wash gold. */
+  is_record: boolean
+}
+
+/** One set of "Nächstes Mal" (stats.next_target). */
+export interface TargetSet {
+  weight: number
+  reps: number
 }
 
 export interface FinishedExercise {
@@ -33,14 +41,16 @@ export interface FinishedExercise {
   best_weight: number
   e1rm: number
   has_history: boolean
-  avg_volume: number | null
-  volume_delta_pct: number | null
   /** This exercise's best e1RM here beat every earlier workout's (D3). */
   is_record: boolean
+  /** What this row's best set beat, or null: no record here. */
+  record: { value: number; previous: number } | null
   sessions_since_pr: number | null
-  /** A deload keeps only 'rekord' and has no progress verdict otherwise, which
-   *  is why the tag can be absent. */
-  verdict: 'rekord' | 'stagniert' | 'steigend' | 'neu' | null
+  /** A deload keeps only 'rekord' and has no progress verdict otherwise. */
+  verdict: 'rekord' | 'stagniert' | 'neu' | null
+  /** What the next live card of this routine aims at, set by set -- null
+   *  where this row is not what it builds on any more, or nothing is. */
+  next_sets: TargetSet[] | null
   set_rows: CorrectableSet[]
   session_exercise_id: number | null
   notes: string | null
@@ -59,22 +69,17 @@ export interface SessionRecord {
   exercise_id: number
   position: number
   value: number
+  /** The set that made it: "aus 80 kg × 12". */
+  weight: number
+  reps: number
   previous: number
   previous_at: string
 }
 
-export interface SessionAdvice {
-  exercise_id: number
-  name: string
-  stuck_at: number
-  sessions: number
-  suggested_weight: number
-}
-
-export interface PreviousSession {
+/** Another workout the debrief points to. */
+export interface WorkoutRef {
   id: number
   started_at: string
-  volume: number
 }
 
 export interface FinishedPayload {
@@ -82,16 +87,22 @@ export interface FinishedPayload {
   exercises: FinishedExercise[]
   total_volume: number
   total_sets: number
-  avg_total_volume: number | null
-  total_volume_delta_pct: number | null
-  /** Ranked by kind then relative gain: records[0] is the strongest claim. */
+  /** Ranked by relative gain: records[0] is the strongest claim. */
   records: SessionRecord[]
   record_count: number
-  advice: SessionAdvice[]
+  /** The one comparison (D10): whole percent against the mean of the two
+   *  newest earlier full workouts of the routine, both named, newest first.
+   *  null: no line (a deload, cut short, freeform, fewer than two). */
+  comparison: { pct: number; against: (WorkoutRef & { volume: number })[] } | null
+  /** The newest workout of the routine after this one (no deload), where
+   *  the plan for next time is built now -- only a lift it left out still
+   *  plans on its row here. */
+  plan_moved_to: WorkoutRef | null
+  /** A deload's one base workout for every "Nächstes Mal", or null. */
+  plan_base: WorkoutRef | null
   is_deload: boolean
   deload_default_pct: number
   deload_applied: boolean
-  previous_session: PreviousSession | null
   tick_states: ('record' | 'done')[]
   /** Average seconds from one logged set to the next, the set itself
    *  included -- there is no stamp for when a set began, so this is pace,

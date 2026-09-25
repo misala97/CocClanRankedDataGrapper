@@ -982,15 +982,16 @@ def test_deload_toggle_snaps_to_the_exercises_real_stack_stops(client, scratch_d
 
 @pytest.fixture()
 def scratch_stagnant_stack_session():
-    """A finished session sitting at the end of a stagnation streak, on an
-    exercise with an UNEVEN recorded stack (5, 12, 18, 29, 33, 61, 68, 92).
+    """A finished session at the top of its rep range after a run at 61 x 8,
+    on an exercise with an UNEVEN recorded stack (5, 12, 18, 29, 33, 61, 68,
+    92).
 
     This is the route-level counterpart to the pure stats.py stack tests: it
     exercises routes.py's own _to_performed(), the fourth call site that reads
-    exercise.stack_kg into a PerformedExercise (session_detail.html's finished
-    branch, load_performed()) -- the one the earlier stack-plumbing review
-    missed. 61 kg is itself a real stop; the default 2.5 kg grid would suggest
-    63.5 kg next, a position this machine does not have.
+    exercise.stack_kg into a PerformedExercise (the debrief, load_performed())
+    -- the one the earlier stack-plumbing review missed. 61 kg is itself a real
+    stop; the default 2.5 kg grid would step up to 63.5 kg next, a position
+    this machine does not have.
     """
     import datetime as dt
     from extensions import db
@@ -1018,7 +1019,8 @@ def scratch_stagnant_stack_session():
                                  finished_at=base + dt.timedelta(days=28, hours=1),
                                  user_id=_admin_id())
         current_se = SessionExercise(exercise_id=exercise.id, position=1)
-        current_se.sets = [SessionSet(position=1, weight=61.0, reps=8, completed=True)]
+        # The range its history gives is 6-10: ten reps is its top.
+        current_se.sets = [SessionSet(position=1, weight=61.0, reps=10, completed=True)]
         current.exercises.append(current_se)
         sessions.append(current)
 
@@ -1042,21 +1044,19 @@ def scratch_stagnant_stack_session():
             db.session.commit()
 
 
-def test_finished_session_advice_snaps_to_the_exercises_real_stack_stops(
+def test_the_debriefs_next_time_steps_up_to_the_exercises_real_stack_stop(
         client, scratch_stagnant_stack_session):
     """Route-level regression guard for _to_performed's stack_kg plumbing
     (routes.py:478), the fourth call site the earlier stack-plumbing review
     missed. Setting stack_kg=None there leaves the full suite green, because
-    nothing else exercises this exact path -- the "Nächstes Mal" advice on
-    session_finished.html, the app's own "go heavier" prescription.
+    nothing else exercises this exact path -- the debrief's "Nächstes Mal",
+    which steps up from the performed rows' own stack (D10).
     """
     html = client.get(f'/gym/session/{scratch_stagnant_stack_session}').get_data(as_text=True)
-    advice = embedded_payload(html)['advice']
-    assert advice, 'expected a "Nächstes Mal" advice entry'
-    # The prescription itself, not the sentence FinishedPage wraps it in:
-    # snapped to the stack's real 68 kg stop rather than the arithmetic 63,5.
-    assert advice[0]['suggested_weight'] == 68.0
-    assert 63.5 not in [item['suggested_weight'] for item in advice]
+    [entry] = embedded_payload(html)['exercises']
+    # Snapped to the stack's real 68 kg stop rather than the arithmetic 63,5,
+    # back at the bottom of the range.
+    assert entry['next_sets'] == [{'weight': 68.0, 'reps': 6}]
 
 
 def test_hand_typed_reps_drop_the_deload_baseline(client, scratch_deload_session):

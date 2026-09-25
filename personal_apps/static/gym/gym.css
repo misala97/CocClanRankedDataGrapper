@@ -2771,19 +2771,19 @@ summary.sheet-row::-webkit-details-marker { display: none; }
    ============================================================================ */
 
 .finished { padding-bottom: var(--sp-8); }
-/* An <h1> now; the size was never the h1 default and the UA margin has to go. */
+/* An <h1>, and the page's title: the workout's name at the name size (M4).
+   The UA margin has to go. */
 .finished__name {
   margin: 0;
-  font-family: var(--font-display); font-size: var(--t-body); font-weight: var(--w-bold);
-  letter-spacing: var(--track-name);
+  font-family: var(--font-display); font-size: var(--t-name); font-weight: var(--w-bold);
+  letter-spacing: var(--track-name); line-height: 1.2; text-wrap: balance;
 }
-/* Last time, beside the mean. Quiet: the figure above is the statement. */
-.finished__prev {
-  margin: var(--sp-2) var(--sp-4) 0;
-  font-size: var(--t-meta); color: var(--unlit);
-}
-.finished__prev a { color: inherit; }
-.finished__prev b { color: var(--ink); font-variant-numeric: tabular-nums; }
+.finished .session-top { align-items: flex-start; }
+.finished .session-top__back { margin-top: -6px; }
+/* Deload is a label, not a state (4.2): .vtag--deload's outline, at the 13px
+   floor where the header's uppercase pill was 11px. */
+.finished .vtag { font-size: var(--t-meta); padding: 3px 10px; }
+.finished__deload { margin-top: 2px; }
 /* Sentence case, body face -- 4.4. It was a .label, i.e. uppercase mono. */
 /* The number fields were identifiable only by an --edge border: 1,55:1 light,
    1,24:1 dark, against 1.4.11's 3:1 for a control boundary. A filled ground
@@ -2879,7 +2879,8 @@ summary.sheet-row::-webkit-details-marker { display: none; }
   .finished { max-inline-size: 1080px; margin-inline: auto; }
 }
 .finished__when {
-  font-size: var(--t-meta); font-weight: var(--w-med); color: var(--unlit);
+  margin-top: 2px;
+  font-size: var(--t-meta); font-weight: var(--w-med); color: var(--dim);
   letter-spacing: 0;
 }
 /* Sits with the duration it qualifies, quieter than it: the session length is
@@ -2888,40 +2889,36 @@ summary.sheet-row::-webkit-details-marker { display: none; }
 /* the header's name block is two stacked lines here, not one truncated line */
 .finished .session-top__name { white-space: normal; overflow: visible; }
 
-.verdict {
-  padding: var(--sp-5) var(--sp-4) 0;
-  font-family: var(--font-display);
-  font-size: 1.75rem; font-weight: var(--w-max);
-  /* 1.2, not 1.12: this is a two-to-three-line German sentence, and at 1.12
-     the lines touched. Display leading, but a readable one. */
-  letter-spacing: -0.03em; line-height: 1.2; text-wrap: balance;
+/* What was done leads (M4): the live screen's readout, closed, with the
+   counts beside it rather than in tiles of their own (G-011, G-121). */
+.finished .grew { margin-top: var(--sp-6); }
+.finished .grew__side { color: var(--dim); }
+.finished .grew__side b { color: var(--ink); }
+.finished .ticks { margin-top: var(--sp-4); }
+
+/* The one comparison (D10). Neutral ink both ways: a minus is a fact, not a
+   warning, and it never sits in a colour of its own (G-079). */
+.finished__cmp {
+  margin: var(--sp-3) var(--sp-4) 0;
+  font-size: var(--t-sm); line-height: 1.45; color: var(--dim); text-wrap: pretty;
 }
-.verdict--record { color: var(--record-ink); }
+.finished__cmp b {
+  color: var(--ink); font-weight: var(--w-bold);
+  font-variant-numeric: tabular-nums; white-space: nowrap;
+}
+/* The two workouts it is measured against open on tap. Inline, so the hit
+   area grows by padding and the line box does not. */
+.finished__cmp a {
+  display: inline-block; padding-block: 12px; margin-block: -12px;
+  color: var(--ink); font-weight: var(--w-semi); white-space: nowrap;
+  text-decoration: underline; text-decoration-color: var(--edge-hi); text-underline-offset: 3px;
+}
 
 /* the strip that filled all workout, now closed */
 /* Taller as well as gold: --record against --done measures 1,03:1 in dark, so
    colour alone carried nothing there. 4.2 requires a shape or a word beside the
    colour, and this same 1,03:1 was rejected on Statistik's career strip. */
 .tick.is-record { background: var(--record); block-size: 15px; margin-block-start: -6px; }
-
-.grew__delta {
-  font-size: var(--t-sm); font-weight: var(--w-bold); color: var(--done-ink);
-  padding-bottom: 5px; text-align: end; min-inline-size: 0;
-}
-
-/* a divided readout band, not four tiles */
-.band {
-  margin: var(--sp-4) var(--sp-4) 0;
-  display: grid; grid-template-columns: repeat(3, 1fr);
-  background: var(--chassis); border-radius: var(--r-panel); padding: var(--sp-3) 0;
-}
-.band__cell { display: flex; flex-direction: column; align-items: center; gap: 2px; }
-.band__cell + .band__cell { border-inline-start: 1px solid var(--edge); }
-.band__num {
-  font-family: var(--font-display); font-size: var(--num-sm); font-weight: var(--w-max);
-  letter-spacing: -0.03em; font-variant-numeric: tabular-nums;
-}
-.band__num.is-record { color: var(--record-ink); }
 
 /* ---- the one moment this design lets itself be loud ---- */
 /* MOTION  ·  the one earned moment
@@ -2964,7 +2961,7 @@ summary.sheet-row::-webkit-details-marker { display: none; }
   margin: var(--sp-5) var(--sp-4) 0; padding: var(--sp-4);
   border-radius: var(--r-panel); background: var(--record); color: var(--on-record);
 }
-.record-flare__kind { font-size: var(--t-meta); font-weight: var(--w-bold); opacity: 0.85; }
+.record-flare__kind { font-size: var(--t-meta); font-weight: var(--w-bold); }
 .record-flare__name { font-size: var(--t-body); font-weight: var(--w-bold); margin-top: 1px; }
 .record-flare__row { display: flex; align-items: flex-end; gap: var(--sp-2); margin-top: var(--sp-3); }
 .record-flare__num {
@@ -2972,21 +2969,93 @@ summary.sheet-row::-webkit-details-marker { display: none; }
   letter-spacing: -0.045em; line-height: 0.9; font-variant-numeric: tabular-nums;
 }
 .record-flare__unit { font-size: var(--t-sm); font-weight: var(--w-semi); padding-bottom: 3px; }
-.record-flare__prev { font-size: var(--t-meta); font-weight: var(--w-semi); opacity: 0.8; margin-top: var(--sp-2); }
+.record-flare__prev {
+  font-size: var(--t-meta); font-weight: var(--w-semi); line-height: 1.45; margin-top: var(--sp-2);
+}
+.finished .record-flare { margin-top: var(--sp-6); }
 
-/* ---- attention is cold, and always carries the word ---- */
-.next-time {
-  margin: var(--sp-5) var(--sp-4) 0; padding: var(--sp-4);
-  border-radius: var(--r-panel); background: var(--chassis);
-  box-shadow: inset 0 0 0 1px var(--stall-ink);
+/* ---- per exercise: what was done, and next time's plan (M4) ---- */
+.finished__sec { margin: var(--sp-8) var(--sp-4) 0; }
+/* A name, not an eyebrow (D11). */
+.finished__h {
+  margin: 0 0 var(--sp-3);
+  font-family: var(--font-display); font-size: var(--t-name); font-weight: var(--w-bold);
+  letter-spacing: var(--track-name); line-height: 1.2;
 }
-.next-time__lbl {
-  font-size: var(--t-micro); font-weight: var(--w-bold);
-  letter-spacing: var(--track-label); text-transform: uppercase; color: var(--stall-ink);
+.finished__note {
+  margin: calc(var(--sp-2) * -1) 0 var(--sp-3);
+  font-size: var(--t-sm); line-height: 1.45; color: var(--dim); text-wrap: pretty;
 }
-.next-time__body { font-size: var(--t-sm); line-height: 1.5; color: var(--dim); margin-top: var(--sp-2); }
-.next-time__body + .next-time__body { margin-top: var(--sp-3); }
-.next-time__body b { font-weight: var(--w-bold); color: var(--ink); }
+/* A workout a newer one of its routine followed: its "next time" has
+   happened, and this says where the plan is now. */
+.finished__moved {
+  display: flex; align-items: center; gap: var(--sp-3);
+  margin: 0 0 var(--sp-2); min-block-size: var(--tap);
+  padding: var(--sp-3) var(--sp-4); border-radius: var(--r-control);
+  box-shadow: inset 0 0 0 1px var(--edge-hi);
+  font-size: var(--t-sm); line-height: 1.45; color: var(--dim); text-decoration: none;
+}
+.finished__moved b { color: var(--ink); font-weight: var(--w-semi); }
+.finished__moved .icon { flex: none; margin-inline-start: auto; color: var(--dim); }
+
+/* One exercise: its name leads, the figures under it; the whole block opens
+   the exercise page. */
+.exrow { align-items: flex-start; flex-wrap: nowrap; }
+.exrow__main {
+  display: block; flex: 1 1 auto; color: inherit; text-decoration: none; padding-block: 2px;
+  container-type: inline-size;
+}
+.exrow .row__name { font-weight: var(--w-semi); color: var(--ink); line-height: 1.3; }
+.exrow .row__trail { padding-top: 2px; }
+/* What was done over next time, set under set: the label column fixed so
+   the figures start at one x down the list, and every set in its own four
+   columns (dot | weight | × | reps) so 10 -> 11 reads straight down. */
+.steps {
+  display: grid; grid-template-columns: 6.6rem repeat(var(--n), auto auto auto auto) 1fr;
+  align-items: baseline; row-gap: 3px; margin-top: var(--sp-2);
+  font-size: var(--t-body); font-variant-numeric: tabular-nums; color: var(--ink);
+}
+/* Where the sets do not pair up (a deload's plan), each line runs on. */
+.steps--flow { grid-template-columns: 6.6rem 1fr; }
+/* Too narrow for the label column beside a set (large text on a phone):
+   each label stands over its line. */
+@container (max-width: 16em) {
+  .steps--flow { grid-template-columns: minmax(0, 1fr); }
+}
+.steps__k { grid-column: 1; font-size: var(--t-meta); font-weight: var(--w-med); color: var(--dim); }
+.steps__line { min-inline-size: 0; }
+.steps__c { white-space: nowrap; font-weight: var(--w-med); }
+.steps__c--w, .steps__c--r { text-align: end; }
+.steps__c--sep, .steps__c--x { color: var(--unlit); font-weight: var(--w-semi); text-align: center; }
+.steps__c--sep:not(:empty) { padding-inline: 0.3em; }
+.steps__c--x:not(:empty) { padding-inline: 0.25em; }
+.steps__c--next, .steps__set--next { font-weight: var(--w-bold); }
+/* A set is one figure: it never breaks between its weight and its reps. */
+.steps__set { white-space: nowrap; font-weight: var(--w-med); }
+.steps__set i { font-style: normal; color: var(--unlit); font-weight: var(--w-semi); margin-inline: 0.3em; }
+.steps__c small, .steps__set small {
+  margin-inline-start: 2px; font-size: var(--t-meta); font-weight: var(--w-semi); color: var(--dim);
+}
+/* Without a plan: what was done, as one running line. */
+.steps__done {
+  display: block; margin-top: 3px;
+  font-size: var(--t-body); font-variant-numeric: tabular-nums; color: var(--ink); line-height: 1.4;
+}
+/* The set that beat the record: its reps washed gold, as its tick is; the
+   word is on the row. The wash reaches past the digits without widening
+   their column. */
+.is-record > .steps__r, .steps__set.is-record .steps__r {
+  background: var(--wash-record); box-shadow: inset 0 -2px 0 var(--record);
+  border-radius: 4px; padding-inline: 2px; margin-inline: -2px;
+}
+.exrow__rec, .exrow__stall, .exrow__first {
+  display: block; margin-top: var(--sp-2); font-size: var(--t-meta); font-weight: var(--w-semi);
+  line-height: 1.45;
+}
+.exrow__rec { color: var(--record-ink); }
+.exrow__rec b { font-variant-numeric: tabular-nums; white-space: nowrap; }
+.exrow__stall { color: var(--stall-ink); }
+.exrow__first { color: var(--dim); }
 
 /* ---- per exercise ---- */
 .sec { margin: var(--sp-6) var(--sp-4) 0; }
@@ -3021,7 +3090,7 @@ summary.sheet-row::-webkit-details-marker { display: none; }
 /* The all-records case: one gold sentence instead of a column of identical
    gold chips. */
 .finished__allpr {
-  margin: 0 var(--sp-4) var(--sp-1); font-size: var(--t-sm);
+  margin: 0 0 var(--sp-2); font-size: var(--t-sm);
   font-weight: var(--w-semi); color: var(--record-ink);
 }
 
@@ -3038,9 +3107,10 @@ summary.sheet-row::-webkit-details-marker { display: none; }
 }
 
 /* ---- the way onward, and the two quiet ones ---- */
+/* The routine question, on the field: a hairline, not a second card (M4). */
 .prompt {
-  margin: var(--sp-5) var(--sp-4) 0; padding: var(--sp-4);
-  border-radius: var(--r-panel); background: var(--chassis);
+  margin: var(--sp-6) var(--sp-4) 0; padding-top: var(--sp-5);
+  border-top: 1px solid var(--edge);
   font-size: var(--t-sm); color: var(--dim); line-height: 1.5;
 }
 .prompt b { color: var(--ink); font-weight: var(--w-bold); }

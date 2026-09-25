@@ -11,8 +11,9 @@ Moved verbatim from the pre-split routes.py.
 import datetime as dt
 
 from flask import abort, current_app, flash, jsonify, redirect, render_template, request, url_for
+from sqlalchemy import and_, or_
 from sqlalchemy.exc import IntegrityError
-from sqlalchemy.orm import joinedload, load_only, selectinload
+from sqlalchemy.orm import joinedload, selectinload
 
 from extensions import db
 from models import (
@@ -46,7 +47,7 @@ from .helpers import (
     _get_active_session, _page_active_session, _refuse_live_write_if_finished,
     _refuse_structure_edit_if_finished, _settle_if_abandoned, _to_bodyweight, _to_client_key, _to_int, _to_name, _to_note,
     _to_reps, _to_rest_seconds, _to_weight, _was_discarded, _write_time,
-    _username, _wants_json,
+    _username, _wants_json, planned_set_count,
 )
 from .history import counts, done_sets, load_performed, performed_from_session, _session_rest_entries
 
@@ -1044,6 +1045,144 @@ def gym_session_detail_json(session_id):
     return jsonify(_session_payload(session_).model_dump(mode='json'))
 
 
+#: The earlier workouts of a routine are read this many at a time: the
+#: comparison stops at the second one done in full.
+_EARLIER_PAGE = 8
+
+
+def _planned_of(session_):
+    """The sets a finished workout held, for D10's "full". The count kept at
+    its finish (B4) -- or, finished before that count was kept, what its
+    open sets still say: only a finish from B4 on deletes them. Counting such
+    a workout as full put a Pull ended at 1 of 18 sets back into the
+    comparison (review, 09-25).
+
+    Plus what its skips dropped: a skip deletes the row's open sets, so four
+    exercises skipped after a set each read 13 of 13. A skipped row holds
+    the sets its routine slot keeps, as one left open would; a replaced
+    original's slot is its substitute's (fix check, 09-25)."""
+    held = session_.planned_sets
+    if held is None:
+        held = planned_set_count(session_)
+    slots = plan.routine_rows(session_)
+    replaced = {se.replaces_id for se in session_.exercises if se.replaces_id is not None}
+    for se in session_.exercises:
+        if not se.skipped or se.id in replaced:
+            continue
+        slot = slots.get(plan.slot_exercise_id(se))
+        if slot is not None and slot.target_sets:
+            held += max(0, slot.target_sets - len(done_sets(se)))
+    return held
+
+
+def _earlier_of_routine(session_):
+    """The finished workouts of `session_`'s routine before it -- by start,
+    then id -- newest first, as stats.volume_comparison reads them. A page at
+    a time, since it stops as soon as two qualify. Deloads are left out here
+    already: they never do."""
+    before = or_(WorkoutSession.started_at < session_.started_at,
+                 and_(WorkoutSession.started_at == session_.started_at,
+                      WorkoutSession.id < session_.id))
+    query = (
+        my_sessions()
+        .filter(WorkoutSession.template_id == session_.template_id,
+                WorkoutSession.finished_at.isnot(None),
+                WorkoutSession.is_deload.is_(False), before)
+        .order_by(WorkoutSession.started_at.desc(), WorkoutSession.id.desc())
+        .options(selectinload(WorkoutSession.exercises).selectinload(SessionExercise.sets),
+                 selectinload(WorkoutSession.exercises).joinedload(SessionExercise.exercise))
+    )
+    offset = 0
+    while True:
+        page = query.offset(offset).limit(_EARLIER_PAGE).all()
+        for workout in page:
+            # Every row's sets that count, a replaced original's too (Q1) --
+            # the volume and the count session_report takes of this workout.
+            done = [(s, se.exercise.is_unilateral)
+                    for se in workout.exercises for s in se.sets if counts(s)]
+            yield {'id': workout.id, 'started_at': workout.started_at,
+                   'volume': sum(stats.set_volume(s.weight, s.reps, unilateral)
+                                 for s, unilateral in done),
+                   'counted': len(done), 'planned': _planned_of(workout),
+                   'is_deload': workout.is_deload}
+        if len(page) < _EARLIER_PAGE:
+            return
+        offset += _EARLIER_PAGE
+
+
+def _plan_moved_to(session_):
+    """The newest finished workout of `session_`'s routine after it with a
+    set that counts, as {'id', 'started_at'} -- or None. The routine's plan
+    for next time is built there now (D10), so a debrief opened later points
+    to it instead of repeating a plan that has been lifted since. One left
+    empty moved nothing; a running one is still lifting this plan; a deload
+    is never what the next live card builds on (fix check, 09-25)."""
+    if session_.template_id is None:
+        return None
+    after = or_(WorkoutSession.started_at > session_.started_at,
+                and_(WorkoutSession.started_at == session_.started_at,
+                     WorkoutSession.id > session_.id))
+    newer = (
+        my_sessions()
+        .filter(WorkoutSession.template_id == session_.template_id,
+                WorkoutSession.finished_at.isnot(None), after,
+                WorkoutSession.is_deload.is_(False),
+                WorkoutSession.exercises.any(SessionExercise.sets.any(
+                    (SessionSet.completed == True) & (SessionSet.reps >= 1))))  # noqa: E712
+        .order_by(WorkoutSession.started_at.desc(), WorkoutSession.id.desc())
+        .first()
+    )
+    return None if newer is None else {'id': newer.id, 'started_at': newer.started_at}
+
+
+def _attach_next_time(data, session_, current, history, session_exercises):
+    """"Nächstes Mal" on each row of the debrief (D10), plus where the plan
+    went (`plan_moved_to`) and, for a deload, what it builds on
+    (`plan_base`).
+
+    What the next live card of this routine will aim at, by _live_data's own
+    call (plan.target_for) on the base it will take: the exercise's newest
+    non-deload row -- seeding's `newest`, by start, then the row logged
+    later. Said only where that base is this row, or for a deload a workout
+    before it: a row the exercise has moved on from since (a newer workout
+    of the routine, one of another routine, the same lift twice in this one)
+    shows what was done, never a plan the live card would not show. A lift
+    the newer workouts left out still plans here: the live card builds it
+    on this row, and no other page shows that plan (review, 09-25).
+
+    `current` and `session_exercises` run 1:1 with data['exercises'];
+    `history` is every other finished row of the same exercises."""
+    for entry in data['exercises']:
+        entry['next_sets'] = None
+    data['plan_moved_to'] = _plan_moved_to(session_)
+    data['plan_base'] = None
+    routine = plan.routine_rows(session_)
+    attempts = {}
+    for row in stats.progression_rows(list(history) + list(current)):
+        attempts.setdefault(row.exercise_id, []).append(row)
+    own = (session_.started_at, session_.id)
+    bases = {}
+    for entry, row, se in zip(data['exercises'], current, session_exercises):
+        newest_first = sorted(attempts.get(row.exercise_id, []),
+                              key=lambda other: (other.started_at, other.row_id or 0),
+                              reverse=True)
+        if not newest_first:
+            continue
+        base = newest_first[0]
+        if session_.is_deload:
+            if stats.session_order(base) >= own:
+                continue
+        elif base.row_id != row.row_id:
+            continue
+        entry['next_sets'] = plan.target_for(
+            se, routine, list(base.sets), [other.sets for other in newest_first],
+            stats.resolve_increment(row.weight_increment, row.is_unilateral), row.stack_kg)
+        bases[base.session_id] = base.started_at
+    if session_.is_deload and len(bases) == 1:
+        (base_id, base_at), = bases.items()
+        data['plan_base'] = {'id': base_id, 'started_at': base_at}
+
+
 def _finished_payload(session_):
     """The debrief as a validated payload -- session_report plus everything it
     structurally cannot know (real set ids, the session's own deload state,
@@ -1078,50 +1217,7 @@ def _finished_payload(session_):
         row for row in load_performed(exercise_ids=[row.exercise_id for row in current])
         if row.session_id != session_.id
     ]
-    comparable = []
-    previous_session = None
-    if session_.template_id:
-        cohort = (
-            my_sessions()
-            .options(load_only(WorkoutSession.id, WorkoutSession.started_at))
-            .filter(
-                WorkoutSession.id != session_.id,
-                WorkoutSession.finished_at.isnot(None),
-                WorkoutSession.template_id == session_.template_id,
-                # A deliberately light session must not deflate the average
-                # every later session of this template is compared against.
-                # session_report cannot do this itself -- it receives bare
-                # floats with no flag to filter on.
-                WorkoutSession.is_deload.is_(False),
-            )
-            .all()
-        )
-        cohort_ids = {other.id for other in cohort}
-        volumes = {}
-        for row in load_performed():
-            if row.session_id in cohort_ids:
-                volumes[row.session_id] = volumes.get(row.session_id, 0.0) + stats.row_volume(row)
-        comparable = [volume for volume in volumes.values() if volume > 0]
-
-        # The session before this one, of the same routine. The mean is a
-        # judgement -- half of all sessions fall below it by construction --
-        # while "last time" is a fact, and the page had nothing to compare
-        # against except the mean. Every volume needed for this was already
-        # in `volumes`; only the mean survived.
-        earlier = sorted(
-            (other for other in cohort
-             if other.started_at < session_.started_at and volumes.get(other.id)),
-            key=lambda other: other.started_at,
-        )
-        if earlier:
-            last = earlier[-1]
-            previous_session = {
-                'id': last.id,
-                'started_at': last.started_at,
-                'volume': round(volumes[last.id], 1),
-            }
-    data = stats.session_report(current, history, comparable_session_volumes=comparable)
-    data['previous_session'] = previous_session
+    data = stats.session_report(current, history)
     # session_report()'s entries carry only plain (weight, reps) tuples --
     # PerformedExercise is deliberately ORM-free (stats.py has zero
     # SQLAlchemy dependency, see its module docstring). The "correct a
@@ -1199,9 +1295,23 @@ def _finished_payload(session_):
     for entry in data['exercises']:
         bar = prior.get(entry['exercise_id'], [])
         for set_row in entry['set_rows']:
-            is_record = stats.record_detail(set_row['weight'], set_row['reps'], bar) is not None
-            tick_states.append('record' if is_record else 'done')
+            # The row washes the same sets gold.
+            set_row['is_record'] = stats.record_detail(
+                set_row['weight'], set_row['reps'], bar) is not None
+            tick_states.append('record' if set_row['is_record'] else 'done')
     data['tick_states'] = tick_states
+    # The one comparison (D10): against the two newest earlier workouts of
+    # the routine done in full -- read back only as far as that takes. A
+    # freeform workout has no routine to be measured against.
+    data['comparison'] = None
+    if session_.template_id is not None:
+        data['comparison'] = stats.volume_comparison(
+            {'id': session_.id, 'started_at': session_.started_at,
+             'volume': sum(stats.row_volume(row) for row in current),
+             'counted': data['total_sets'], 'planned': _planned_of(session_),
+             'is_deload': session_.is_deload},
+            _earlier_of_routine(session_))
+    _attach_next_time(data, session_, current, history, reported_session_exercises)
     # Measured pace: the average gap between consecutive sets, which exists
     # only for sessions logged since completed_at was added. A pace, not a
     # rest total: each gap runs from one confirm to the next, so it holds the

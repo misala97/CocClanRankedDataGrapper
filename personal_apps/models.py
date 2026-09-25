@@ -320,10 +320,10 @@ class WorkoutSession(db.Model):
     rest_ends_at = db.Column(db.DateTime, nullable=True)  # display-only target for the in-page countdown
     resting_set_id = db.Column(db.Integer, db.ForeignKey('gym_session_sets.id'), nullable=True)  # which set's completion started the current rest timer, for the per-set progress bar
     # A deliberately light session. Excluded from every judgement that assumes
-    # an attempt at progress (stagnation, volume averages, next session's
-    # pre-fill) and kept in every figure where it is simply true (tonnage,
-    # balance, consistency) -- and a record it sets is a record (D3). See
-    # features/gym/stats.py.
+    # an attempt at progress (stagnation, the debrief's volume comparison, the
+    # next session's pre-fill) and kept in every figure where it is simply
+    # true (tonnage, balance, consistency) -- and a record it sets is a record
+    # (D3). See features/gym/stats.py.
     is_deload    = db.Column(db.Boolean, nullable=False, default=False, server_default=sa.false())
     # The percentage of normal working weight actually used, stored per session
     # rather than read from a constant: changing the default later must not

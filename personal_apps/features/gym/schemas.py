@@ -874,6 +874,15 @@ class CorrectableSet(_Model):
     id: int
     weight: float
     reps: int
+    #: Its own e1RM beat every earlier workout's (D3): a gold tick, and its
+    #: reps washed gold in the row.
+    is_record: bool
+
+
+class RowRecord(_Model):
+    """What one row's best set beat (D3): its judged e1RM and the best before."""
+    value: float
+    previous: float
 
 
 class UnloggedExercise(_Model):
@@ -886,7 +895,7 @@ class UnloggedExercise(_Model):
 
 
 class FinishedExercise(_Model):
-    """One row of the Nach-Übung list, and one group of the correction sheet.
+    """One row of the Übungen list, and one group of the correction sheet.
 
     `sets` is session_report's own list of (weight, reps) pairs; `set_rows`
     are the same sets with their database ids, attached by the route. Both are
@@ -902,15 +911,19 @@ class FinishedExercise(_Model):
     best_weight: float
     e1rm: float
     has_history: bool
-    avg_volume: float | None
-    volume_delta_pct: int | None
     #: This exercise's best e1RM here beat every earlier workout's (D3).
     is_record: bool
+    #: What it beat, or None: no record here.
+    record: RowRecord | None
     sessions_since_pr: int | None
-    # 'rekord' | 'stagniert' | 'steigend' | 'neu', or None -- a deload keeps
-    # only 'rekord' (a record is a record, D3) and has no progress verdict
-    # otherwise, which is why the tag strip can be empty.
+    # 'rekord' | 'stagniert' | 'neu', or None -- a deload keeps only 'rekord'
+    # (a record is a record, D3) and has no progress verdict otherwise.
     verdict: str | None
+    #: "Nächstes Mal": what the next live card of this routine will aim at,
+    #: set by set (plan.target_for) -- None when this row is not what it
+    #: builds on (the exercise was done again after it, in any workout)
+    #: or when there is nothing to build on.
+    next_sets: list[TargetSet] | None
     set_rows: list[CorrectableSet]
     # The per-exercise note and pain flag, which belong to the workout rather
     # than to the set values. None for an exercise with no SessionExercise
@@ -932,26 +945,29 @@ class SessionRecord(_Model):
     exercise_id: int
     position: int
     value: float
+    #: The set that made it: "aus 80 kg × 12".
+    weight: float
+    reps: int
     previous: float
     previous_at: datetime
 
 
-class SessionAdvice(_Model):
-    """A plateau worth acting on next time. Only ever produced for a verdict of
-    'stagniert', so a deload can never generate any."""
-    exercise_id: int
-    name: str
-    stuck_at: float
-    sessions: int
-    suggested_weight: float
-
-
-class PreviousSession(_Model):
-    """The session before this one, of the same routine. A fact, next to the
-    mean, which is a judgement."""
+class WorkoutRef(_Model):
+    """Another workout the debrief points to."""
     id: int
     started_at: datetime
+
+
+class ComparedWorkout(WorkoutRef):
     volume: float
+
+
+class Comparison(_Model):
+    """The debrief's one comparison (D10, stats.volume_comparison): the
+    difference in whole percent from the mean of the two newest earlier
+    workouts of the routine done in full, both named, newest first."""
+    pct: int
+    against: list[ComparedWorkout]
 
 
 class FinishedPayload(_Model):
@@ -959,11 +975,18 @@ class FinishedPayload(_Model):
     exercises: list[FinishedExercise]
     total_volume: float
     total_sets: int
-    avg_total_volume: float | None
-    total_volume_delta_pct: int | None
     records: list[SessionRecord]
     record_count: int
-    advice: list[SessionAdvice]
+    #: None: no line -- a deload, a workout cut short, a freeform one, or
+    #: fewer than two earlier full workouts of the routine.
+    comparison: Comparison | None
+    #: The newest finished workout of the routine after this one that is
+    #: no deload: the plan for next time is built there now. Only a lift
+    #: it left out still plans on its row here.
+    plan_moved_to: WorkoutRef | None
+    #: A deload plans from what came before it: the one workout every row's
+    #: "Nächstes Mal" builds on, or None -- not a deload, or several.
+    plan_base: WorkoutRef | None
     is_deload: bool
     # No top-level deload_pct: session_report reports one as None for shape
     # stability, and the real value lives on the session row. Carrying it
@@ -974,7 +997,6 @@ class FinishedPayload(_Model):
     # session retroactively never rewrites them, and without this the page
     # would quote a percentage of a working weight over the real numbers.
     deload_applied: bool
-    previous_session: PreviousSession | None
     # One entry per logged set, in order: 'record' for every set whose e1RM
     # beat each earlier workout's (D3), 'done' for the rest.
     tick_states: list[Literal['record', 'done']]

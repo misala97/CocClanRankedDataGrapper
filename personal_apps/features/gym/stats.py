@@ -329,10 +329,10 @@ def progression_rows(rows):
     A deload session is deliberately light: its numbers are not a failed
     attempt at progress, and treating them as one manufactures exactly the
     plateau the deload existed to break. The progress judgements --
-    stagnation, the trend, volume averages -- start here. Records do not: a
-    record a deload sets still counts (D3), so record_marks and drought read
-    every row. Functions that report what actually happened (tonnage,
-    balance, consistency, the history table) deliberately do not either.
+    stagnation, the trend -- start here. Records do not: a record a deload
+    sets still counts (D3), so record_marks and drought read every row.
+    Functions that report what actually happened (tonnage, balance,
+    consistency, the history table) deliberately do not either.
 
     Public (and called directly from the routes) because the exercise
     catalogue route has to make the same judgement/report split on its own
@@ -839,31 +839,33 @@ def _verdict(entry, since, is_deload, is_judged=True):
     if not entry['has_history']:
         return 'neu'
     # A row with no judged set (only sets above RECORD_MAX_REPS) was no
-    # attempt at the number a stall counts by: no stall, no "go heavier".
+    # attempt at the number a stall counts by: no stall.
     if since is not None and since >= STAGNATION_THRESHOLD and is_judged:
         return 'stagniert'
-    if entry['volume_delta_pct'] is not None and entry['volume_delta_pct'] > 0:
-        return 'steigend'
     return None
 
 
-def session_report(current, history, comparable_session_volumes=()):
+def session_report(current, history):
     """The finished-workout page.
 
     `current` is this session's performed exercises, a replaced-away original
     included: the sets done on it before the swap were done, and they count
     like any other (Q1). `history` is every other performed row for those same
-    exercises. `comparable_session_volumes` holds the total volume of past
-    sessions built from the same template, and is empty for freeform workouts:
-    averaging a leg day into a push day produces a number that is arithmetically
-    correct and completely meaningless.
+    exercises.
 
     Records have the one meaning (record_marks, D3): e1RM only, against the
     workouts BEFORE this one. `history` may hold later ones -- a debrief read
     weeks on -- and they are no bar for it: the badge is what was true on the
-    day. A deload workout keeps its records (G-078) but gets no stagnation
-    advice or trend verdict: it was never an attempt at progress. Past
-    deloads stay out of the averages and the stall count for the same reason.
+    day. A deload workout keeps its records (G-078) but gets no stall
+    verdict: it was never an attempt at progress. Past deloads stay out of
+    the stall count for the same reason.
+
+    Nothing here compares volumes any more (D10): the workout is measured
+    once, against two earlier ones of its routine (volume_comparison, which
+    the route feeds), and no exercise gets "+12 % Vol." against a mean the
+    page never showed. Nor is there "go heavier" advice: each row's
+    "Nächstes Mal" (plan.target_for) is the one answer to what to lift, and
+    a second one could disagree with it.
     """
     # This session's own deload state. Every row in `current` comes from the
     # same session, so any of them answers it; an empty session (no completed
@@ -880,20 +882,14 @@ def session_report(current, history, comparable_session_volumes=()):
 
     exercises = []
     records = []
-    advice = []
     total_volume = 0.0
     total_sets = 0
 
     for row in current:
         volume = row_volume(row)
-        weight = best_weight(row)
-        e1rm = best_e1rm(row)
         total_volume += volume
         total_sets += len(row.sets)
-
-        past = by_exercise.get(row.exercise_id, [])
-        past_volumes = [row_volume(p) for p in past]
-        avg_volume = (sum(past_volumes) / len(past_volumes)) if past_volumes else None
+        mark = marks.get(row)
 
         entry = {
             'exercise_id': row.exercise_id,
@@ -902,45 +898,26 @@ def session_report(current, history, comparable_session_volumes=()):
             'sets': row.sets,
             'sets_display': _sets_display(row),
             'volume': round(volume, 1),
-            'best_weight': weight,
-            'e1rm': round(e1rm, 1),
+            'best_weight': best_weight(row),
+            'e1rm': round(best_e1rm(row), 1),
             # Done before at all, deloads included: "neu" is a fact, the
             # first time -- not a judgement.
             'has_history': row.exercise_id in done_before,
-            'avg_volume': round(avg_volume, 1) if avg_volume is not None else None,
-            'volume_delta_pct': (round((volume - avg_volume) / avg_volume * 100)
-                                 if avg_volume else None),
-            'is_record': row in marks,
+            'is_record': mark is not None,
+            # What this row itself beat, for its own line: an exercise twice
+            # in one workout is two tries, and the records below keep only
+            # the stronger.
+            'record': None if mark is None else {'value': mark['value'],
+                                                 'previous': mark['previous']},
         }
 
         # Counted from the last record (drought) with this workout in it: a
         # record here -- deload or not -- ends the drought, and a deload row
         # never adds to it.
-        since = sessions_since_pr(past + [row])
+        since = sessions_since_pr(by_exercise.get(row.exercise_id, []) + [row])
         entry['sessions_since_pr'] = since
         entry['verdict'] = _verdict(entry, since, is_deload, judged_best(row) is not None)
         exercises.append(entry)
-
-        if entry['verdict'] == 'stagniert':
-            suggested_weight = snap_to_stack(
-                _next_weight(weight, resolve_increment(row.weight_increment, row.is_unilateral)),
-                row.stack_kg, 'up')
-            # Topped out: on a machine whose real stops are known, snap_to_stack
-            # clamps a jump past the heaviest stop back down to that stop -- so a
-            # lifter already sitting on the top step gets suggested_weight ==
-            # stuck_at, the exact number the plateau is already stuck at. Without
-            # a stack (or one with room above the current weight) the jump is
-            # always strictly upward, so this never fires on that path -- it
-            # exists only for the one case where "go heavier" has no honest
-            # answer, and dropping the entry beats repeating a number.
-            if suggested_weight > weight:
-                advice.append({
-                    'exercise_id': row.exercise_id,
-                    'name': row.name,
-                    'stuck_at': weight,
-                    'sessions': since,
-                    'suggested_weight': suggested_weight,
-                })
 
     # One record per exercise. Grouped per EXERCISE, not per row: a session
     # that (rarely) logs the same exercise in two slots is one performance of
@@ -955,8 +932,11 @@ def session_report(current, history, comparable_session_volumes=()):
     for exercise_id, rows in current_by_exercise.items():
         lead = max(rows, key=lambda r: marks[r]['value'])
         mark = marks[lead]
+        # The set that made it, which the flare names ("aus 80 kg × 12").
+        weight, reps = record_set(lead, mark['value'])
         records.append({'kind': 'e1rm', 'name': lead.name, 'position': lead.position,
                         'exercise_id': exercise_id, 'value': mark['value'],
+                        'weight': weight, 'reps': reps,
                         'previous': mark['previous'], 'previous_at': mark['previous_at']})
 
     # By how much each beat the old one -- relative, so a heavy lift's +2 kg
@@ -967,27 +947,63 @@ def session_report(current, history, comparable_session_volumes=()):
         return (record['value'] - previous) / previous if previous > 0 else math.inf
 
     records.sort(key=lambda record: -_gain(record))
-    advice.sort(key=lambda item: -item['sessions'])
-
-    avg_total = ((sum(comparable_session_volumes) / len(comparable_session_volumes))
-                 if comparable_session_volumes else None)
 
     return {
         'exercises': exercises,
         'total_volume': round(total_volume, 1),
         'total_sets': total_sets,
-        'avg_total_volume': round(avg_total, 1) if avg_total else None,
-        'total_volume_delta_pct': (round((total_volume - avg_total) / avg_total * 100)
-                                   if avg_total else None),
         'records': records,
         'record_count': len(records),
-        'advice': advice,
         'is_deload': is_deload,
         # The percentage is a property of the session row, not of the
         # performed rows, so the route supplies it to the template directly.
         # Reported here as None so the shape is stable for any caller reading
         # the dict alone.
         'deload_pct': None,
+    }
+
+
+def is_full(counted, planned):
+    """Whether a workout was done in full, for the debrief's comparison
+    (D10): at least four in five of the sets it held (`planned`) counted.
+    None, a plan nobody knows, counts as full."""
+    return planned is None or 5 * counted >= 4 * planned
+
+
+def volume_comparison(own, earlier):
+    """The debrief's one comparison (D10): a workout's volume against the
+    mean of the two newest earlier workouts of its routine done in full.
+    A deload, a workout cut short (is_full) and one that moved nothing are
+    passed over, however far back that reaches -- the mean it replaced took
+    every other workout of the routine, cut short and later ones too, and
+    headlined an ordinary day "-17 %" (G-079).
+
+    `own` and each of `earlier` -- newest first, and read only as far as it
+    takes -- are {'id', 'started_at', 'volume', 'counted', 'planned',
+    'is_deload'}. None when this workout is itself a deload, cut short or
+    empty, or fewer than two earlier ones qualify: the page then has no
+    line. Else {'pct': the difference in whole percent, 'against': the two
+    as {'id', 'started_at', 'volume'}, newest first}.
+    """
+    def qualifies(workout):
+        return (not workout['is_deload'] and workout['volume'] > 0
+                and is_full(workout['counted'], workout['planned']))
+
+    if not qualifies(own):
+        return None
+    against = []
+    for workout in earlier:
+        if qualifies(workout):
+            against.append(workout)
+            if len(against) == 2:
+                break
+    if len(against) < 2:
+        return None
+    mean = (against[0]['volume'] + against[1]['volume']) / 2
+    return {
+        'pct': round((own['volume'] - mean) / mean * 100),
+        'against': [{'id': workout['id'], 'started_at': workout['started_at'],
+                     'volume': round(workout['volume'], 1)} for workout in against],
     }
 
 

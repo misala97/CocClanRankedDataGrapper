@@ -13,16 +13,16 @@ beforeEach(() => {
 const exercise = (over: Partial<FinishedExercise> = {}): FinishedExercise => ({
   exercise_id: 10, name: 'Bankdrücken', position: 1,
   sets: [[60, 8], [60, 8]], sets_display: '2 × 60 kg', volume: 960,
-  best_weight: 60, e1rm: 75, has_history: true, avg_volume: 900,
-  volume_delta_pct: 7, is_record: false,
-  sessions_since_pr: 2, verdict: null,
-  set_rows: [{ id: 501, weight: 60, reps: 8 }, { id: 502, weight: 60, reps: 8 }],
+  best_weight: 60, e1rm: 75, has_history: true, is_record: false, record: null,
+  sessions_since_pr: 2, verdict: null, next_sets: null,
+  set_rows: [{ id: 501, weight: 60, reps: 8, is_record: false },
+    { id: 502, weight: 60, reps: 8, is_record: false }],
   session_exercise_id: 90, notes: null, pain: false, best: null, ...over,
 })
 
 const record = (over: Partial<SessionRecord> = {}): SessionRecord => ({
   kind: 'e1rm', name: 'Bankdrücken', exercise_id: 10, position: 1,
-  value: 72.5, previous: 70, previous_at: '2026-07-20T10:00:00', ...over,
+  value: 72.5, weight: 60, reps: 8, previous: 70, previous_at: '2026-07-20T10:00:00', ...over,
 })
 
 const base: FinishedPayload = {
@@ -35,15 +35,14 @@ const base: FinishedPayload = {
   exercises: [exercise()],
   total_volume: 12345,
   total_sets: 2,
-  avg_total_volume: 11000,
-  total_volume_delta_pct: 7,
   records: [],
   record_count: 0,
-  advice: [],
+  comparison: null,
+  plan_moved_to: null,
+  plan_base: null,
   is_deload: false,
   deload_default_pct: 60,
   deload_applied: false,
-  previous_session: null,
   tick_states: ['done', 'done'],
   set_pace_seconds: null,
   unlogged: [],
@@ -61,6 +60,15 @@ const deload = (over: Partial<FinishedPayload> = {}): Partial<FinishedPayload> =
   is_deload: true, ...over,
 })
 
+const empty: Partial<FinishedPayload> = { total_sets: 0, total_volume: 0, exercises: [], tick_states: [] }
+
+/** Dates in a sentence carry their year only when it is not this one. */
+const inSeptember2026 = () => {
+  vi.useFakeTimers({ toFake: ['Date'] })
+  vi.setSystemTime(new Date('2026-09-25T12:00:00Z'))
+}
+afterEach(() => { vi.useRealTimers() })
+
 /**
  * The markup half of the finished-page tests that used to live in the Python
  * suite: those now assert on the payload the server embeds, and the rendering
@@ -70,8 +78,9 @@ describe('FinishedPage', () => {
   it('heads with the session, its date and its duration', () => {
     mount()
     expect(screen.getByRole('heading', { level: 1 })).toHaveTextContent('Push Day')
-    // Weekday first, then the date once -- the name often embeds one already.
-    expect(screen.getByText(/So · 09\.08\.2026 · 65 Minuten/)).toBeInTheDocument()
+    // The weekday leads the date, which is printed once -- the name often
+    // embeds one already.
+    expect(screen.getByText('So 09.08.2026 · 65 Minuten')).toBeInTheDocument()
     expect(screen.queryByText(/Automatisch beendet/)).not.toBeInTheDocument()
   })
 
@@ -82,50 +91,78 @@ describe('FinishedPage', () => {
       .toBeInTheDocument()
   })
 
-  describe('the verdict', () => {
-    it('leads with records when there are any', () => {
-      mount({ records: [record()], record_count: 1 })
-      expect(screen.getByText('1 neuer Rekord.')).toBeInTheDocument()
-      mount({ records: [record(), record({ name: 'Dips', exercise_id: 11 })], record_count: 2 })
-      expect(screen.getByText('2 neue Rekorde.')).toBeInTheDocument()
+  it('labels a deload in the header, with its percentage only when applied', () => {
+    const { container, unmount } = mount({ ...deload(), deload_applied: true })
+    expect(container.querySelector('.vtag--deload')).toHaveTextContent('Deload 70 %')
+    unmount()
+    const later = mount(deload())
+    expect(later.container.querySelector('.vtag--deload')).toHaveTextContent(/^Deload$/)
+  })
+
+  describe('what was done', () => {
+    it('leads with the volume, the counts beside it', () => {
+      const { container } = mount()
+      expect(screen.getByText('12.345')).toBeInTheDocument()
+      expect(container.querySelector('.grew__side')).toHaveTextContent(/^2 Sätze1 Übung$/)
     })
 
-    it('says an empty workout does not count', () => {
-      mount({ total_sets: 0, exercises: [], tick_states: [] })
-      expect(screen.getByText(/Kein Satz erfasst/)).toBeInTheDocument()
+    it('counts one set as one (G-011)', () => {
+      const { container } = mount({ total_sets: 1, tick_states: ['done'] })
+      expect(container.querySelector('.grew__side')).toHaveTextContent(/^1 Satz1 Übung$/)
+      expect(screen.getByRole('img')).toHaveAccessibleName('1 Satz erledigt')
     })
 
-    it('reads a deload as deliberate rather than as a shortfall', () => {
-      // Ordering matters: without this branch before every volume branch, a
-      // deload that worked exactly as intended reads as a bad day.
-      mount({ ...deload(), deload_applied: true, total_volume_delta_pct: -40 })
-      expect(screen.getByText('Deload — 70 %. Bewusst leichter.')).toBeInTheDocument()
+    it('says an empty workout does not count, and no volume', () => {
+      mount(empty)
+      expect(screen.getByText('Kein Satz erfasst — dieses Workout zählt nicht mit.'))
+        .toBeInTheDocument()
+      expect(screen.queryByText('kg bewegt')).not.toBeInTheDocument()
     })
 
-    it('drops the percentage when the weights were never scaled', () => {
-      mount({ ...deload(), deload_applied: false })
-      expect(screen.getByText('Als Deload markiert. Bewusst leichter.')).toBeInTheDocument()
+    it('keeps no headline verdict, tiles, mean or last time (D10)', () => {
+      // "N neue Rekorde.", the three tiles, "+13 % zum Schnitt dieses
+      // Workouts" and "Letztes Mal … · Schnitt …" are gone: one line compares.
+      const { container } = mount({ records: [record()], record_count: 1 })
+      expect(screen.queryByText(/neuer Rekord\./)).not.toBeInTheDocument()
+      expect(container.querySelector('.band, .verdict, .finished__prev')).toBeNull()
+      expect(screen.queryByText(/Letztes Mal|dieses Workouts/)).not.toBeInTheDocument()
+    })
+  })
+
+  describe('the one comparison (D10)', () => {
+    const against = [
+      { id: 71, started_at: '2026-08-27T16:00:00', volume: 10218 },
+      { id: 67, started_at: '2026-08-23T16:00:00', volume: 10498 },
+    ]
+
+    it('names both workouts it is measured against, newest first, a tap away', () => {
+      inSeptember2026()
+      mount({ comparison: { pct: 2, against } })
+      const line = screen.getByText(/zum Schnitt von/)
+      expect(line).toHaveTextContent('+2 % zum Schnitt von Do 27.08. und So 23.08.')
+      const links = within(line).getAllByRole('link')
+      expect(links.map((link) => link.getAttribute('href')))
+        .toEqual(['/gym/session/71', '/gym/session/67'])
     })
 
-    it('has a ±15 % dead band, not ±5 %', () => {
-      // At ±5 % an ordinary Tuesday was headlined in 28px display type.
-      mount({ total_volume_delta_pct: 12 })
-      expect(screen.getByText('Im gewohnten Rahmen.')).toBeInTheDocument()
-      mount({ total_volume_delta_pct: 18 })
-      expect(screen.getByText('+18 % über deinem Schnitt.')).toBeInTheDocument()
+    it('says less with a true minus, and the same as ±0', () => {
+      mount({ comparison: { pct: -17, against } })
+      expect(screen.getByText('−17 %')).toBeInTheDocument()
+      mount({ comparison: { pct: 0, against } })
+      expect(screen.getByText('±0 %')).toBeInTheDocument()
     })
 
-    it('states the low comparison rather than judging it', () => {
-      mount({ total_volume_delta_pct: -22 })
-      expect(screen.getByText('22 % unter deinem Schnitt für dieses Workout.'))
+    it('says why a deload has none', () => {
+      mount(deload())
+      expect(screen.getByText('Deload: bewusst leichter, darum ohne Vergleich.'))
         .toBeInTheDocument()
     })
 
-    it('falls back to the set count with nothing to compare against', () => {
-      mount({ total_volume_delta_pct: null, avg_total_volume: null })
-      expect(screen.getByText('2 Sätze erledigt.')).toBeInTheDocument()
-      mount({ total_volume_delta_pct: null, avg_total_volume: null, total_sets: 1 })
-      expect(screen.getByText('1 Satz erledigt.')).toBeInTheDocument()
+    it('is silent without one', () => {
+      mount()
+      expect(screen.queryByText(/zum Schnitt|ohne Vergleich/)).not.toBeInTheDocument()
+      mount({ ...deload(), ...empty })
+      expect(screen.queryByText(/ohne Vergleich/)).not.toBeInTheDocument()
     })
   })
 
@@ -145,61 +182,21 @@ describe('FinishedPage', () => {
     })
   })
 
-  describe('the volume block', () => {
-    it('names the baseline in words', () => {
-      mount()
-      expect(screen.getByText('12.345')).toBeInTheDocument()
-      expect(screen.getByText('+7 % zum Schnitt dieses Workouts')).toBeInTheDocument()
-    })
-
-    it('says nothing about the average on a deload', () => {
-      // The pill and the verdict have both already said it, and the long
-      // string wrapped "kg bewegt" onto two lines beside the figure.
-      mount({ ...deload(), total_volume_delta_pct: -40 })
-      expect(screen.queryByText(/zum Schnitt/)).not.toBeInTheDocument()
-    })
-
-    it('shows the mean it quotes a percentage of', () => {
-      // "+34 % ggü. Ø" was a percentage of a number the reader could not see.
-      const { container } = mount()
-      expect(container.querySelector('.finished__prev'))
-        .toHaveTextContent('Schnitt dieses Workouts 11.000 kg')
-    })
-
-    it('puts last time next to the mean', () => {
-      mount({
-        previous_session: { id: 7, started_at: '2026-08-02T16:00:00', volume: 11500 },
-      })
-      const line = screen.getByText(/Letztes Mal/)
-      expect(line).toHaveTextContent('11.500 kg am 02.08.')
-      expect(line).toHaveTextContent('Schnitt 11.000 kg')
-      expect(within(line).getByRole('link')).toHaveAttribute('href', '/gym/session/7')
-    })
-
-    it('is suppressed entirely at zero sets', () => {
-      // The verdict directly above says this workout does not count, and the
-      // page then scored it "-100 %" over a band of three zeroes.
-      mount({ total_sets: 0, exercises: [], tick_states: [] })
-      expect(screen.queryByText('kg bewegt')).not.toBeInTheDocument()
-      expect(screen.queryByText(/zum Schnitt/)).not.toBeInTheDocument()
-    })
-  })
-
   describe('records', () => {
-    it('flares exactly one, however many there are', () => {
-      // It used to loop: six records meant six identical full-bleed gold slabs.
+    it('flares exactly one, however many there are, with the set that made it', () => {
+      inSeptember2026()
       mount({
         records: [record(), record({ name: 'Dips', exercise_id: 11 }),
           record({ name: 'Rudern', exercise_id: 12 })],
         record_count: 3,
       })
-      expect(screen.getAllByText(/Neuer Rekord/)).toHaveLength(1)
-      // Named in full once, its first use on the page; 1RM after it (D16).
-      expect(screen.getByText('Neuer Rekord · geschätztes Maximum (1RM)')).toBeInTheDocument()
-      // The rest become quiet rows.
-      const others = screen.getByRole('region', { name: 'Weitere Rekorde' })
-      expect(within(others).getAllByRole('link')).toHaveLength(2)
-      expect(within(others).getAllByText(/^1RM · vorher /)).toHaveLength(2)
+      expect(screen.getAllByText('Neuer Rekord')).toHaveLength(1)
+      expect(screen.getByText('72,5')).toBeInTheDocument()
+      // Named in full once, its first use on the page (D16); no position.
+      expect(screen.getByText(
+        'geschätztes Maximum (1RM), aus 60,0 kg × 8 · vorher 70,0 kg am 20.07.')).toBeInTheDocument()
+      // The rest say themselves on their own rows, not in a list of their own.
+      expect(screen.queryByRole('region', { name: 'Weitere Rekorde' })).toBeNull()
     })
 
     it('celebrates on arrival, not on every later visit', () => {
@@ -208,52 +205,210 @@ describe('FinishedPage', () => {
       const fresh = mount({ records: [record()], record_count: 1, just_finished: true })
       expect(fresh.container.querySelector('.record-flare')).toHaveClass('is-fresh')
     })
-
-    it('states what the record beat', () => {
-      mount({ records: [record()], record_count: 1 })
-      expect(screen.getByText('72,5')).toBeInTheDocument()
-      expect(screen.getByText(/vorher 70,0 kg · 20\.07\.2026 · als 1\. Übung/))
-        .toBeInTheDocument()
-    })
   })
 
-  it('prescribes a heavier weight for a plateau', () => {
-    mount({
-      advice: [{
-        exercise_id: 10, name: 'Bankdrücken', stuck_at: 63.5,
-        sessions: 3, suggested_weight: 68,
-      }],
-    })
-    const line = screen.getByText(/steht seit 3 Workouts auf/)
-    expect(line).toHaveTextContent('63,5 kg — auf 68,0 kg gehen, notfalls 2 Wdh. weniger.')
+  it('prescribes nothing beside the plan', () => {
+    // The advice box's "auf 68,0 kg gehen" was a second answer to what to
+    // lift, and could disagree with "Nächstes Mal".
+    mount({ exercises: [exercise({ verdict: 'stagniert', sessions_since_pr: 4 })] })
+    expect(screen.queryByText(/gehen, notfalls/)).not.toBeInTheDocument()
   })
 
-  describe('the per-exercise list', () => {
-    it('tags each verdict', () => {
-      mount({
-        exercises: [
-          exercise({ position: 1, verdict: 'rekord' }),
-          exercise({ position: 2, verdict: 'stagniert', sessions_since_pr: 4 }),
-          exercise({ position: 3, verdict: 'steigend', volume_delta_pct: 12 }),
-          exercise({ position: 4, verdict: 'neu' }),
-        ],
+  describe('the exercise rows', () => {
+    const rows = () => screen.getByRole('region', { name: 'Übungen' })
+
+    it('stands next time under what was done, set by set (D10)', () => {
+      mount({ exercises: [exercise({
+        set_rows: [{ id: 501, weight: 27.5, reps: 10, is_record: false },
+          { id: 502, weight: 27.5, reps: 9, is_record: false },
+          { id: 503, weight: 27.5, reps: 8, is_record: false }],
+        next_sets: [{ weight: 27.5, reps: 11 }, { weight: 27.5, reps: 10 }, { weight: 27.5, reps: 9 }],
+      })] })
+      const steps = rows().querySelector('.steps')!
+      expect(steps).not.toHaveClass('steps--flow')
+      expect(steps).toHaveTextContent('Geschafft27,5kg×10·9·8Nächstes Mal27,5kg×11·10·9')
+      expect((steps as HTMLElement).style.getPropertyValue('--n')).toBe('3')
+      expect(steps.querySelectorAll('.steps__c--next')).toHaveLength(6)
+    })
+
+    it('stands a longer or a shorter plan under what was done, too', () => {
+      const done = (reps: number[]) => reps.map((count, i) =>
+        ({ id: 510 + i, weight: 60, reps: count, is_record: i === 0 }))
+      const next = (reps: number[]) => reps.map((count) => ({ weight: 60, reps: count }))
+      // The routine holds a set more than was done: the last one repeated.
+      const longer = mount({ exercises: [exercise({
+        set_rows: done([10, 9, 8]), next_sets: next([10, 10, 9, 9]) })] })
+      const steps = longer.container.querySelector('.steps') as HTMLElement
+      expect(steps).not.toHaveClass('steps--flow')
+      expect(steps.style.getPropertyValue('--n')).toBe('4')
+      // The record set's reps are gold in the grid too.
+      expect(steps.querySelectorAll('.is-record')).toHaveLength(1)
+      longer.unmount()
+      // A set fewer: the routine holds three now.
+      const shorter = mount({ exercises: [exercise({
+        set_rows: done([10, 9, 8, 8]), next_sets: next([11, 10, 9]) })] })
+      expect(shorter.container.querySelector('.steps')).not.toHaveClass('steps--flow')
+    })
+
+    it('lets set under set run on where it is wider than its row, until the row is wide enough', () => {
+      // A pyramid's three weights at 390 px: a grid cannot wrap, and it
+      // pushed the page sideways. jsdom lays nothing out; the widths are set.
+      const observers = new Set<() => void>()
+      vi.stubGlobal('ResizeObserver', class {
+        constructor(private readonly notify: () => void) {}
+        observe() { observers.add(this.notify) }
+        disconnect() { observers.delete(this.notify) }
       })
-      expect(screen.getByText('Rekord')).toBeInTheDocument()
-      expect(screen.getByText('Seit 4 Workouts ohne Rekord')).toBeInTheDocument()
-      expect(screen.getByText('+12 % Vol.')).toBeInTheDocument()
-      expect(screen.getByText('Erste Aufzeichnung')).toBeInTheDocument()
+      let room = 330
+      const needs = vi.spyOn(Element.prototype, 'scrollWidth', 'get').mockImplementation(
+        function (this: Element) { return this.classList.contains('steps--flow') ? room : 420 })
+      const has = vi.spyOn(Element.prototype, 'clientWidth', 'get').mockImplementation(() => room)
+      try {
+        mount({ exercises: [exercise({
+          next_sets: [{ weight: 60, reps: 9 }, { weight: 60, reps: 9 }] })] })
+        expect(rows().querySelector('.steps')).toHaveClass('steps--flow')
+        room = 480
+        act(() => { observers.forEach((notify) => notify()) })
+        expect(rows().querySelector('.steps')).not.toHaveClass('steps--flow')
+      } finally {
+        needs.mockRestore()
+        has.mockRestore()
+        vi.unstubAllGlobals()
+      }
     })
 
-    it('carries no tag on a deload, where every verdict is null', () => {
-      mount(deload())
-      const list = screen.getByRole('region', { name: 'Nach Übung' })
-      expect(within(list).queryByText('Rekord')).not.toBeInTheDocument()
+    it('lets the lines run on where the weights change at other places', () => {
+      mount({ exercises: [exercise({
+        next_sets: [{ weight: 62.5, reps: 6 }, { weight: 60, reps: 9 }],
+      })] })
+      expect(rows().querySelector('.steps')).toHaveClass('steps--flow')
+      expect(rows().querySelector('.steps')).toHaveTextContent(
+        'Geschafft60,0kg×8·8Nächstes Mal62,5kg×6·60,0kg×9')
     })
 
-    it('says so when nothing was completed', () => {
-      mount({ exercises: [], total_sets: 0, tick_states: [] })
-      expect(screen.getByText('Keine erledigten Sätze in diesem Workout.'))
+    it("lets a deload's lines run on: its plan comes from the workout before", () => {
+      mount({ ...deload(), exercises: [exercise({
+        next_sets: [{ weight: 80, reps: 9 }, { weight: 80, reps: 9 }],
+      })] })
+      expect(rows().querySelector('.steps')).toHaveClass('steps--flow')
+    })
+
+    it('shows only what was done without a plan', () => {
+      mount()
+      expect(rows().querySelector('.steps')).toBeNull()
+      expect(rows().querySelector('.steps__done')).toHaveTextContent('60,0kg×8·8')
+      expect(within(rows()).queryByText('Nächstes Mal')).not.toBeInTheDocument()
+    })
+
+    it('washes the reps of a set that beat the record gold', () => {
+      mount({ exercises: [exercise({
+        set_rows: [{ id: 501, weight: 60, reps: 8, is_record: false },
+          { id: 502, weight: 60, reps: 10, is_record: true }],
+      })] })
+      const gold = rows().querySelectorAll('.is-record')
+      expect(gold).toHaveLength(1)
+      expect(gold[0]).toHaveTextContent('10')
+    })
+
+    it('says what a record beat, and chips it', () => {
+      mount({ exercises: [exercise({ is_record: true, verdict: 'rekord',
+                                     record: { value: 71.5, previous: 68.3 } })] })
+      expect(within(rows()).getByText(/^Rekord: 1RM/))
+        .toHaveTextContent('Rekord: 1RM 71,5 kg, vorher 68,3 kg')
+      expect(rows().querySelector('.vtag--record')).toHaveTextContent('Rekord')
+    })
+
+    it('says how long a lift has stood still, and when it is new', () => {
+      mount({ exercises: [
+        exercise({ position: 1, verdict: 'stagniert', sessions_since_pr: 4 }),
+        exercise({ position: 2, exercise_id: 11, session_exercise_id: 91, verdict: 'neu' }),
+      ] })
+      expect(within(rows()).getByText('Seit 4 Workouts ohne Rekord')).toBeInTheDocument()
+      expect(within(rows()).getByText('Zum ersten Mal')).toBeInTheDocument()
+      // The one chip left is "Rekord" (D10).
+      expect(rows().querySelector('.vtag')).toBeNull()
+    })
+
+    const hit = (id: number) => exercise({ exercise_id: id, session_exercise_id: id,
+      is_record: true, verdict: 'rekord', record: { value: 80, previous: 75 } })
+
+    it('says an all-record workout once instead of in every chip', () => {
+      mount({ exercises: [hit(1), hit(2), hit(3)] })
+      expect(screen.getByText('Alle 3 Übungen mit Rekord.')).toBeInTheDocument()
+      expect(rows().querySelector('.vtag--record')).toBeNull()
+      expect(within(rows()).getAllByText(/^Rekord: 1RM/)).toHaveLength(3)
+    })
+
+    it('chips each record where not every row set one', () => {
+      mount({ exercises: [hit(1), hit(2), exercise({ exercise_id: 3, session_exercise_id: 3 })] })
+      expect(screen.queryByText(/Übungen mit Rekord\./)).not.toBeInTheDocument()
+      expect(rows().querySelectorAll('.vtag--record')).toHaveLength(2)
+    })
+
+    it('points to the newer workout the plan moved on to', () => {
+      inSeptember2026()
+      mount({ plan_moved_to: { id: 12686, started_at: '2026-09-23T16:00:00' } })
+      const pointer = within(rows()).getByRole('link', { name: /Der Plan fürs nächste Mal/ })
+      expect(pointer).toHaveTextContent(
+        'Der Plan fürs nächste Mal steht jetzt beim Workout vom Mi 23.09.')
+      expect(pointer).toHaveAttribute('href', '/gym/session/12686')
+    })
+
+    it('points only the rest there while a row still plans here', () => {
+      // A lift the newer workout left out: its next live card builds on
+      // this row, so its plan stays, and the pointer speaks for the others.
+      inSeptember2026()
+      mount({ plan_moved_to: { id: 12686, started_at: '2026-09-23T16:00:00' },
+              exercises: [exercise({ next_sets: [{ weight: 80, reps: 9 }] }),
+                          exercise({ exercise_id: 2, session_exercise_id: 2 })] })
+      expect(within(rows()).getByRole('link', { name: /steht jetzt beim Workout/ }))
+        .toHaveTextContent(/^Der Plan für die übrigen Übungen steht jetzt beim Workout vom Mi 23\.09\.$/)
+      expect(within(rows()).getAllByText('Nächstes Mal')).toHaveLength(1)
+    })
+
+    it("names the workout a deload's plan builds on", () => {
+      inSeptember2026()
+      const planned = [exercise({ next_sets: [{ weight: 80, reps: 9 }] })]
+      mount({ ...deload(), exercises: planned,
+              plan_base: { id: 5, started_at: '2026-07-24T16:00:00' } })
+      expect(screen.getByText(
+        'Nächstes Mal wieder mit deinen Arbeitsgewichten, aufgebaut auf Fr 24.07.'))
         .toBeInTheDocument()
+      // A date with its year ends the sentence with a stop of its own.
+      mount({ ...deload(), exercises: planned,
+              plan_base: { id: 4, started_at: '2025-07-24T16:00:00' } })
+      expect(screen.getByText(/aufgebaut auf Do 24\.07\.2025\.$/)).toBeInTheDocument()
+      mount({ ...deload(), exercises: planned })
+      expect(screen.getByText('Nächstes Mal wieder mit deinen Arbeitsgewichten, '
+        + 'aufgebaut auf dem jeweils letzten Workout davor.')).toBeInTheDocument()
+    })
+
+    it("keeps a deload's note under the pointer while a row still plans", () => {
+      inSeptember2026()
+      mount({ ...deload(), plan_moved_to: { id: 12686, started_at: '2026-09-23T16:00:00' },
+              exercises: [exercise({ next_sets: [{ weight: 80, reps: 9 }] })],
+              plan_base: { id: 5, started_at: '2026-07-24T16:00:00' } })
+      expect(within(rows()).getByRole('link', { name: /steht jetzt beim Workout/ }))
+        .toBeInTheDocument()
+      expect(screen.getByText(
+        'Nächstes Mal wieder mit deinen Arbeitsgewichten, aufgebaut auf Fr 24.07.'))
+        .toBeInTheDocument()
+    })
+
+    it('says nothing of next time on a deload without a plan', () => {
+      mount(deload())
+      expect(screen.queryByText(/Arbeitsgewichten/)).not.toBeInTheDocument()
+    })
+
+    it('opens the sheet for a workout with nothing logged, too', async () => {
+      mount({ ...empty, unlogged: [{ session_exercise_id: 91, name: 'Butterfly', best: null }] })
+      await userEvent.click(screen.getByRole('button', { name: /Sätze & Notizen/ }))
+      expect(within(screen.getByRole('dialog')).getByText('Butterfly')).toBeInTheDocument()
+    })
+
+    it('leaves the list out when there is nothing in it', () => {
+      mount(empty)
+      expect(screen.queryByRole('region', { name: 'Übungen' })).toBeNull()
     })
   })
 
@@ -496,7 +651,7 @@ describe('FinishedPage', () => {
     mount({ exercises: [
       exercise({ session_exercise_id: 90 }),
       exercise({ exercise_id: 11, name: 'Schrägbankdrücken', session_exercise_id: 91,
-                 set_rows: [{ id: 503, weight: 50, reps: 8 }] }),
+                 set_rows: [{ id: 503, weight: 50, reps: 8, is_record: false }] }),
     ] })
     expect(screen.getAllByText('Bankdrücken').length).toBeGreaterThan(0)
     expect(screen.getAllByText('Schrägbankdrücken').length).toBeGreaterThan(0)
@@ -508,9 +663,32 @@ describe('FinishedPage', () => {
     mount()
     const del = screen.getByRole('button', { name: 'Workout löschen' })
     expect(del).toHaveClass('quiet-acts__btn--danger')
-    // Not one of the two ways out of this screen.
-    expect(screen.getByRole('link', { name: 'Zum Start' })).toHaveAttribute('href', '/gym')
-    expect(screen.getByRole('link', { name: 'Verlauf' })).toHaveAttribute('href', '/gym/verlauf')
+  })
+
+  it('goes on to Start after finishing, and back to Verlauf when opened again (G-045)', () => {
+    // The one way on; the header's back arrow is the other, to Verlauf.
+    const outs = () => within(document.querySelector('.outs') as HTMLElement)
+    const { unmount } = mount({ just_finished: true })
+    expect(outs().getAllByRole('link')).toHaveLength(1)
+    expect(outs().getByRole('link', { name: 'Zum Start' })).toHaveAttribute('href', '/gym')
+    unmount()
+    mount()
+    expect(outs().getAllByRole('link')).toHaveLength(1)
+    expect(outs().getByRole('link', { name: 'Zurück zum Verlauf' }))
+      .toHaveAttribute('href', '/gym/verlauf')
+    expect(screen.queryByRole('link', { name: 'Verlauf' })).toBeNull()
+  })
+
+  it('puts the routine update first among the quiet actions on a later visit', () => {
+    mount({
+      session: { ...base.session, template_id: 3, template_name: 'Pull' },
+      template_exercises: ['Bizepscurls', 'Hammercurls'],
+      template_next_exercises: ['Hammercurls', 'Bizepscurls'],
+    })
+    const quiet = document.querySelector('.quiet-acts')!
+    expect(within(quiet as HTMLElement).getAllByRole('button').map((b) => b.textContent))
+      .toEqual(['Routine „Pull“ aktualisieren …', 'Körpergewicht & Notiz',
+        'Als Deload markieren', 'Workout löschen'])
   })
 
   it.each([false, true])(
@@ -571,7 +749,8 @@ describe('saving without a reload', () => {
 
   it('posts the correction and re-renders from the answer, sheet still open', async () => {
     const fresh = exercise({ sets_display: '2 × 65 kg', set_rows: [
-      { id: 501, weight: 65, reps: 8 }, { id: 502, weight: 60, reps: 8 },
+      { id: 501, weight: 65, reps: 8, is_record: false },
+      { id: 502, weight: 60, reps: 8, is_record: false },
     ] })
     // just_finished true in the ANSWER: the client must overwrite it with its
     // own, because a POST carries no ?just_finished and the flare belongs to
@@ -589,7 +768,7 @@ describe('saving without a reload', () => {
     expect((init.body as FormData).get('weight')).toBe('60')
 
     // Re-rendered from the answer...
-    expect(screen.getByText('2 × 65 kg')).toBeInTheDocument()
+    expect(document.querySelector('.steps__done')).toHaveTextContent('65,0kg×8·60,0kg×8')
     // ...with the sheet still open and the visit's flag preserved.
     expect(screen.getByRole('dialog')).toBeInTheDocument()
     expect(screen.getByText('Dieses Workout als Routine speichern?')).toBeInTheDocument()
@@ -625,14 +804,14 @@ describe('saving without a reload', () => {
     vi.unstubAllGlobals()
   })
 
-  it('re-renders the verdict when the deload toggle answers', async () => {
+  it('re-renders as a deload when the deload toggle answers', async () => {
     vi.stubGlobal('fetch', fetchPayload({
       session: { ...base.session, is_deload: true, deload_pct: 60 },
       is_deload: true,
     }))
     mount()
     await userEvent.click(screen.getByRole('button', { name: 'Als Deload markieren' }))
-    expect(await screen.findByText('Als Deload markiert. Bewusst leichter.'))
+    expect(await screen.findByText('Deload: bewusst leichter, darum ohne Vergleich.'))
       .toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Deload-Markierung entfernen' }))
       .toBeInTheDocument()
@@ -657,7 +836,7 @@ describe('saving without a reload', () => {
     useUndo.setState({ pending: null, timer: null })
     const fetchMock = fetchPayload({
       exercises: [exercise({ sets_display: '1 × 60 kg',
-        set_rows: [{ id: 502, weight: 60, reps: 8 }] })],
+        set_rows: [{ id: 502, weight: 60, reps: 8, is_record: false }] })],
       total_sets: 1,
     })
     vi.stubGlobal('fetch', fetchMock)
@@ -673,7 +852,8 @@ describe('saving without a reload', () => {
     useUndo.getState().commitNow()
     const [url] = fetchMock.mock.calls[0] as unknown as [string]
     expect(url).toBe('/gym/set/501/delete')
-    expect(await screen.findByText('1 × 60 kg')).toBeInTheDocument()
+    await waitFor(() => expect(document.querySelectorAll('.steps__done .steps__set'))
+      .toHaveLength(1))
     vi.unstubAllGlobals()
   })
 
