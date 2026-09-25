@@ -1,0 +1,178 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Grow a Tree in Riso</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bowlby+One&family=DM+Mono:wght@400;500&display=swap">
+<style>
+  :root {
+    --desk: #e7e4dc;
+    --dot: rgba(61, 85, 136, 0.15);
+    --dot-off: rgba(255, 72, 176, 0.1);
+    --ink: #1e2640;
+    --muted: #485170;
+    --pink: #ff48b0;
+    --sticker: #ffe800;
+    --sticker-ink: #26345a;
+    --button: #fffdf6;
+    --focus: #1d63c4;
+    --lift: 0 22px 44px -22px rgba(30, 38, 64, 0.55), 0 2px 6px rgba(30, 38, 64, 0.2);
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      color-scheme: dark;
+      --desk: #141827;
+      --dot: rgba(94, 200, 229, 0.11);
+      --dot-off: rgba(255, 72, 176, 0.09);
+      --ink: #e8eaf3;
+      --muted: #a9b0c8;
+      --button: #1f2438;
+      --focus: #8cc4ff;
+      --lift: 0 22px 44px -18px rgba(0, 0, 0, 0.8), 0 2px 6px rgba(0, 0, 0, 0.5);
+    }
+  }
+  :root[data-theme="dark"] {
+    color-scheme: dark;
+    --desk: #141827;
+    --dot: rgba(94, 200, 229, 0.11);
+    --dot-off: rgba(255, 72, 176, 0.09);
+    --ink: #e8eaf3;
+    --muted: #a9b0c8;
+    --button: #1f2438;
+    --focus: #8cc4ff;
+    --lift: 0 22px 44px -18px rgba(0, 0, 0, 0.8), 0 2px 6px rgba(0, 0, 0, 0.5);
+  }
+  [hidden] { display: none !important; }
+  html, body { height: 100%; }
+  body {
+    margin: 0;
+    color: var(--ink);
+    background-color: var(--desk);
+    /* two halftone screens, printed slightly out of register */
+    background-image:
+      radial-gradient(var(--dot) 1.2px, transparent 1.5px),
+      radial-gradient(var(--dot-off) 1.2px, transparent 1.5px);
+    background-size: 10px 10px, 10px 10px;
+    background-position: 0 0, 4px 6px;
+    font-family: "DM Mono", "Courier New", monospace;
+  }
+  .desk {
+    box-sizing: border-box;
+    min-height: 100%;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 16px;
+    padding-inline: 16px;
+    padding-block: 20px;
+  }
+  .frame, .bar {
+    width: min(100%, 1280px, calc((100vh - 150px) * 16 / 9));
+    width: min(100%, 1280px, calc((100dvh - 150px) * 16 / 9));
+    max-width: 100%;
+  }
+  .frame { position: relative; aspect-ratio: 16 / 9; container-type: inline-size; }
+  #stage {
+    display: block;
+    width: 100%;
+    height: 100%;
+    background: #f3eee2;
+    box-shadow: var(--lift);
+    cursor: pointer;
+  }
+  .tag {
+    position: absolute;
+    left: 50%;
+    top: 50%;
+    display: grid;
+    justify-items: center;
+    gap: 4px;
+    padding: 14px 30px 12px;
+    padding: clamp(7px, 1.2cqw, 14px) clamp(14px, 2.6cqw, 30px) clamp(6px, 1cqw, 12px);
+    border: 0;
+    border-radius: 999px;
+    background: var(--sticker);
+    color: var(--sticker-ink);
+    box-shadow: 6px 6px 0 var(--pink);
+    font: inherit;
+    cursor: pointer;
+    transform: translate(-50%, -50%) rotate(-4deg);
+    transition: transform 160ms ease, box-shadow 160ms ease;
+  }
+  .tag:hover { transform: translate(-50%, -50%) rotate(-2deg) scale(1.04); box-shadow: 8px 8px 0 var(--pink); }
+  .tag .label {
+    font-family: "Bowlby One", "Arial Black", Impact, sans-serif;
+    font-size: clamp(30px, 5vw, 46px);
+    font-size: clamp(20px, 3.6cqw, 46px);
+    line-height: 1;
+    letter-spacing: 0.02em;
+    text-shadow: 2px 2px 0 rgba(94, 200, 229, 0.9);
+  }
+  .tag .sub {
+    font-size: clamp(13px, 1.6vw, 15px);
+    font-size: clamp(10px, 1.25cqw, 15px);
+    font-weight: 500;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    white-space: nowrap;
+  }
+  .bar {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px 24px;
+  }
+  .caption {
+    margin: 0;
+    max-width: 62ch;
+    color: var(--muted);
+    font-size: 13px;
+    line-height: 1.5;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    text-wrap: balance;
+  }
+  .controls { display: flex; gap: 10px; }
+  .controls button {
+    padding: 9px 14px 8px;
+    border: 2px solid var(--ink);
+    border-radius: 0;
+    background: var(--button);
+    color: var(--ink);
+    box-shadow: 3px 3px 0 var(--pink);
+    font: 500 13px/1 "DM Mono", "Courier New", monospace;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    cursor: pointer;
+  }
+  .controls button:active { transform: translate(2px, 2px); box-shadow: 1px 1px 0 var(--pink); }
+  button:focus-visible, #stage:focus-visible { outline: 3px solid var(--focus); outline-offset: 3px; }
+  @media (prefers-reduced-motion: reduce) {
+    .tag, .tag:hover { transition: none; transform: translate(-50%, -50%) rotate(-4deg); }
+  }
+</style>
+</head>
+<body>
+<main class="desk">
+  <div class="frame">
+    <canvas id="stage" width="1280" height="720" role="img"
+      aria-label="Riso-printed animation in pink, aqua, yellow and blue. An acorn drops into the soil, gets watered, wakes up when the sun rises, sprouts, and grows through twenty years into an apple tree, with a big numbered step for each stage."></canvas>
+    <button id="play" class="tag" type="button"><span class="label">Play</span><span class="sub">10 seconds · sound on</span></button>
+  </div>
+  <div class="bar">
+    <p class="caption">Printed live in four riso inks: fluorescent pink, aqua, yellow and federal blue. Every dot and every note comes from plain JavaScript.</p>
+    <div class="controls">
+      <button id="again" type="button">Play</button>
+      <button id="sound" type="button" aria-pressed="true">Sound: on</button>
+    </div>
+  </div>
+  <noscript><p class="caption">This animation is drawn by JavaScript. Turn it on to watch it print.</p></noscript>
+</main>
+<script src="grow-a-tree-riso.js"></script>
+</body>
+</html>
