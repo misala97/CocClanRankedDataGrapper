@@ -39,6 +39,9 @@ export function ExerciseDetailPage({ payload }: Props) {
   useEffect(() => { setP(payload) }, [payload])
   const id = p.exercise.id
   const count = p.table.length
+  // One row per slot: an exercise done at two positions in one workout is
+  // two rows here and still one workout (D16).
+  const workouts = new Set(p.table.map((row) => row.session_id)).size
   const [editing, setEditing] = useState(false)
 
   // Arrived from an exception under "Deine Pause": open on the settings, and
@@ -114,14 +117,19 @@ export function ExerciseDetailPage({ payload }: Props) {
 
               <section className="sec sec--chart" aria-labelledby="sec-chart">
                 <div className="sec__head">
-                  <h2 className="label" id="sec-chart">Verlauf e1RM</h2>
+                  {/* The band's tile names the 1RM in full first (D16); with no
+                      set of 1 to 12 reps there is no tile, and the chart below
+                      still plots an estimate, so the heading names it. */}
+                  <h2 className="label" id="sec-chart">
+                    {p.pr_e1rm !== null ? 'Verlauf 1RM' : 'Verlauf des geschätzten Maximums (1RM)'}
+                  </h2>
                   <span className="sec__sp" />
                   {/* The count is scoped, so it says what it is counting. It
-                      read "10 Einheiten" under a chart already filtered to one
+                      read "10 Workouts" under a chart already filtered to one
                       slot. */}
                   <span className="label">
                     {(p.selected_position !== null ? `Pos. ${p.selected_position} · ` : '')
-                      + `${count} ${count === 1 ? 'Einheit' : 'Einheiten'}`}
+                      + `${workouts} ${workouts === 1 ? 'Workout' : 'Workouts'}`}
                   </span>
                 </div>
 
@@ -154,7 +162,7 @@ export function ExerciseDetailPage({ payload }: Props) {
                       <p className="exdetail__scope">
                         {`Zeigt Position ${p.selected_position} — ` +
                           (p.selected_position_reason === 'strongest'
-                            ? 'die stärkste mit mindestens zwei Einheiten'
+                            ? 'die stärkste mit mindestens zwei Workouts'
                             : 'die einzige mit nennenswerter Historie') + '.'}
                       </p>
                     )}
@@ -162,7 +170,7 @@ export function ExerciseDetailPage({ payload }: Props) {
                 )}
 
                 {p.chart !== null && oldest !== undefined && newest !== undefined && (
-                  <ExerciseChart chart={p.chart} sessionCount={count}
+                  <ExerciseChart chart={p.chart} sessionCount={workouts}
                     firstDate={shortDate(oldest.started_at)}
                     lastDate={shortDate(newest.started_at)} />
                 )}
@@ -179,8 +187,8 @@ export function ExerciseDetailPage({ payload }: Props) {
              was a dead end on a screen that has nothing else on it. */
           <p className="empty">
             Noch keine Sätze protokolliert. Sobald du diese Übung in einem
-            Workout loggst, stehen hier Rekorde, der e1RM-Verlauf und jede
-            einzelne Einheit.
+            Workout loggst, stehen hier Rekorde, der Verlauf deines geschätzten
+            Maximums (1RM) und jedes einzelne Workout.
           </p>
         )}
 

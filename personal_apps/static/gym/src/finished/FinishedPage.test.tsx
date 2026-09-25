@@ -193,11 +193,13 @@ describe('FinishedPage', () => {
           record({ name: 'Rudern', exercise_id: 12 })],
         record_count: 3,
       })
-      expect(screen.getAllByText(/Neuer .*-Rekord/)).toHaveLength(1)
-      expect(screen.getByText('Neuer e1RM-Rekord')).toBeInTheDocument()
+      expect(screen.getAllByText(/Neuer Rekord/)).toHaveLength(1)
+      // Named in full once, its first use on the page; 1RM after it (D16).
+      expect(screen.getByText('Neuer Rekord · geschätztes Maximum (1RM)')).toBeInTheDocument()
       // The rest become quiet rows.
       const others = screen.getByRole('region', { name: 'Weitere Rekorde' })
       expect(within(others).getAllByRole('link')).toHaveLength(2)
+      expect(within(others).getAllByText(/^1RM · vorher /)).toHaveLength(2)
     })
 
     it('celebrates on arrival, not on every later visit', () => {
@@ -222,7 +224,7 @@ describe('FinishedPage', () => {
         sessions: 3, suggested_weight: 68,
       }],
     })
-    const line = screen.getByText(/steht seit 3 Einheiten auf/)
+    const line = screen.getByText(/steht seit 3 Workouts auf/)
     expect(line).toHaveTextContent('63,5 kg — auf 68,0 kg gehen, notfalls 2 Wdh. weniger.')
   })
 
@@ -237,7 +239,7 @@ describe('FinishedPage', () => {
         ],
       })
       expect(screen.getByText('Rekord')).toBeInTheDocument()
-      expect(screen.getByText('4 ohne PR')).toBeInTheDocument()
+      expect(screen.getByText('Seit 4 Workouts ohne Rekord')).toBeInTheDocument()
       expect(screen.getByText('+12 % Vol.')).toBeInTheDocument()
       expect(screen.getByText('Erste Aufzeichnung')).toBeInTheDocument()
     })
@@ -477,13 +479,14 @@ describe('FinishedPage', () => {
     // set itself, so the old total claimed nearly the whole workout as rest.
     it('reports what it counted, per set', () => {
       mount({ set_pace_seconds: 185 })
-      expect(screen.getByText('Ø 3:05 min pro Satz')).toBeInTheDocument()
-      expect(screen.queryByText(/Pause/)).not.toBeInTheDocument()
+      // Pace with the rest in it, said so (D16) -- not "davon 50 Minuten Pause".
+      expect(screen.getByText('Ø 3:05 min je Satz (inkl. Pause)')).toBeInTheDocument()
+      expect(screen.queryByText(/Minuten Pause/)).not.toBeInTheDocument()
     })
 
     it('says nothing without timestamps to build it from', () => {
       mount({ set_pace_seconds: null })
-      expect(screen.queryByText(/pro Satz/)).not.toBeInTheDocument()
+      expect(screen.queryByText(/je Satz/)).not.toBeInTheDocument()
     })
   })
 

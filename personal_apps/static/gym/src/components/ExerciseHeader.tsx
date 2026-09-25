@@ -33,11 +33,11 @@ export function ExerciseHeader({ exercise, lastOverall, chipClass, chipLabel }: 
             raster identical. */}
         <span className="exdetail__sub">
           {[
-            exercise.muscle_group || 'Ohne Gruppe',
+            exercise.muscle_group || 'Ohne Muskelgruppe',
             lastOverall !== null
               ? `Zuletzt ${shortDate(lastOverall.started_at)} · Pos. ${lastOverall.position}`
               : null,
-            exercise.is_unilateral ? 'einseitig' : null,
+            exercise.is_unilateral ? 'Gewicht je Seite' : null,
           ].filter(Boolean).join(' · ')}
         </span>
       </span>

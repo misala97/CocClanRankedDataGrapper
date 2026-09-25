@@ -155,14 +155,14 @@ export function ExerciseSheet({
         </div>
       )}
       {/* Today's rest, from the one in force: the setting's value is marked
-          ("deine" or "Liste") and one tap away, and every tap saves. */}
+          ("Deine" or "Standard") and one tap away, and every tap saves. */}
       <div className="sheet__group">
         <div className="sheet__group-head">
           <span className="label">Pause heute</span>
         </div>
-        <Choice label="Pause heute" values={restChoices(exercise.rest_setting, 2)}
+        <Choice label="Pause heute" values={restChoices(exercise.rest_setting)}
           on={exercise.rest_seconds ?? exercise.rest_setting} mark={exercise.rest_setting}
-          markWord={exercise.rest_setting_mine ? 'deine' : 'Liste'} format={clock}
+          markWord={exercise.rest_setting_mine ? 'Deine' : 'Standard'} format={clock}
           onPick={(seconds) => onRestChange(seconds)}
           nudge={{
             step: REST_NUDGE, min: REST_MIN, max: REST_MAX,

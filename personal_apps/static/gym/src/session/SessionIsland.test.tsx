@@ -578,7 +578,7 @@ describe('SessionIsland', () => {
     await user.click(within(document.querySelector(SHEET) as HTMLElement).getByLabelText('Satz 1 löschen'))
     act(() => { useSheets.getState().close() })
     act(() => { useUndo.getState().undoNow() })
-    expect(screen.queryByText('Neuer e1RM-Rekord')).toBeNull()
+    expect(document.querySelector('.record-takeover')).toBeNull()
   })
 
   it('brings a set back when the server refuses its delete (G-147)', async () => {

@@ -3712,8 +3712,11 @@ summary.sheet-row::-webkit-details-marker { display: none; }
   display: flex; gap: 4px; margin: var(--sp-3) var(--sp-4) 0;
   padding: 4px; border-radius: var(--r-control); background: var(--raised);
 }
+/* "Nach Muskelgruppe" takes two lines in a third of a 390px phone: a tighter
+   leading keeps the pair inside the pill, not against its edges. */
 .sort {
   flex: 1; min-block-size: var(--tap); border-radius: 12px;
+  padding: 4px 6px; line-height: 1.2; text-wrap: balance;
   font-size: var(--t-meta); font-weight: var(--w-bold); color: var(--dim);
 }
 /* An outline as well as the lift: the fill alone measured 1.23:1 against the
@@ -4198,6 +4201,11 @@ summary.sheet-row::-webkit-details-marker { display: none; }
    orange fill here was another decorative NOW. */
 .rb__fill.is-top { background: var(--done); }
 .rb__lbl { display: block; text-align: center; margin-top: 5px; font-size: var(--t-micro); color: var(--unlit); }
+/* Data, so the 13 px floor (D11), in figures that line up bar to bar. */
+.rb__val {
+  display: block; text-align: center; margin-bottom: 4px;
+  font-size: var(--t-meta); font-variant-numeric: tabular-nums; color: var(--dim);
+}
 .read__silent { font-size: var(--t-meta); color: var(--unlit); margin-top: var(--sp-2); line-height: 1.5; }
 
 /* ---- records: year bands, current year open, the rest folded ---- */

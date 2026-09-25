@@ -687,7 +687,7 @@ def record_drought(rows):
     time the number moved, so the drought runs from there rather than being
     reported as unanswerable.
 
-    The count is stats.drought(), the one behind every "ohne PR" and
+    The count is stats.drought(), the one behind every "ohne Rekord" and
     "Stagniert" in the app, so this list and the exercise's own page can
     never disagree.
     """

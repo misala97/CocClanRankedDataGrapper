@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import {
-  barChoices, barLabel, clock, evenStops, kg, parseStops, restChoices, stepChoices, stopsLine,
+  barChoices, barLabel, clock, kg, parseStops, restChoices, stepChoices, stopsLine,
 } from './values'
 
 describe('how a setting reads', () => {
@@ -13,19 +13,26 @@ describe('how a setting reads', () => {
 })
 
 describe('restChoices', () => {
-  it('puts the reference one in for the settings, two in for "Pause heute"', () => {
-    expect(restChoices(90, 1)).toEqual([60, 90, 120, 150, 180])
-    expect(restChoices(150, 2)).toEqual([90, 120, 150, 180, 210])
+  it('puts the reference in the middle, the same row in both sheets (G-056)', () => {
+    expect(restChoices(90)).toEqual([30, 60, 90, 120, 150])
+    expect(restChoices(150)).toEqual([90, 120, 150, 180, 210])
   })
 
   it('always holds the reference, with fewer before it than any below half a minute', () => {
-    expect(restChoices(60, 2)).toEqual([30, 60, 90, 120, 150])
-    expect(restChoices(45, 1)).toEqual([45, 75, 105, 135, 165])
-    expect(restChoices(15, 2)[0]).toBe(15)
+    expect(restChoices(60)).toEqual([30, 60, 90, 120, 150])
+    expect(restChoices(45)).toEqual([45, 75, 105, 135, 165])
+    expect(restChoices(15)[0]).toBe(15)
+  })
+
+  it('never offers a rest past the longest the server takes, and still holds the reference', () => {
+    expect(restChoices(540)).toEqual([480, 510, 540, 570, 600])
+    expect(restChoices(570)).toEqual([480, 510, 540, 570, 600])
+    expect(restChoices(600)).toEqual([480, 510, 540, 570, 600])
+    expect(restChoices(595)).toEqual([475, 505, 535, 565, 595])
   })
 
   it('starts around two minutes when nothing marks a reference', () => {
-    expect(restChoices(null, 2)).toEqual([60, 90, 120, 150, 180])
+    expect(restChoices(null)).toEqual([60, 90, 120, 150, 180])
   })
 })
 
@@ -44,12 +51,11 @@ describe('stepChoices and barChoices', () => {
 })
 
 describe('stops', () => {
-  it('reads the first stops of a machine, and an even stack from its step', () => {
+  it('reads the first stops of a machine', () => {
     expect(stopsLine([5, 13, 21])).toBe('5, 13, 21')
     expect(stopsLine([5, 12, 19, 26, 33, 40])).toBe('5, 12, 19, 26, 33 …')
-    expect(evenStops(2.5)).toEqual([2.5, 5, 7.5])
     // A decimal comma between list commas would read as more numbers.
-    expect(stopsLine(evenStops(2.5))).toBe('2,5 · 5 · 7,5')
+    expect(stopsLine([2.5, 5, 7.5])).toBe('2,5 · 5 · 7,5')
   })
 
   it('takes stops typed any way, ascending and once each, and at least two', () => {

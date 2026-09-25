@@ -110,7 +110,7 @@ function RestBody({ overview, onSaved }: { overview: RestOverview; onSaved: Prop
           keyNoun="15 Sekunden" onChange={nudge} />
       )}
       <p className="sheet__note">
-        {`${forAll !== null ? 'Je nach Übungsart wären es' : 'Die Liste nimmt je nach Übung'} `
+        {`${forAll !== null ? 'Je nach Übungsart wären es' : 'Standard: je nach Übung'} `
           + `${clock(shown.list_min_seconds)} bis ${clock(shown.list_max_seconds)} — `
           + 'Kreuzheben mehr, Curls weniger.'}
       </p>

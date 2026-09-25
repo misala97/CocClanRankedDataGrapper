@@ -84,7 +84,7 @@ def _to_increment(value):
     if not raw:
         return None
     if parsed is None or not 0 < parsed <= MAX_INCREMENT_KG:
-        raise InvalidInput(f'Gewichtsstufe: bitte mehr als 0 und höchstens {MAX_INCREMENT_KG} kg.')
+        raise InvalidInput(f'Schritt: bitte mehr als 0 und höchstens {MAX_INCREMENT_KG} kg.')
     return parsed
 
 
@@ -432,7 +432,7 @@ def _to_stack_steps(raw):
             steps.append(value)
     steps = sorted(set(steps))
     if len(steps) > MAX_STACK_STOPS:
-        raise InvalidInput(f'Höchstens {MAX_STACK_STOPS} Stufen.')
+        raise InvalidInput(f'Höchstens {MAX_STACK_STOPS} Gewichtsstufen.')
     return steps or None
 
 

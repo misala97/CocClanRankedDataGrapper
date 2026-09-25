@@ -80,7 +80,7 @@ class RestOverview(_Model):
 
 
 class SessionRow(_Model):
-    """One performed session, as rendered in the Einheiten log."""
+    """One performed session, as rendered in the Workouts log."""
     session_id: int
     started_at: datetime
     position: int

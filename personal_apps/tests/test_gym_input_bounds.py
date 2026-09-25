@@ -251,12 +251,22 @@ def test_an_impossible_setting_is_refused_with_the_reason(client, scratch_exerci
     assert response.get_json()['error']
 
 
+def test_an_impossible_step_is_called_the_step(client, scratch_exercise):
+    # "Gewichtsstufen" are a machine's stops now (D16): the step the stepper
+    # moves by is the "Schritt", the word its row in the sheet uses.
+    from features.gym.routes.helpers import MAX_INCREMENT_KG
+    response = client.post(f'/gym/exercises/{scratch_exercise}/update',
+                           data={'weight_increment': '0'}, headers=JSON)
+    assert response.get_json()['error'] == \
+        f'Schritt: bitte mehr als 0 und höchstens {MAX_INCREMENT_KG} kg.'
+
+
 def test_a_stack_drops_stops_that_are_not_weights_and_refuses_a_hundred_and_one():
     from features.gym.routes import _to_stack_steps
     from features.gym.routes.helpers import InvalidInput
     assert _to_stack_steps('5, inf, 13, 1e9') == [5.0, 13.0]
     assert len(_to_stack_steps(', '.join(str(n) for n in range(1, 101)))) == 100
-    with pytest.raises(InvalidInput):
+    with pytest.raises(InvalidInput, match=r'^Höchstens 100 Gewichtsstufen\.$'):
         _to_stack_steps(', '.join(str(n) for n in range(1, 102)))
 
 

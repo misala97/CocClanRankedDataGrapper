@@ -89,7 +89,7 @@ function StallRow({ item }: { item: Stall }) {
           {`Meist als ${item.position}. Übung · zuletzt ${kg1(item.stuck_at)} kg`}
         </span>
       </span>
-      <span className="vtag vtag--stall">{sincePr(item.sessions_since_pr)}</span>
+      <span className="vtag vtag--stall">{sincePr(item.sessions_since_pr, true)}</span>
     </a>
   )
 }
@@ -180,8 +180,10 @@ function FirstRun({
     const when = recency(daysSinceLast)
     const minutes = Math.floor(
       (instant(last.finished_at).getTime() - instant(last.started_at).getTime()) / 60000)
+    // Mid-sentence only the adverbs go lower case: "zuletzt gestern", but
+    // "zuletzt vor 3 Tagen" -- a whole-string toLowerCase wrote "tagen".
     receipt = workouts > 1
-      ? `${workouts} Workouts · zuletzt ${when.toLowerCase()}`
+      ? `${workouts} Workouts · zuletzt ${when.replace(/^(Heute|Gestern)/, (word) => word.toLowerCase())}`
       : `${when.charAt(0).toUpperCase()}${when.slice(1)} · ${last.exercises} ${last.exercises === 1 ? 'Übung' : 'Übungen'} · ${minutes < 1 ? '< 1' : minutes} min`
   }
 
@@ -655,7 +657,7 @@ export function StartPage({ payload: initial }: { payload: HeutePayload }) {
                       <span key={week.week_start}
                         className={`vbar${week.is_current ? ' is-live' : ''}${week.has_deload ? ' vbar--deload' : ''}`}
                         role="listitem"
-                        aria-label={`${week.is_current ? 'Diese Woche' : `Woche ab ${dayMonth(week.week_start)}`}: ${de(week.volume)} kg${week.has_deload ? ', mit Deload-Einheit' : ''}`}
+                        aria-label={`${week.is_current ? 'Diese Woche' : `Woche ab ${dayMonth(week.week_start)}`}: ${de(week.volume)} kg${week.has_deload ? ', mit Deload-Workout' : ''}`}
                         style={{ blockSize: `${Math.round((week.volume / payload.tonnage_peak) * 1000) / 10}%` }} />
                     ))}
                   </div>
@@ -668,7 +670,7 @@ export function StartPage({ payload: initial }: { payload: HeutePayload }) {
                   </div>
                   <p className="start__note">
                     {`${de(lastWeek?.volume ?? 0)} kg diese Woche bisher — läuft noch.`}
-                    {deloadWeeks.length > 0 && ' Schraffiert: Woche mit Deload-Einheit.'}
+                    {deloadWeeks.length > 0 && ' Schraffiert: Woche mit Deload-Workout.'}
                   </p>
                 </>
               ) : (
@@ -793,7 +795,7 @@ function LeadWatch({ lead, stalls }: { lead: RoutineMemory; stalls: Stall[] }) {
   const first = watch[0]!
   return (
     <p className="lead__watch">
-      {`${first.name} steht seit ${first.sessions_since_pr} ${first.sessions_since_pr === 1 ? 'Session' : 'Sessions'} bei ${kg1(first.stuck_at)} kg.`}
+      {`${first.name} steht seit ${first.sessions_since_pr} ${first.sessions_since_pr === 1 ? 'Workout' : 'Workouts'} bei ${kg1(first.stuck_at)} kg.`}
       {watch.length > 1 && ` · ${watch.length - 1} weitere`}
     </p>
   )

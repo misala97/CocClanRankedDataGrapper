@@ -374,10 +374,10 @@ def drought(rows):
     no failed attempt -- and a workout with only sets above RECORD_MAX_REPS
     was no attempt at the number either. `workouts` counts every attempt.
 
-    The one count behind "N Einheiten ohne PR", "Stagniert", the live stall
-    line, Start's stall list and Statistik's drought: it used to be judged
-    per slot and blind to deloads, so a lift could read "Rekord" beside
-    "2 Einheiten ohne PR" (B3 review)."""
+    The one count behind "seit N Workouts ohne Rekord", "Stagniert", the
+    live stall line, Start's stall list and Statistik's drought: it used to
+    be judged per slot and blind to deloads, so a lift could read "Rekord"
+    beside "2 Einheiten ohne PR" (B3 review; D16 has renamed both since)."""
     judged = [row for row in rows if judged_best(row) is not None]
     if not judged:
         return None

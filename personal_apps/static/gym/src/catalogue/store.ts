@@ -30,7 +30,7 @@ function writeOpen(open: string[]): void {
 
 const SORT_KEY = 'gym.uebungen.sort'
 
-/** The sort IS a preference (a power user who lives in "Ohne PR" re-tapped it
+/** The sort IS a preference (a power user who lives in "Stagniert zuerst" re-tapped it
  *  every visit), so localStorage, not session. Unknown stored values fall
  *  back rather than crash a renamed mode. */
 function readSort(): SortMode {

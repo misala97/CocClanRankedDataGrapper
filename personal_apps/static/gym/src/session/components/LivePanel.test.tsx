@@ -493,7 +493,7 @@ describe('LivePanel', () => {
   })
   /** The rule behind the numbers, one tap away (D8). */
   const openSource = async () => {
-    await userEvent.setup().click(screen.getByRole('button', { name: /^(Letztes Mal|Stärkste Einheit)/ }))
+    await userEvent.setup().click(screen.getByRole('button', { name: /^(Letztes Mal|Stärkstes Workout)/ }))
     return screen.getByText('Vorgabe').closest('p')!
   }
 
@@ -512,7 +512,7 @@ describe('LivePanel', () => {
     // a lighter workout came after it.
     render(<LivePanel payload={seeded({ is_latest: false })} {...handlers()} />)
     expect(screen.queryByRole('button', { name: /^Letztes Mal/ })).not.toBeInTheDocument()
-    expect(screen.getByRole('button', { name: /^Stärkste Einheit 25\.08\./ })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /^Stärkstes Workout 25\.08\./ })).toBeInTheDocument()
   })
 
   it('says where the plan came from on a tap', async () => {
@@ -553,7 +553,7 @@ describe('LivePanel', () => {
     }
     render(<LivePanel payload={none} {...handlers()} />)
     expect(screen.queryByText('Vorgabe')).not.toBeInTheDocument()
-    expect(screen.queryByRole('button', { name: /^(Letztes Mal|Stärkste Einheit)/ }))
+    expect(screen.queryByRole('button', { name: /^(Letztes Mal|Stärkstes Workout)/ }))
       .not.toBeInTheDocument()
   })
 
@@ -618,7 +618,7 @@ describe('LivePanel', () => {
     // The stall line keeps its fact and gives no weight of its own: what to
     // lift is the target's to say (D2 P1), one answer rather than two.
     const stall = container.querySelector('.live__stall')!
-    expect(stall.textContent).toBe('Stagniert 4 Workouts ohne neuen e1RM-PR.')
+    expect(stall.textContent).toBe('Stagniert 4 Workouts ohne neuen Rekord.')
   })
 
   it('says the target set by set, and only says it', () => {

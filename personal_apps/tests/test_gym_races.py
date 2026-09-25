@@ -425,6 +425,9 @@ def test_a_follower_cannot_invite_and_sees_no_picker(lifter, live_session):
         response = follower.post(f'/gym/session/{follower_session}/invite',
                                  data={'partner_id': str(_admin_id())})
         assert response.status_code == 302
+        with follower.session_transaction() as flask_session:
+            assert ('error', 'Einladen kann nur, wer das gemeinsame Workout leitet.') \
+                in flask_session['_flashes']
         with flask_app.app_context():
             assert SharedSession.query.filter_by(
                 leader_session_id=follower_session).count() == 0

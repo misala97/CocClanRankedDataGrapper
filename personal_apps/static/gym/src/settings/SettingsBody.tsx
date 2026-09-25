@@ -4,7 +4,7 @@ import { saveSetting } from './api'
 import { Choice } from './Choice'
 import { useSaveQueue } from './useSaveQueue'
 import {
-  REST_MAX, REST_MIN, REST_NUDGE, barChoices, barLabel, clock, evenStops, kg,
+  REST_MAX, REST_MIN, REST_NUDGE, barChoices, barLabel, clock, kg,
   parseStops, restChoices, stepChoices, stopsLine,
 } from './values'
 
@@ -76,9 +76,9 @@ export function SettingsBody({ exercise, onSaved }: Props) {
   const restBack = forAll ?? list.default_rest_seconds
   const restOwn = mine('default_rest_seconds')
   const restSource = restOwn
-    ? (forAll !== null ? 'Ausnahme' : 'Von dir')
-    : (forAll !== null ? 'Wie deine Pause' : 'Wie die Liste')
-  const source = (field: SettingField) => (mine(field) ? 'Von dir' : 'Wie die Liste')
+    ? (forAll !== null ? 'Ausnahme' : 'Deine')
+    : (forAll !== null ? 'Wie deine Pause' : 'Standard')
+  const source = (field: SettingField) => (mine(field) ? 'Deine' : 'Standard')
 
   return (
     <>
@@ -90,9 +90,9 @@ export function SettingsBody({ exercise, onSaved }: Props) {
       {error !== null && <p className="setting__error" role="alert">{error}</p>}
 
       <Setting name="Pause nach jedem Satz" source={restSource} own={restOwn}>
-        <Choice label="Pause nach jedem Satz" values={restChoices(restBack, 1)}
+        <Choice label="Pause nach jedem Satz" values={restChoices(restBack)}
           on={meta.default_rest_seconds} mark={restBack}
-          markWord={forAll !== null ? 'deine' : 'Liste'} format={clock}
+          markWord={forAll !== null ? 'Deine' : 'Standard'} format={clock}
           onPick={(value, leaving) => save('default_rest_seconds', value, leaving)}
           nudge={{
             step: REST_NUDGE, min: REST_MIN, max: REST_MAX,
@@ -104,7 +104,7 @@ export function SettingsBody({ exercise, onSaved }: Props) {
       <Setting name={meta.is_unilateral ? 'Schritt je Seite (kg)' : 'Schritt bei + und − (kg)'}
         source={source('weight_increment')} own={mine('weight_increment')}>
         <Choice label="Schritt" values={stepChoices(meta.equipment, list.weight_increment)}
-          on={meta.weight_increment} mark={list.weight_increment} markWord="Liste" format={kg}
+          on={meta.weight_increment} mark={list.weight_increment} markWord="Standard" format={kg}
           onPick={(value, leaving) => save('weight_increment', value, leaving)}
           nudge={{ step: 0.25, min: 0.25, max: 25, label: 'kg je Tipp', keyNoun: '0,25 kg' }} />
       </Setting>
@@ -115,14 +115,14 @@ export function SettingsBody({ exercise, onSaved }: Props) {
       {(list.bar_weight !== null || mine('bar_weight')) && (
         <Setting name="Stangengewicht (kg)" source={source('bar_weight')} own={mine('bar_weight')}>
           <Choice label="Stangengewicht" values={barChoices(list.bar_weight)}
-            on={meta.bar_weight} mark={list.bar_weight} markWord="Liste" format={barLabel}
+            on={meta.bar_weight} mark={list.bar_weight} markWord="Standard" format={barLabel}
             onPick={(value, leaving) => save('bar_weight', value, leaving)}
             nudge={{ step: 0.5, min: 0, max: 50, label: 'kg Stange', keyNoun: '0,5 kg' }} />
         </Setting>
       )}
 
       {meta.equipment === 'stack' && (
-        <Setting name="Stufen am Gerät" source={source('stack_kg')} own={mine('stack_kg')}>
+        <Setting name="Gewichtsstufen" source={source('stack_kg')} own={mine('stack_kg')}>
           <StackStops meta={meta} own={mine('stack_kg')}
             onSave={(stops) => save('stack_kg', stops)} />
         </Setting>
@@ -133,7 +133,7 @@ export function SettingsBody({ exercise, onSaved }: Props) {
 
 function Setting({ name, source, own, children }: {
   name: string
-  /** Where the value comes from: "Von dir", "Wie die Liste", ... */
+  /** Where the value comes from: "Deine", "Standard", ... */
   source: string
   own: boolean
   children: ReactNode
@@ -171,7 +171,7 @@ function StackStops({ meta, own, onSave }: {
     return (
       <div className="setting__edit">
         <label className="setting__line" htmlFor={field}>
-          Jede Stufe in kg, mit Komma getrennt — etwa 5, 12, 19, 26.
+          Jede Gewichtsstufe in kg, mit Komma getrennt — etwa 5, 12, 19, 26.
         </label>
         <input type="text" id={field} className="input" value={text} autoComplete="off"
           // The field appears on a tap inside a sheet already open, so it
@@ -205,20 +205,20 @@ function StackStops({ meta, own, onSave }: {
           ? stopsLine(stops)
           : step === null
             ? 'Gleichmäßig.'
-            : `Gleichmäßig, im Schritt von oben: ${stopsLine(evenStops(step))} …`}
+            : `Gleichmäßig, in Schritten von ${kg(step)} kg.`}
       </p>
       {own ? (
         <div className="setting__acts">
           <button type="button" className="btn btn--ghost btn--sm" onClick={edit}>
-            Stufen ändern
+            Gewichtsstufen ändern
           </button>
           <button type="button" className="btn btn--ghost btn--sm" onClick={() => onSave(null)}>
-            {listStops === null ? 'Wieder gleichmäßig' : 'Wie die Liste'}
+            {listStops === null ? 'Wieder gleichmäßig' : 'Zurück zum Standard'}
           </button>
         </div>
       ) : (
         <button type="button" className="btn btn--ghost btn--block" onClick={edit}>
-          Das Gerät hat andere Stufen
+          Das Gerät hat andere Gewichtsstufen
         </button>
       )}
     </>

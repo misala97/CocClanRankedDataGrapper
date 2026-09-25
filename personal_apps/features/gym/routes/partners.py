@@ -69,7 +69,7 @@ def gym_invite_partner(session_id):
     # the first, and the mirror of a mirror drifted (G-085). The leader
     # invites; a follower's screen offers no picker.
     if sharing.is_live_follower(session_.id):
-        flash('Einladen kann nur, wer das gemeinsame Training leitet.', 'error')
+        flash('Einladen kann nur, wer das gemeinsame Workout leitet.', 'error')
         return redirect(url_for('gym.session_detail', session_id=session_.id))
 
     partner = db.session.get(AppUser, partner_id)
@@ -102,8 +102,8 @@ def gym_invite_partner(session_id):
         })
         flash(f'{partner.username} wurde eingeladen.', 'success')
     elif existing.ended_at is not None:
-        flash(f'Das gemeinsame Training mit {partner.username} ist bereits beendet '
-              f'und kann für dieses Workout nicht neu gestartet werden.', 'error')
+        flash(f'Das gemeinsame Workout mit {partner.username} ist bereits beendet '
+              f'und kann nicht neu gestartet werden.', 'error')
     else:
         flash(f'{partner.username} ist bereits eingeladen.', 'error')
     return redirect(url_for('gym.session_detail', session_id=session_.id))

@@ -65,7 +65,7 @@ export function ExerciseChart({ chart, sessionCount, firstDate, lastDate }: Prop
   }
 
   const description =
-    `Verlauf des e1RM über ${sessionCount} Einheiten, ` +
+    `Verlauf des 1RM über ${sessionCount} ${sessionCount === 1 ? 'Workout' : 'Workouts'}, ` +
     `${firstDate} bis ${lastDate}. ` +
     `Zwischen ${kg1(chart.lo)} und ${kg1(chart.hi)} Kilogramm. ` +
     `Die Tabelle darunter enthält dieselben Werte.`
@@ -209,7 +209,7 @@ export function ExerciseChart({ chart, sessionCount, firstDate, lastDate }: Prop
           return (
             <>
               {shortDate(point.started_at)}
-              {' · '}<b>{kg1(point.e1rm)} kg</b> e1RM
+              {' · '}<b>{kg1(point.e1rm)} kg</b> 1RM
               {chart.series.length > 1 && ` · P${picked!.position}`}
               {point.is_record && <span className="chart__read-tag vtag vtag--record">Rekord</span>}
               {point.is_deload && <span className="chart__read-tag vtag vtag--deload">Deload</span>}
@@ -242,7 +242,7 @@ export function ExerciseChart({ chart, sessionCount, firstDate, lastDate }: Prop
           claims what was actually plotted. */}
       <div className="chart__legend">
         <span className="key">
-          <span className="key__dot" style={{ background: 'var(--done)' }} />e1RM
+          <span className="key__dot" style={{ background: 'var(--done)' }} />1RM
         </span>
         {chart.has_record && (
           <span className="key">

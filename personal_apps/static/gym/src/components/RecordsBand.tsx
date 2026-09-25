@@ -33,7 +33,7 @@ export function RecordsBand({
           {prE1rm !== null && (
             <span className="pr">
               <span className="pr__val">{kg1(prE1rm.e1rm)}<small>kg</small></span>
-              <span className="label">Bestes e1RM</span>
+              <span className="label">Bestes geschätztes Maximum (1RM)</span>
               <span className="pr__sub">
                 {`${kg1(prE1rm.weight)} kg × ${prE1rm.reps} · Pos. ${prE1rm.position} · ${shortDate(prE1rm.started_at)}`}
               </span>
@@ -48,14 +48,14 @@ export function RecordsBand({
         <section className="next-time">
           <div className="next-time__lbl">Stagniert</div>
           <p className="next-time__body">
-            Seit {sessionsSincePr} Workouts kein neuer e1RM-PR — mehr Gewicht
+            Seit {sessionsSincePr} Workouts kein neuer Rekord — mehr Gewicht
             oder mehr Wiederholungen versuchen, ausgehend von{' '}
             <b>{kg1(lastProgression.best_weight)} kg</b>.
           </p>
         </section>
       ) : sessionsSincePr !== null && sessionsSincePr > 0 ? (
         <p className="exdetail__since">
-          {`Seit ${sessionsSincePr} ${sessionsSincePr === 1 ? 'Workout' : 'Workouts'} kein neuer e1RM-PR`}
+          {`Seit ${sessionsSincePr} ${sessionsSincePr === 1 ? 'Workout' : 'Workouts'} kein neuer Rekord`}
         </p>
       ) : null}
     </>

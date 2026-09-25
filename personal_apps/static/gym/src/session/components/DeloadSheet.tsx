@@ -28,8 +28,8 @@ export function DeloadSheet({
   return (
     <Sheet id="sheet-deload" title="Deload">
       <p className="sheet__note">
-        Eine bewusst leichte Einheit. Sie bekommt keine eigene Farbe und zählt
-        nicht gegen die Stagnation — ihr Zweck ist, dass die Statistik eine
+        Ein bewusst leichtes Workout. Es bekommt keine eigene Farbe und zählt
+        nicht gegen die Stagnation — sein Zweck ist, dass die Statistik eine
         geplante leichte Woche nicht als Plateau liest. Ein Rekord bleibt ein
         Rekord.
       </p>

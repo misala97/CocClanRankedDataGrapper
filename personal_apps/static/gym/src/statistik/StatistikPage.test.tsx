@@ -4,6 +4,19 @@ import { describe, expect, it, vi } from 'vitest'
 import { StatistikPage } from './StatistikPage'
 import type { StatistikPayload, TimelineRecord } from './types'
 
+/** The first mention of the 1RM a reader meets -- text or aria-label, in
+ *  document order. D16: it is the one that names it in full. */
+function firstOneRm(root: HTMLElement): string | null {
+  const walker = document.createTreeWalker(root, NodeFilter.SHOW_ELEMENT | NodeFilter.SHOW_TEXT)
+  for (let node = walker.nextNode(); node !== null; node = walker.nextNode()) {
+    const said = node.nodeType === Node.TEXT_NODE
+      ? node.textContent
+      : (node as Element).getAttribute('aria-label')
+    if (said?.includes('1RM')) return said
+  }
+  return null
+}
+
 const record = (over: Partial<TimelineRecord> = {}): TimelineRecord => ({
   started_at: '2026-07-31T16:00:00', session_id: 900, exercise_id: 4,
   name: 'Reverse Fly (Machine)',
@@ -380,6 +393,25 @@ describe('StatistikPage', () => {
       expect(screen.getByText('Bench Press (Dumbbell)')).toBeInTheDocument()
     })
 
+    it('says what the percentages are of, before the first of them (G-027, D16)', () => {
+      const { container } = mount()
+      const section = container.querySelector('[aria-labelledby="prog-h"]')!
+      const note = within(section as HTMLElement).getByText(
+        'Geschätztes Maximum (1RM) je Übung, vom ersten Workout im Zeitraum zum letzten.')
+      expect(note.compareDocumentPosition(section.querySelector('.prog')!)
+        & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+      // The page's first 1RM, ahead of the record timeline's short ones.
+      expect(firstOneRm(container)).toBe(note.textContent)
+    })
+
+    it('keeps saying so when the window holds nothing', async () => {
+      // The timeline still says "1RM" below; the page names it in full first.
+      const { container } = mount()
+      await userEvent.setup().click(screen.getByRole('button', { name: '30 Tage' }))
+      expect(firstOneRm(container))
+        .toBe('Geschätztes Maximum (1RM) je Übung, vom ersten Workout im Zeitraum zum letzten.')
+    })
+
     it('re-ranks from the window the reader picked', async () => {
       // The whole point of precomputing four blocks: the click swaps which one
       // renders, with no fetch. Scoped to this section -- 'Hammer Curl' is
@@ -404,7 +436,7 @@ describe('StatistikPage', () => {
       mount()
       const user = userEvent.setup()
       await user.click(screen.getByRole('button', { name: '30 Tage' }))
-      expect(screen.getByText('Keine Übung mit zwei Einheiten in diesem Zeitraum.'))
+      expect(screen.getByText('Keine Übung mit zwei Workouts in diesem Zeitraum.'))
         .toBeInTheDocument()
     })
 
@@ -475,6 +507,17 @@ describe('StatistikPage', () => {
       expect(bars[2]).toHaveStyle({ inlineSize: '100%' })    // -4.6, the biggest move
     })
 
+    it('names the sets of exercises that have no group', () => {
+      const { container } = mount({
+        balance_drift: {
+          ...base.balance_drift,
+          groups: [{ label: null, recent_share: 5, earlier_share: 2, delta: 3 }],
+        },
+      })
+      const rows = container.querySelector('[aria-labelledby="drift-h"]')!
+      expect(rows.querySelector('.prog__name')).toHaveTextContent('Ohne Muskelgruppe')
+    })
+
     it('says there is no before to compare against, rather than drifting by zero', () => {
       mount(nothing)
       expect(screen.getByText(/Noch kein Vergleich/)).toBeInTheDocument()
@@ -485,6 +528,9 @@ describe('StatistikPage', () => {
     it('counts progress in this equipment\'s own steps', () => {
       const { container } = mount()
       const section = container.querySelector('[aria-labelledby="ladder-h"]')!
+      expect(within(section as HTMLElement).getByRole('heading', { name: 'Gewichtssteigerungen' }))
+        .toBeInTheDocument()
+      expect(section).toHaveTextContent('Gezählt in Schritten des jeweiligen Geräts, nicht in Prozent.')
       expect(section).toHaveTextContent('5 insgesamt')
       expect(section).toHaveTextContent('Hammer Curl')
       expect(section).toHaveTextContent('3×')
@@ -499,6 +545,9 @@ describe('StatistikPage', () => {
     it('ranks the stalest lift first and dates its last record', () => {
       const { container } = mount()
       const section = container.querySelector('[aria-labelledby="drought-h"]')!
+      expect(within(section as HTMLElement).getByRole('heading', { name: 'Am längsten ohne Rekord' }))
+        .toBeInTheDocument()
+      expect(section.querySelector('.sec__head')).toHaveTextContent('Workouts')
       const names = [...section.querySelectorAll('.prog__name')].map((n) => n.textContent)
       expect(names).toEqual(['Bench Press', 'Biceps Curl'])
       expect(section.querySelectorAll('.prog__pct')[0])
@@ -509,7 +558,7 @@ describe('StatistikPage', () => {
       const { container } = mount()
       const section = container.querySelector('[aria-labelledby="drought-h"]')!
       expect(section.querySelectorAll('.prog__pct')[1])
-        .toHaveAttribute('title', 'Noch nie über die erste Einheit hinaus')
+        .toHaveAttribute('title', 'Noch nie über das erste Workout hinaus')
     })
 
     it('drops both sections rather than showing empty rankings', () => {
@@ -539,12 +588,12 @@ describe('StatistikPage', () => {
       mount()
       expect(screen.getByText(/Satz 1 bis letzter Satz/)).toHaveTextContent('-1,1 Wdh.')
       expect(screen.getByText(/Gewichtsänderung/))
-        .toHaveTextContent('Bei -5,1 % Gewichtsänderung. Aus 151 Einheiten.')
+        .toHaveTextContent('Bei -5,1 % Gewichtsänderung. Aus 151 Übungen, je Workout gezählt.')
     })
 
     it('names the favourite time and day', () => {
       mount()
-      expect(screen.getByText(/Abends/)).toHaveTextContent('Abends, am liebsten Dienstags')
+      expect(screen.getByText(/Abends/)).toHaveTextContent('Abends, am liebsten dienstags')
       expect(screen.getByText(/häufigste Tag/))
         .toHaveTextContent('Dienstag ist mit 31 % der häufigste Tag.')
       expect(screen.getByText(/häufigste Tag/)).toHaveTextContent('Aus 26 Workouts.')
@@ -553,7 +602,7 @@ describe('StatistikPage', () => {
     it('leaves every unanswerable question open rather than guessing', () => {
       mount(nothing)
       expect(screen.getByText(/dafür braucht es mindestens 50/)).toBeInTheDocument()
-      expect(screen.getByText('Noch nicht genug Einheiten mit mehreren Sätzen.'))
+      expect(screen.getByText('Noch nicht genug Übungen mit mehreren Sätzen.'))
         .toBeInTheDocument()
       expect(screen.getByText('Noch nicht genug Workouts, um ein Muster zu behaupten.'))
         .toBeInTheDocument()
@@ -568,7 +617,9 @@ describe('StatistikPage', () => {
       const bars = screen.getAllByRole('listitem').filter(
         (n) => n.getAttribute('aria-label')?.includes('seit dem letzten Workout'),
       )
-      expect(bars.map((n) => n.textContent)).toEqual(['0-1 T.', '2 T.'])
+      expect(bars.map((n) => n.querySelector('.rb__lbl')!.textContent)).toEqual(['0-1 T.', '2 T.'])
+      // Each bar says its value, not only its height (G-030).
+      expect(bars.map((n) => n.querySelector('.rb__val')!.textContent)).toEqual(['7.302', '8.000'])
     })
 
     it('names the gaps that are still short instead of dropping them silently', () => {
@@ -626,7 +677,7 @@ describe('StatistikPage', () => {
     it('names the most productive day when it is not the most frequent one', () => {
       mount()
       expect(screen.getByText(/häufigste Tag/))
-        .toHaveTextContent('Am meisten bewegst du Donnerstags, im Schnitt 9.100 kg.')
+        .toHaveTextContent('Am meisten bewegst du donnerstags, im Schnitt 9.100 kg.')
     })
 
     it('stays quiet about the best day when it is already the favourite', () => {
@@ -666,12 +717,12 @@ describe('StatistikPage', () => {
       expect(within(section).getByText('1 weitere')).toBeInTheDocument()
     })
 
-    it('states each record as the e1RM it reached and the one it beat', () => {
+    it('states each record as the 1RM it reached and the one it beat', () => {
       // A record is e1RM only (D3): the weight row that used to lead is gone.
       const { container } = mount({ recent_records: [record()], record_years: [] })
       expect(container.querySelector('.rec__val'))
-        .toHaveTextContent('57,0 kg e1RM vorher 53,3')
-      expect(screen.queryByText(/auch e1RM/)).not.toBeInTheDocument()
+        .toHaveTextContent('57,0 kg 1RM vorher 53,3')
+      expect(screen.queryByText(/auch e?1RM/)).not.toBeInTheDocument()
     })
 
     it('is absent when nothing has been beaten yet', () => {

@@ -48,7 +48,7 @@ function Record({ record, hit = false }: { record: TimelineRecord; hit?: boolean
       <span className="rec__date">{shortDate(record.started_at)}</span>
       <span className="rec__name">{record.name}</span>
       <span className="rec__val">
-        {`${kg1(move.value)} kg e1RM `}
+        {`${kg1(move.value)} kg 1RM `}
         <small>{`vorher ${kg1(move.previous)}`}</small>
       </span>
     </a>
@@ -205,6 +205,8 @@ export function StatistikPage({ payload }: { payload: StatistikPayload }) {
   const bestDay = weekday.statable
     ? weekday.days.reduce((a, b) => (b.share >= a.share ? b : a))
     : null
+  // "dienstags": the adverb is lower case, the day's name is not (G-030).
+  const adverb = (day: number) => `${payload.weekday_names[day]!.toLowerCase()}s`
 
   const perWeek = totals.days_training !== null && totals.days_training >= 7
     ? kg1(totals.sessions / (totals.days_training / 7))
@@ -457,6 +459,13 @@ export function StatistikPage({ payload }: { payload: StatistikPayload }) {
                 </span>
               )}
             </div>
+            {/* Not weights anyone loaded, and nothing said so (G-027). Under
+                the head, before the first number and whatever the window
+                holds: it is also this page's first 1RM, which the record
+                timeline further down names short (D16). */}
+            <p className="sec__note">
+              Geschätztes Maximum (1RM) je Übung, vom ersten Workout im Zeitraum zum letzten.
+            </p>
             {shownProgression.length > 0 ? (
               shownProgression.map((entry) => (
                 <Progression entry={entry} key={entry.exercise_id} />
@@ -466,7 +475,7 @@ export function StatistikPage({ payload }: { payload: StatistikPayload }) {
                  the window, an empty history is a fact about the log. */
               <p className="empty">
                 {hasProgression
-                  ? 'Keine Übung mit zwei Einheiten in diesem Zeitraum.'
+                  ? 'Keine Übung mit zwei Workouts in diesem Zeitraum.'
                   : 'Noch zu wenig Historie, um Fortschritt zu messen.'}
               </p>
             )}
@@ -532,7 +541,7 @@ export function StatistikPage({ payload }: { payload: StatistikPayload }) {
           {topRungs.length > 0 && (
             <section aria-labelledby="ladder-h">
               <div className="sec__head">
-                <h2 className="label" id="ladder-h">Stufen erklommen</h2>
+                <h2 className="label" id="ladder-h">Gewichtssteigerungen</h2>
                 <span className="sec__sp" />
                 <span className="label">{`${ladder.total_notches} insgesamt`}</span>
               </div>
@@ -549,7 +558,10 @@ export function StatistikPage({ payload }: { payload: StatistikPayload }) {
                   </span>
                 </div>
               ))}
-              <p className="sec__note">In Schritten dieser Geräte, nicht in Prozent.</p>
+              {/* A step of the exercise's own Schritt, or one of a stack's
+                  typed Gewichtsstufen (analytics._notch_count): "Schritte"
+                  is true of both, "Gewichtsstufen" of stacks only. */}
+              <p className="sec__note">Gezählt in Schritten des jeweiligen Geräts, nicht in Prozent.</p>
             </section>
           )}
 
@@ -603,11 +615,11 @@ export function StatistikPage({ payload }: { payload: StatistikPayload }) {
                   <em>{`${signed1(fatigue.last_reps! - fatigue.first_reps!)} Wdh.`}</em>
                 </p>
                 <p className="read__silent">
-                  {`Bei ${signed1(fatigue.weight_change_pct!)} % Gewichtsänderung. Aus ${de(fatigue.sample)} Einheiten.`}
+                  {`Bei ${signed1(fatigue.weight_change_pct!)} % Gewichtsänderung. Aus ${de(fatigue.sample)} Übungen, je Workout gezählt.`}
                 </p>
               </>
             ) : (
-              <p className="read__silent">Noch nicht genug Einheiten mit mehreren Sätzen.</p>
+              <p className="read__silent">Noch nicht genug Übungen mit mehreren Sätzen.</p>
             )}
           </div>
 
@@ -619,7 +631,7 @@ export function StatistikPage({ payload }: { payload: StatistikPayload }) {
                   {bestPart !== null
                     && (payload.daypart_names[bestPart.label] ?? bestPart.label)}
                   {bestPart !== null && bestDay !== null && ', am liebsten '}
-                  {bestDay !== null && <em>{`${payload.weekday_names[bestDay.weekday]}s`}</em>}
+                  {bestDay !== null && <em>{adverb(bestDay.weekday)}</em>}
                 </p>
                 <p className="read__silent">
                   {bestDay !== null
@@ -628,7 +640,7 @@ export function StatistikPage({ payload }: { payload: StatistikPayload }) {
                       the answer is only worth a sentence when they disagree. */}
                   {heaviestDay !== null && bestDay !== null
                     && heaviestDay.weekday !== bestDay.weekday
-                    && `Am meisten bewegst du ${payload.weekday_names[heaviestDay.weekday]}s, im Schnitt ${de(heaviestDay.avg_volume)} kg. `}
+                    && `Am meisten bewegst du ${adverb(heaviestDay.weekday)}, im Schnitt ${de(heaviestDay.avg_volume)} kg. `}
                   {weekday.statable && `Aus ${weekday.sample} Workouts.`}
                 </p>
               </>
@@ -676,6 +688,9 @@ export function StatistikPage({ payload }: { payload: StatistikPayload }) {
                   {shownGaps.map((bucket) => (
                     <span className="rb" role="listitem" key={bucket.label}
                       aria-label={`${bucket.label} Tage seit dem letzten Workout: Ø ${de(bucket.avg_volume)} kg`}>
+                      {/* The value over its bar: the question compares them,
+                          and a height alone answered it by eye (G-030). */}
+                      <span className="rb__val" aria-hidden="true">{de(bucket.avg_volume)}</span>
                       <span className="rb__track">
                         <span className="rb__fill"
                           style={{ blockSize: `${peakGap ? roundTo((bucket.avg_volume / peakGap) * 100, 1) : 0}%` }} />
@@ -685,7 +700,7 @@ export function StatistikPage({ payload }: { payload: StatistikPayload }) {
                   ))}
                 </div>
                 <p className="read__silent">
-                  {'Ø Volumen eines Workouts, nach Tagen seit dem letzten.'}
+                  {'Ø Volumen eines Workouts in kg, nach Tagen seit dem letzten.'}
                   {restGap.thin.length > 0
                     && ` Für ${joinAnd(restGap.thin.map((b) => b.label))} Tage fehlen noch Workouts.`}
                 </p>
@@ -730,7 +745,7 @@ export function StatistikPage({ payload }: { payload: StatistikPayload }) {
             <>
               {drift.groups.map((group) => (
                 <div className="prog prog--plain" key={group.label ?? 'ohne'}>
-                  <span className="prog__name">{group.label ?? 'Ohne Gruppe'}</span>
+                  <span className="prog__name">{group.label ?? 'Ohne Muskelgruppe'}</span>
                   <span className="prog__axis">
                     <span className="prog__bar prog__bar--flat"
                       style={{
@@ -765,9 +780,9 @@ export function StatistikPage({ payload }: { payload: StatistikPayload }) {
         {stalest.length > 0 && (
           <section aria-labelledby="drought-h">
             <div className="sec__head">
-              <h2 className="label" id="drought-h">Am längsten ohne Bestwert</h2>
+              <h2 className="label" id="drought-h">Am längsten ohne Rekord</h2>
               <span className="sec__sp" />
-              <span className="label">Einheiten</span>
+              <span className="label">Workouts</span>
             </div>
             {stalest.map((row) => (
               <div className="prog prog--plain prog--count" key={row.exercise_id}>
@@ -780,7 +795,7 @@ export function StatistikPage({ payload }: { payload: StatistikPayload }) {
                 </span>
                 <span className="prog__pct"
                   title={row.last_record_at === null
-                    ? 'Noch nie über die erste Einheit hinaus'
+                    ? 'Noch nie über das erste Workout hinaus'
                     : `Letzter Rekord: ${shortDate(row.last_record_at)}`}>
                   {`${row.sessions_since}`}
                 </span>

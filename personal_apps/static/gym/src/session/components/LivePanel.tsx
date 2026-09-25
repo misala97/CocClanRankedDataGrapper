@@ -364,7 +364,7 @@ export function LivePanel({
       {stall !== undefined && (
         <p className="live__stall">
           <span className="live__stall-lbl">Stagniert</span>
-          {` ${stall} Workouts ohne neuen e1RM-PR.`}
+          {` ${stall} Workouts ohne neuen Rekord.`}
         </p>
       )}
 
@@ -405,7 +405,7 @@ export function LivePanel({
             aria-expanded={sourceOpenFor === live.id} aria-controls={`seed-rule-${live.id}`}
             onClick={() => setSourceOpenFor(sourceOpenFor === live.id ? null : live.id)}>
             <span className="seedline__lbl">
-              {`${source.is_latest ? 'Letztes Mal' : 'Stärkste Einheit'} ${whenSaid(source.date)}`}
+              {`${source.is_latest ? 'Letztes Mal' : 'Stärkstes Workout'} ${whenSaid(source.date)}`}
             </span>
             {' '}
             <span className="seedline__val">{setsLine(source.sets)}</span>

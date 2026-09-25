@@ -47,7 +47,7 @@ describe('LiveSettingsSheet', () => {
     // step: both come from these settings.
     const user = userEvent.setup()
     const { invalidate, sheet } = mount()
-    await user.click(await sheet.findByRole('button', { name: '3:00' }))
+    await user.click(await sheet.findByRole('button', { name: '2:00' }))
     await waitFor(() => expect(invalidate)
       .toHaveBeenCalledWith({ queryKey: sessionKey(payload.session.id) }))
   })

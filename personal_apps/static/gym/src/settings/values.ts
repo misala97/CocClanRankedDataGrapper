@@ -34,15 +34,19 @@ const REST_GAP = 30
 const REST_FLOOR = 30
 
 /**
- * Five rests half a minute apart, the reference `before` places in -- one
- * for the settings, where lifters mostly want longer than the list; two for
- * "Pause heute", which goes either way. The reference is always one of them,
- * so going back to it is one tap; fewer come before it rather than any
- * below half a minute.
+ * Five rests half a minute apart, the reference in the middle: one row for
+ * "Pause heute" and the settings alike, each around the value it goes back
+ * to (G-056; the settings put it second). The reference is always one of
+ * them, so going back to it is one tap; fewer come before it rather than any
+ * below half a minute, and fewer after it rather than any past REST_MAX --
+ * a rest the server refuses.
  */
-export function restChoices(reference: number | null, before: 1 | 2): number[] {
-  let first = reference ?? REST_AROUND
-  for (let i = 0; i < before && first - REST_GAP >= REST_FLOOR; i += 1) first -= REST_GAP
+export function restChoices(reference: number | null): number[] {
+  const centre = reference ?? REST_AROUND
+  let first = centre
+  for (let i = 0; i < 2 && first - REST_GAP >= REST_FLOOR; i += 1) first -= REST_GAP
+  const last = () => first + 4 * REST_GAP
+  while (last() > REST_MAX && last() - REST_GAP >= centre) first -= REST_GAP
   return [0, 1, 2, 3, 4].map((i) => first + i * REST_GAP)
 }
 
@@ -83,11 +87,6 @@ export function stopsLine(stops: number[]): string {
   const first = stops.slice(0, 5)
   const shown = first.map(kg).join(first.every(Number.isInteger) ? ', ' : ' · ')
   return stops.length > 5 ? `${shown} …` : shown
-}
-
-/** An even stack's first stops, from its step. */
-export function evenStops(step: number): number[] {
-  return [1, 2, 3].map((n) => Math.round(step * n * 100) / 100)
 }
 
 /** Stops as typed: "5, 12; 19" -> [5, 12, 19], ascending, once each. Comma,

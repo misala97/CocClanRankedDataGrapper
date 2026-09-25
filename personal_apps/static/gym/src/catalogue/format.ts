@@ -16,14 +16,16 @@ export function recency(daysAgo: number | null, lead = false): string {
 }
 
 /**
- * "4 Einheiten ohne PR", never a bare "4 ohne PR": the unit is the whole
- * meaning. At 0 the clause is dropped rather than rendered blank -- a row that
- * just set a record was showing an empty slot where every other row has a
- * count, which reads as missing data.
+ * "seit 4 Workouts ohne Rekord", never a bare "4 ohne PR": the unit is the
+ * whole meaning (D16). At 0 the clause is dropped rather than rendered blank
+ * -- a row that just set a record was showing an empty slot where every
+ * other row has a count, which reads as missing data. `lead` capitalises it
+ * where it stands alone, as a tag beside "Rekord" and "+18 % Vol."; after a
+ * "·" it stays lower case.
  */
-export function sincePr(sessions: number | null): string {
+export function sincePr(sessions: number | null, lead = false): string {
   if (!sessions) return ''
-  return `${sessions} ${sessions === 1 ? 'Einheit' : 'Einheiten'} ohne PR`
+  return `${lead ? 'Seit' : 'seit'} ${sessions} ${sessions === 1 ? 'Workout' : 'Workouts'} ohne Rekord`
 }
 
 /**

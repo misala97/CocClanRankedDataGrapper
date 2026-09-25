@@ -42,7 +42,7 @@ export function SessionTotals({ volume, setsDone, startedAt }: Props) {
 
   return (
     <>
-      <h2 className="sr-only">Diese Einheit</h2>
+      <h2 className="sr-only">Dieses Workout</h2>
       <div className="grew">
         <span className={`grew__num${counting ? ' is-counting' : ''}`}>
           {Math.round(shown).toLocaleString('de-DE')}

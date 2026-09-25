@@ -70,6 +70,33 @@ describe('CataloguePage', () => {
     // Nothing to rest between yet.
     expect(screen.queryByText('Deine Pause')).toBeNull()
   })
+
+  it('names each order by what it does, the first grouping as well (G-022)', () => {
+    mount()
+    const orders = within(screen.getByRole('group', { name: 'Übungen ordnen' }))
+    expect(orders.getAllByRole('button').map((b) => b.textContent))
+      .toEqual(['Nach Muskelgruppe', 'Stagniert zuerst', 'Zuletzt trainiert'])
+    expect(orders.getByRole('button', { name: 'Nach Muskelgruppe' }))
+      .toHaveAttribute('aria-pressed', 'true')
+  })
+
+  it('counts a stall in workouts since the last record, and drops it at none (D16)', () => {
+    mount({
+      groups: [{
+        name: 'Brust',
+        entries: [
+          { ...entry(1, 'Bankdrücken (Langhantel)'), days_ago: 3, sessions_since_pr: 4 },
+          { ...entry(2, 'Schrägbankdrücken'), days_ago: 3, sessions_since_pr: 1 },
+          { ...entry(3, 'Butterfly'), days_ago: 3, sessions_since_pr: 0 },
+        ],
+      }],
+    })
+    const meta = (name: string) =>
+      screen.getByText(name).closest('a')!.querySelector('.row__meta')!.textContent
+    expect(meta('Bankdrücken (Langhantel)')).toBe('vor 3 Tagen · seit 4 Workouts ohne Rekord')
+    expect(meta('Schrägbankdrücken')).toBe('vor 3 Tagen · seit 1 Workout ohne Rekord')
+    expect(meta('Butterfly')).toBe('vor 3 Tagen')
+  })
 })
 
 describe('Deine Pause', () => {
@@ -151,7 +178,7 @@ describe('Deine Pause', () => {
     await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1))
     expect(sent(fetchMock)).toEqual(['/gym/rest', ''])
     expect(sheet.queryByRole('button', { name: '15 Sekunden mehr' })).toBeNull()
-    expect(sheet.getByText('Die Liste nimmt je nach Übung 1:00 bis 3:00 — Kreuzheben mehr, Curls weniger.'))
+    expect(sheet.getByText('Standard: je nach Übung 1:00 bis 3:00 — Kreuzheben mehr, Curls weniger.'))
       .toBeInTheDocument()
   })
 

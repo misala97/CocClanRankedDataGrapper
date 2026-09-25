@@ -1113,6 +1113,30 @@ def test_inviting_twice_does_not_create_a_second_invite(leader_with_partner):
             leader_session_id=leader_with_partner['session']).count() == 1
 
 
+def test_an_ended_invite_says_the_shared_workout_cannot_restart(leader_with_partner):
+    """The one refusal that is for good: this pair's link already ended. The
+    flash says so in the app's word for it, a workout (D16)."""
+    from extensions import db
+    from models import SharedSession
+
+    client = _client_for(leader_with_partner['leader'])
+    url = f"/gym/session/{leader_with_partner['session']}/invite"
+    client.post(url, data={'partner_id': leader_with_partner['partner']})
+    with flask_app.app_context():
+        shared = SharedSession.query.filter_by(
+            leader_session_id=leader_with_partner['session']).one()
+        shared.ended_at = dt.datetime.utcnow()
+        db.session.commit()
+    with client.session_transaction() as flask_session:
+        flask_session.pop('_flashes', None)
+
+    client.post(url, data={'partner_id': leader_with_partner['partner']})
+    with client.session_transaction() as flask_session:
+        assert flask_session['_flashes'] == [(
+            'error', 'Das gemeinsame Workout mit pytest invite partner ist bereits beendet '
+                     'und kann nicht neu gestartet werden.')]
+
+
 def test_a_stranger_cannot_invite_into_someone_elses_session(leader_with_partner):
     """Ownership failures are 404 throughout the gym: a 403 would confirm the
     session exists."""

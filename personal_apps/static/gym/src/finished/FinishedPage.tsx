@@ -15,10 +15,13 @@ import type { LiveBest } from '../session/types'
 import { leaveBySubmit, leavePage, useSheetHistory } from '../session/useSheetHistory'
 import { Sheet } from '../session/components/Sheet'
 import { Icon } from '../components/Icon'
+import { sincePr } from '../catalogue/format'
 
-/** A record is e1RM only (D3); the weight and volume kinds are gone. */
-const KINDS: Record<RecordKind, string> = {
-  e1rm: 'e1RM',
+/** A record is e1RM only (D3); the weight and volume kinds are gone. The
+ *  flare names it in full, its first use on the page; the rows under it say
+ *  1RM (D16). */
+const KINDS: Record<RecordKind, { full: string; short: string }> = {
+  e1rm: { full: 'geschätztes Maximum (1RM)', short: '1RM' },
 }
 
 const pad = (n: number) => String(n).padStart(2, '0')
@@ -72,7 +75,7 @@ function Tag({ entry }: { entry: FinishedExercise }) {
     case 'rekord':
       return <span className="vtag vtag--record">Rekord</span>
     case 'stagniert':
-      return <span className="vtag vtag--stall">{`${entry.sessions_since_pr} ohne PR`}</span>
+      return <span className="vtag vtag--stall">{sincePr(entry.sessions_since_pr, true)}</span>
     case 'steigend':
       return <span className="vtag vtag--up">{`+${entry.volume_delta_pct} % Vol.`}</span>
     case 'neu':
@@ -88,7 +91,7 @@ function RecordRow({ record }: { record: SessionRecord }) {
       <span className="row__main stack">
         <span className="row__name row__name--strong">{record.name}</span>
         <span className="row__meta">
-          {`${KINDS[record.kind] ?? record.kind} · vorher ${kg1(record.previous)} kg`}
+          {`${KINDS[record.kind]?.short ?? record.kind} · vorher ${kg1(record.previous)} kg`}
         </span>
       </span>
       <span className="row__trail">
@@ -201,7 +204,7 @@ export function FinishedPage({ payload: initial }: { payload: FinishedPayload })
               claimed almost all of it was spent resting. */}
           {payload.set_pace_seconds !== null && payload.set_pace_seconds > 0 && (
             <span className="finished__rest">
-              {`Ø ${clock(payload.set_pace_seconds)} min pro Satz`}
+              {`Ø ${clock(payload.set_pace_seconds)} min je Satz (inkl. Pause)`}
             </span>
           )}
         </span>
@@ -303,7 +306,7 @@ export function FinishedPage({ payload: initial }: { payload: FinishedPayload })
         <a className={payload.just_finished ? 'record-flare is-fresh' : 'record-flare'}
           href={`/gym/exercises/${lead.exercise_id}`}>
           <div className="record-flare__kind">
-            {`Neuer ${KINDS[lead.kind] ?? lead.kind}-Rekord`}
+            {`Neuer Rekord · ${KINDS[lead.kind]?.full ?? lead.kind}`}
           </div>
           <div className="record-flare__name">{lead.name}</div>
           <div className="record-flare__row">
@@ -336,7 +339,7 @@ export function FinishedPage({ payload: initial }: { payload: FinishedPayload })
           {payload.advice.map((item) => (
             <p className="next-time__body" key={item.exercise_id}>
               <b>{item.name}</b>
-              {` steht seit ${item.sessions} ${item.sessions === 1 ? 'Einheit' : 'Einheiten'} auf ${kg1(item.stuck_at)} kg — auf `}
+              {` steht seit ${item.sessions} ${item.sessions === 1 ? 'Workout' : 'Workouts'} auf ${kg1(item.stuck_at)} kg — auf `}
               <b>{`${kg1(item.suggested_weight)} kg`}</b>
               {' gehen, notfalls 2 Wdh. weniger.'}
             </p>

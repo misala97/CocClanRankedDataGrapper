@@ -89,10 +89,16 @@ describe('ExerciseChart', () => {
   it('describes the range and the date span for a screen reader', () => {
     render(<ExerciseChart chart={chart} {...labels} />)
     const svg = screen.getByRole('img')
-    expect(svg.getAttribute('aria-label')).toContain('3 Einheiten')
+    expect(svg.getAttribute('aria-label')).toContain('3 Workouts')
     expect(svg.getAttribute('aria-label')).toContain('01.06.2026 bis 01.08.2026')
     // the DATA range, not the padded axis range
     expect(svg.getAttribute('aria-label')).toContain('90,0 und 110,0')
+  })
+
+  it('says one workout in the singular', () => {
+    render(<ExerciseChart chart={chart} {...labels} sessionCount={1} />)
+    expect(screen.getByRole('img').getAttribute('aria-label'))
+      .toMatch(/^Verlauf des 1RM über 1 Workout, /)
   })
 
   it('shows the deload legend key only when a deload is plotted', () => {
@@ -106,7 +112,7 @@ describe('ExerciseChart', () => {
   it('shows the record legend key only when a record is plotted', () => {
     render(<ExerciseChart chart={{ ...chart, has_record: false }} {...labels} />)
     expect(screen.queryByText('Rekord')).not.toBeInTheDocument()
-    expect(screen.getByText('e1RM')).toBeInTheDocument()
+    expect(screen.getByText('1RM')).toBeInTheDocument()
   })
 
   it('omits the position label when only one series is drawn', () => {
@@ -153,7 +159,7 @@ describe('tap to inspect', () => {
     const { container } = render(<ExerciseChart chart={chart} {...labels} />)
     tapAt(container, chart, 310, 20)
     const read = container.querySelector('.chart__read')!
-    expect(read).toHaveTextContent('01.06.2026 · 100,0 kg e1RM')
+    expect(read).toHaveTextContent('01.06.2026 · 100,0 kg 1RM')
     expect(read).toHaveTextContent('Rekord')
     // One series only: no P label in the readout.
     expect(read).not.toHaveTextContent('P2')

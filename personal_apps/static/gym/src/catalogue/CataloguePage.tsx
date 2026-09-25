@@ -9,9 +9,9 @@ import { RestSheet, exceptionCount, listRange } from '../settings/RestSheet'
 import { clock } from '../settings/values'
 
 const SORTS: { mode: SortMode; label: string }[] = [
-  { mode: 'muscle', label: 'Muskelgruppe' },
-  { mode: 'stall', label: 'Ohne PR' },
-  { mode: 'recent', label: 'Zuletzt' },
+  { mode: 'muscle', label: 'Nach Muskelgruppe' },
+  { mode: 'stall', label: 'Stagniert zuerst' },
+  { mode: 'recent', label: 'Zuletzt trainiert' },
 ]
 
 function ExerciseRow({ entry, group }: {
@@ -176,7 +176,7 @@ export function CataloguePage({ payload }: { payload: CataloguePayload }) {
               }} />
           </div>
 
-          <div className="sorts" role="group" aria-label="Sortierung">
+          <div className="sorts" role="group" aria-label="Übungen ordnen">
             {SORTS.map(({ mode, label }) => (
               <button key={mode} type="button"
                 className={sort === mode ? 'sort is-on' : 'sort'}

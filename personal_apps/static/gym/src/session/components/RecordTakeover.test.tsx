@@ -33,9 +33,9 @@ afterEach(() => {
 })
 
 describe('RecordTakeover', () => {
-  it('names the record an e1RM record, the only kind there is (D3)', () => {
+  it('names the record a 1RM record, in full, the only kind there is (D3, D16)', () => {
     mount()
-    expect(screen.getByText('Neuer e1RM-Rekord')).toBeInTheDocument()
+    expect(screen.getByText('Neuer Rekord · geschätztes Maximum (1RM)')).toBeInTheDocument()
     expect(screen.queryByText(/Gewichts-Rekord/)).not.toBeInTheDocument()
   })
 

@@ -4,6 +4,19 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import { ExerciseDetailPage } from './ExerciseDetail'
 import type { ExerciseDetailPayload, ExerciseMeta, SessionRow } from '../types'
 
+/** The first mention of the 1RM a reader meets -- text or aria-label, in
+ *  document order. D16: it is the one that names it in full. */
+function firstOneRm(root: HTMLElement): string | null {
+  const walker = document.createTreeWalker(root, NodeFilter.SHOW_ELEMENT | NodeFilter.SHOW_TEXT)
+  for (let node = walker.nextNode(); node !== null; node = walker.nextNode()) {
+    const said = node.nodeType === Node.TEXT_NODE
+      ? node.textContent
+      : (node as Element).getAttribute('aria-label')
+    if (said?.includes('1RM')) return said
+  }
+  return null
+}
+
 function payload(over: Partial<ExerciseDetailPayload> = {}): ExerciseDetailPayload {
   return {
     exercise: {
@@ -51,8 +64,10 @@ describe('ExerciseDetailPage', () => {
 
   it('shows the empty state when nothing is logged', () => {
     render(<ExerciseDetailPage payload={payload()} />)
-    expect(screen.getByText(/Noch keine Sätze protokolliert/)).toBeInTheDocument()
-    expect(screen.queryByText('Einheiten')).not.toBeInTheDocument()
+    expect(screen.getByText(/Noch keine Sätze protokolliert/)).toHaveTextContent(
+      'Noch keine Sätze protokolliert. Sobald du diese Übung in einem Workout loggst, stehen '
+      + 'hier Rekorde, der Verlauf deines geschätzten Maximums (1RM) und jedes einzelne Workout.')
+    expect(screen.queryByText('Workouts')).not.toBeInTheDocument()
   })
 
   it('formats volume with a German thousands separator', () => {
@@ -62,7 +77,7 @@ describe('ExerciseDetailPage', () => {
 
   it('formats weights with a comma decimal separator', () => {
     render(<ExerciseDetailPage payload={payload({ table: [row()] })} />)
-    expect(screen.getByText('e1RM 100,0')).toBeInTheDocument()
+    expect(screen.getByText('1RM 100,0')).toBeInTheDocument()
   })
 
   it('scopes the session count to the selected position', () => {
@@ -74,13 +89,13 @@ describe('ExerciseDetailPage', () => {
         table: [row()], selected_position: 2, available_positions: [1, 2],
       })} />)
     const head = container.querySelector('.sec--chart .sec__head')!
-    expect(head.textContent).toContain('Pos. 2 · 1 Einheit')
+    expect(head.textContent).toContain('Pos. 2 · 1 Workout')
   })
 
-  it('pluralises Einheit correctly', () => {
+  it('pluralises Workout correctly', () => {
     render(<ExerciseDetailPage
       payload={payload({ table: [row(), row({ session_id: 8 })] })} />)
-    expect(screen.getByText(/2 Einheiten/)).toBeInTheDocument()
+    expect(screen.getByText(/2 Workouts/)).toBeInTheDocument()
   })
 
   it('offers position pills only when more than one slot exists', () => {
@@ -107,7 +122,7 @@ describe('ExerciseDetailPage', () => {
         table: [row()], available_positions: [1, 2], selected_position: 2,
         selected_position_is_default: true, selected_position_reason: 'strongest',
       })} />)
-    expect(screen.getByText(/die stärkste mit mindestens zwei Einheiten/)).toBeInTheDocument()
+    expect(screen.getByText(/die stärkste mit mindestens zwei Workouts/)).toBeInTheDocument()
 
     // Explicitly chosen -- no explanation, because the reader made the choice.
     rerender(<ExerciseDetailPage
@@ -146,11 +161,54 @@ describe('ExerciseDetailPage', () => {
   it('says what a record is, and lets a deload row hold one (G-078)', () => {
     render(<ExerciseDetailPage
       payload={payload({ table: [row({ is_deload: true, is_record: true })] })} />)
-    expect(screen.getByText(/Rekord heißt: das beste e1RM bis zu diesem Tag\./))
+    expect(screen.getByText(/Rekord heißt: das beste 1RM bis zu diesem Tag\./))
       .toBeInTheDocument()
     expect(screen.queryByText(/keine Rekorde/)).not.toBeInTheDocument()
     expect(screen.getByText('Rekord')).toBeInTheDocument()
     expect(screen.getByText('Deload')).toBeInTheDocument()
+  })
+
+  it('names the 1RM in full once, and counts in workouts and records (D16)', () => {
+    const { container } = render(<ExerciseDetailPage payload={payload({
+      exercise: { ...payload().exercise, muscle_group: null, is_unilateral: true },
+      table: [row()],
+      pr_e1rm: {
+        e1rm: 104, weight: 84, reps: 5, session_id: 9,
+        started_at: '2026-08-01T18:30:00', position: 2,
+      },
+      sessions_since_pr: 3,
+    })} />)
+    expect(screen.getByText('Bestes geschätztes Maximum (1RM)')).toBeInTheDocument()
+    expect(firstOneRm(container)).toBe('Bestes geschätztes Maximum (1RM)')
+    expect(screen.getByText('Seit 3 Workouts kein neuer Rekord')).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: 'Verlauf 1RM' })).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: 'Workouts' })).toBeInTheDocument()
+    // Per side, not "einseitig": a dumbbell press is two-sided (G-039).
+    const sub = container.querySelector('.exdetail__sub')
+    expect(sub).toHaveTextContent('Ohne Muskelgruppe')
+    expect(sub).toHaveTextContent('Gewicht je Seite')
+    // Not "je Hantel": a one-sided cable or machine logs per side too.
+    expect(screen.getByText(
+      'Gewicht je Seite geloggt; das Volumen zählt beide Seiten (×2).',
+    )).toBeInTheDocument()
+  })
+
+  it('names the 1RM in full in the heading when no set earned the tile', () => {
+    // Every set past 12 reps: no best e1RM to show, and the chart still
+    // plots an estimate, so the heading is the first mention.
+    const { container } = render(<ExerciseDetailPage
+      payload={payload({ table: [row()], pr_e1rm: null })} />)
+    expect(screen.getByRole('heading', { name: 'Verlauf des geschätzten Maximums (1RM)' }))
+      .toBeInTheDocument()
+    expect(firstOneRm(container)).toBe('Verlauf des geschätzten Maximums (1RM)')
+  })
+
+  it('counts a workout once when the exercise sat at two positions in it', () => {
+    render(<ExerciseDetailPage payload={payload({
+      table: [row({ session_id: 5, position: 1 }), row({ session_id: 5, position: 4 }),
+        row({ session_id: 6, position: 1 })],
+    })} />)
+    expect(screen.getByText('2 Workouts')).toBeInTheDocument()
   })
 
   it('says why there is no best yet when no set had a weight', () => {
@@ -209,27 +267,35 @@ describe('Deine Einstellungen', () => {
   it('says where each value comes from, and marks what it falls back to', () => {
     sheet(stackExercise)
     const rest = setting('Pause nach jedem Satz')
-    expect(rest.getByText('Von dir')).toBeInTheDocument()
+    expect(rest.getByText('Deine')).toBeInTheDocument()
     expect(rest.getAllByRole('button').map((b) => b.textContent))
-      .toEqual(['1:00', '1:30Liste', '2:00', '2:30', '3:00', 'Andere'])
+      .toEqual(['0:30', '1:00', '1:30Standard', '2:00', '2:30', 'Andere'])
     expect(rest.getByRole('button', { name: '2:00' })).toHaveAttribute('aria-pressed', 'true')
 
     const step = setting('Schritt bei + und − (kg)')
     expect(step.getAllByRole('button').map((b) => b.textContent))
-      .toEqual(['2,5Liste', '5', '7', '8', '10', 'Andere'])
+      .toEqual(['2,5Standard', '5', '7', '8', '10', 'Andere'])
     expect(step.getByRole('button', { name: '5' })).toHaveAttribute('aria-pressed', 'true')
 
-    const stops = setting('Stufen am Gerät')
+    const stops = setting('Gewichtsstufen')
     expect(stops.getByText('5, 13, 21')).toBeInTheDocument()
+    expect(stops.getByRole('button', { name: 'Gewichtsstufen ändern' })).toBeInTheDocument()
     expect(stops.getByRole('button', { name: 'Wieder gleichmäßig' })).toBeInTheDocument()
+  })
+
+  it('goes back to the standard stops by that name', () => {
+    sheet({ ...stackExercise,
+      list_defaults: { ...stackExercise.list_defaults, stack_kg: [5, 10, 15] } })
+    expect(setting('Gewichtsstufen').getByRole('button', { name: 'Zurück zum Standard' }))
+      .toBeInTheDocument()
   })
 
   it('asks for a bar only where the list knows one, and stops only on a stack', () => {
     sheet(payload().exercise)
     const bar = setting('Stangengewicht (kg)')
     expect(bar.getAllByRole('button').map((b) => b.textContent))
-      .toEqual(['Ohne', '10', '15', '20Liste', '25', 'Andere'])
-    expect(screen.queryByRole('heading', { name: 'Stufen am Gerät' })).toBeNull()
+      .toEqual(['Ohne', '10', '15', '20Standard', '25', 'Andere'])
+    expect(screen.queryByRole('heading', { name: 'Gewichtsstufen' })).toBeNull()
   })
 
   it('never asks a stack for a bar', () => {
@@ -244,39 +310,39 @@ describe('Deine Einstellungen', () => {
       own: ['default_rest_seconds'],
     }))
     const rest = setting('Pause nach jedem Satz')
-    expect(rest.getByText('Wie die Liste')).toBeInTheDocument()
+    expect(rest.getByText('Standard', { selector: '.setting__src' })).toBeInTheDocument()
 
-    await user.click(rest.getByRole('button', { name: '3:00' }))
+    await user.click(rest.getByRole('button', { name: '2:30' }))
     await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1))
     const [url, init] = fetchMock.mock.calls[0]!
     expect(url).toBe('/gym/exercises/1/update')
-    expect([...(init.body as FormData).entries()]).toEqual([['default_rest_seconds', '180']])
-    expect(rest.getByRole('button', { name: '3:00' })).toHaveAttribute('aria-pressed', 'true')
-    expect(await rest.findByText('Von dir')).toBeInTheDocument()
+    expect([...(init.body as FormData).entries()]).toEqual([['default_rest_seconds', '150']])
+    expect(rest.getByRole('button', { name: '2:30' })).toHaveAttribute('aria-pressed', 'true')
+    expect(await rest.findByText('Deine')).toBeInTheDocument()
   })
 
-  it("goes back to the list's value in one tap", async () => {
+  it('goes back to the standard in one tap', async () => {
     const user = userEvent.setup()
     const { fetchMock } = sheet(stackExercise, () => ({
       ...stackExercise, default_rest_seconds: 90,
       own: stackExercise.own.filter((f) => f !== 'default_rest_seconds'),
     }))
     const rest = setting('Pause nach jedem Satz')
-    await user.click(rest.getByRole('button', { name: '1:30 Liste' }))
+    await user.click(rest.getByRole('button', { name: '1:30 Standard' }))
     await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1))
     expect([...(fetchMock.mock.calls[0]![1].body as FormData).entries()])
       .toEqual([['default_rest_seconds', '90']])
-    expect(rest.getByText('Wie die Liste')).toBeInTheDocument()
+    expect(rest.getByText('Standard', { selector: '.setting__src' })).toBeInTheDocument()
   })
 
   it('puts the value back and says why when a save fails', async () => {
     const user = userEvent.setup()
     sheet(payload().exercise, () => new TypeError('Failed to fetch'))
     const rest = setting('Pause nach jedem Satz')
-    await user.click(rest.getByRole('button', { name: '3:00' }))
+    await user.click(rest.getByRole('button', { name: '2:30' }))
     expect(await screen.findByRole('alert'))
       .toHaveTextContent('Verbindung fehlgeschlagen — deine letzte Änderung wurde nicht gespeichert.')
-    expect(rest.getByRole('button', { name: '1:30 Liste' })).toHaveAttribute('aria-pressed', 'true')
+    expect(rest.getByRole('button', { name: '1:30 Standard' })).toHaveAttribute('aria-pressed', 'true')
   })
 
   it('falls back to the rest for all, and calls an own rest an exception', () => {
@@ -287,7 +353,13 @@ describe('Deine Einstellungen', () => {
     const rest = setting('Pause nach jedem Satz')
     expect(rest.getByText('Ausnahme')).toBeInTheDocument()
     expect(rest.getAllByRole('button').map((b) => b.textContent))
-      .toEqual(['2:00', '2:30deine', '3:00', '3:30', '4:00', 'Andere'])
+      .toEqual(['1:30', '2:00', '2:30Deine', '3:00', '3:30', 'Andere'])
+  })
+
+  it('says a rest that is not its own follows the rest for all', () => {
+    sheet({ ...payload().exercise, default_rest_seconds: 150, rest_for_all: 150, own: [] })
+    const rest = setting('Pause nach jedem Satz')
+    expect(rest.getByText('Wie deine Pause', { selector: '.setting__src' })).toBeInTheDocument()
   })
 
   it('takes a machine\'s own stops typed once, and only a list of them', async () => {
@@ -295,11 +367,12 @@ describe('Deine Einstellungen', () => {
     const even = { ...stackExercise, stack_kg: null,
       own: stackExercise.own.filter((f) => f !== 'stack_kg') }
     const { fetchMock } = sheet(even)
-    const stops = setting('Stufen am Gerät')
-    expect(stops.getByText('Gleichmäßig, im Schritt von oben: 5, 10, 15 …')).toBeInTheDocument()
+    const stops = setting('Gewichtsstufen')
+    // The step, not a ladder from 0: a real stack starts where it starts (G-042).
+    expect(stops.getByText('Gleichmäßig, in Schritten von 5 kg.')).toBeInTheDocument()
 
-    await user.click(stops.getByRole('button', { name: 'Das Gerät hat andere Stufen' }))
-    const field = stops.getByLabelText(/Jede Stufe in kg/)
+    await user.click(stops.getByRole('button', { name: 'Das Gerät hat andere Gewichtsstufen' }))
+    const field = stops.getByLabelText(/Jede Gewichtsstufe in kg/)
     await user.type(field, '12')
     expect(stops.getByRole('button', { name: 'Übernehmen' })).toBeDisabled()
     await user.type(field, ', 5; 19')

@@ -97,7 +97,7 @@ describe('StartPage', () => {
   describe('the lead briefing', () => {
     it('names a stall the lead routine contains', () => {
       mount({ stalls: [stall()] })
-      expect(screen.getByText(/Bankdrücken steht seit 4 Sessions bei 60,0 kg\./))
+      expect(screen.getByText(/Bankdrücken steht seit 4 Workouts bei 60,0 kg\./))
         .toBeInTheDocument()
     })
 
@@ -124,9 +124,9 @@ describe('StartPage', () => {
       expect(screen.queryByText(/steht seit/)).not.toBeInTheDocument()
     })
 
-    it('says one Session in the singular', () => {
+    it('says one Workout in the singular', () => {
       mount({ stalls: [stall({ sessions_since_pr: 1 })] })
-      expect(screen.getByText(/seit 1 Session bei/)).toBeInTheDocument()
+      expect(screen.getByText(/seit 1 Workout bei/)).toBeInTheDocument()
     })
   })
 
@@ -218,6 +218,13 @@ describe('StartPage', () => {
       expect(within(section).getAllByRole('link')).toHaveLength(7)
     })
 
+    it('tags each lift with its count, a tag of its own and so capitalised (D16)', () => {
+      mount({ stalls: [stall(), stall({ exercise_id: 11, name: 'Dips', sessions_since_pr: 1 })] })
+      const section = screen.getByRole('region', { name: 'Steht still' })
+      expect([...section.querySelectorAll('.vtag--stall')].map((t) => t.textContent))
+        .toEqual(['Seit 4 Workouts ohne Rekord', 'Seit 1 Workout ohne Rekord'])
+    })
+
     it('scopes the deload note to what is actively trained', () => {
       mount({ stalls: many, deload_suggestion: { count: 3, stalls: many.slice(0, 3) } })
       expect(screen.getByText('3 davon aktiv trainiert')).toBeInTheDocument()
@@ -243,8 +250,10 @@ describe('StartPage', () => {
       expect(bars[0]).toHaveStyle({ blockSize: '100%' })
       expect(bars[1]).toHaveStyle({ blockSize: '50%' })
       // Magnitude is not left to bar height alone.
-      expect(bars[0]).toHaveAccessibleName(/4\.000 kg, mit Deload-Einheit/)
+      expect(bars[0]).toHaveAccessibleName(/4\.000 kg, mit Deload-Workout/)
       expect(bars[1]).toHaveAccessibleName(/Diese Woche: 2\.000 kg/)
+      expect(screen.getByText(/kg diese Woche bisher/))
+        .toHaveTextContent('2.000 kg diese Woche bisher — läuft noch. Schraffiert: Woche mit Deload-Workout.')
     })
 
     it('says so rather than drawing eight stubs when there is nothing', () => {
@@ -475,6 +484,15 @@ describe('the first-run checklist', () => {
   it('counts workouts once there is more than one', () => {
     mount({ ...once, onboarding: { ...once.onboarding!, workouts: 2 } })
     expect(step(/Erstes Workout/)).toHaveTextContent('2 Workouts · zuletzt heute')
+  })
+
+  it('lower-cases only the adverb mid-sentence, never a noun', () => {
+    mount({
+      ...once,
+      consistency: { ...once.consistency!, days_since_last: 3 },
+      onboarding: { ...once.onboarding!, workouts: 2 },
+    })
+    expect(step(/Erstes Workout/)).toHaveTextContent('2 Workouts · zuletzt vor 3 Tagen')
   })
 
   it('steps aside while a workout runs', () => {

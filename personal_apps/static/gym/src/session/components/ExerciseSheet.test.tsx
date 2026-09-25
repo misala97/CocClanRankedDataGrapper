@@ -81,13 +81,13 @@ describe('ExerciseSheet', () => {
 
   it('marks the rest in force and saves a pick on the tap', async () => {
     // The exercise has its own rest, 2:30, and none for today: the row
-    // centres on it, marked "deine".
+    // centres on it, marked "Deine".
     const user = userEvent.setup()
     const { actions: a } = open()
     const row = within(screen.getByRole('group', { name: 'Pause heute' }))
     expect(row.getAllByRole('button').map((b) => b.textContent))
-      .toEqual(['1:30', '2:00', '2:30deine', '3:00', '3:30', 'Andere'])
-    expect(row.getByRole('button', { name: '2:30 deine' })).toHaveAttribute('aria-pressed', 'true')
+      .toEqual(['1:30', '2:00', '2:30Deine', '3:00', '3:30', 'Andere'])
+    expect(row.getByRole('button', { name: '2:30 Deine' })).toHaveAttribute('aria-pressed', 'true')
 
     await user.click(row.getByRole('button', { name: '3:00' }))
     expect(a.onRestChange).toHaveBeenCalledWith(180)
@@ -98,14 +98,14 @@ describe('ExerciseSheet', () => {
     const { actions: a } = open({ exercise: { ...exercise, rest_seconds: 180 } })
     const row = within(screen.getByRole('group', { name: 'Pause heute' }))
     expect(row.getByRole('button', { name: '3:00' })).toHaveAttribute('aria-pressed', 'true')
-    await user.click(row.getByRole('button', { name: '2:30 deine' }))
+    await user.click(row.getByRole('button', { name: '2:30 Deine' }))
     expect(a.onRestChange).toHaveBeenCalledWith(150)
   })
 
-  it("marks the list's rest as the list's", () => {
+  it('marks the standard rest by that name', () => {
     open({ exercise: { ...exercise, rest_setting: 90, rest_setting_mine: false } })
     const row = within(screen.getByRole('group', { name: 'Pause heute' }))
-    expect(row.getByRole('button', { name: '1:30 Liste' })).toHaveAttribute('aria-pressed', 'true')
+    expect(row.getByRole('button', { name: '1:30 Standard' })).toHaveAttribute('aria-pressed', 'true')
   })
 
   it('nudges another rest in 15 seconds and sends it once, when it settles', async () => {

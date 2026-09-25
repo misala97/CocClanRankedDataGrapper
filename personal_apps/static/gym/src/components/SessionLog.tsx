@@ -11,9 +11,9 @@ export function SessionLog({ table, selectedPosition, isUnilateral }: Props) {
   return (
     <section className="sec sec--log" aria-labelledby="sec-log">
       {/* Same scoping as the chart above: this list is filtered too, and a
-          bare "Einheiten" over 10 of 13 rows is a quiet miscount. */}
+          bare "Workouts" over 10 of 13 rows is a quiet miscount. */}
       <div className="sec__head">
-        <h2 className="label" id="sec-log">Einheiten</h2>
+        <h2 className="label" id="sec-log">Workouts</h2>
         <span className="sec__sp" />
         <span className="label">
           {selectedPosition !== null ? `Pos. ${selectedPosition}` : 'Alle Positionen'}
@@ -22,7 +22,7 @@ export function SessionLog({ table, selectedPosition, isUnilateral }: Props) {
 
       {isUnilateral && (
         <p className="exdetail__note">
-          Einseitig: Gewicht &amp; Wdh. sind je Seite geloggt, Volumen zählt beide Seiten (×2).
+          Gewicht je Seite geloggt; das Volumen zählt beide Seiten (×2).
         </p>
       )}
 
@@ -58,14 +58,14 @@ export function SessionLog({ table, selectedPosition, isUnilateral }: Props) {
             </span>
             <span className="row__trail row__trail--stack">
               <span className="vol">{volume(row.volume)}<small>kg</small></span>
-              <span className="e1rm">{`e1RM ${kg1(row.e1rm)}`}</span>
+              <span className="e1rm">{`1RM ${kg1(row.e1rm)}`}</span>
             </span>
           </a>
         )
       })}
 
       <p className="exdetail__note">
-        Rekord heißt: das beste e1RM bis zu diesem Tag. Deload-Einheiten bleiben
+        Rekord heißt: das beste 1RM bis zu diesem Tag. Deload-Workouts bleiben
         in der Liste — sie sind das Protokoll — und zählen nicht gegen die
         Stagnation.
       </p>
