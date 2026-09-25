@@ -7,7 +7,7 @@ const NOTICE_MS = 8000
 /**
  * The visible half of "Dein Partner hat den Plan geändert."
  *
- * useFollowerSync announces the same sentence to the live region, but that is
+ * usePartnerSync announces the same sentence to the live region, but that is
  * sr-only text: for anyone LOOKING at the screen the queue rearranged itself
  * without a word. A bar in the page flow, where the reorder bar sits and for
  * the same reason -- it is a statement about the list below, and it must not

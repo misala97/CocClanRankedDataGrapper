@@ -1,4 +1,5 @@
 import type { RoutinePlan, SessionDetailPayload, SessionReply } from './types'
+import type { SyncPayload } from '../partner/types'
 import { getJson, postForm, MutationFailed } from '../api'
 
 /**
@@ -77,11 +78,11 @@ export function fetchSession(sessionId: number): Promise<SessionDetailPayload> {
     .then(rememberCatalogue)
 }
 
-/** The follower's version check. Reads the caller's OWN session -- a
- *  structural change arrives as a write into their rows, so nothing here
- *  reads the partner's data. */
-export function fetchSync(sessionId: number): Promise<{ version: number; shared: boolean }> {
-  return getJson<{ version: number; shared: boolean }>(`/gym/session/${sessionId}/sync.json`)
+/** The poll behind the partner lines (usePartnerSync): the follower's
+ *  version check -- a structural change arrives as a write into their own
+ *  rows -- and every partner line, read server-side through partner_view. */
+export function fetchSync(sessionId: number): Promise<SyncPayload> {
+  return getJson<SyncPayload>(`/gym/session/${sessionId}/sync.json`)
 }
 
 export const api = {

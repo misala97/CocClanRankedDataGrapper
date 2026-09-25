@@ -16,6 +16,9 @@ import type { LiveBest } from '../session/types'
 import { leaveBySubmit, leavePage, useSheetHistory } from '../session/useSheetHistory'
 import { Sheet } from '../session/components/Sheet'
 import { Icon } from '../components/Icon'
+import { PARTNER_SHEET } from '../partner/PartnerLine'
+import { MitPartner, PartnerSheet } from '../partner/PartnerSheet'
+import type { PartnerRef } from '../partner/types'
 import { sincePr } from '../catalogue/format'
 
 /** A record is e1RM only (D3). The flare names it in full, its first use on
@@ -211,6 +214,8 @@ export function FinishedPage({ payload: initial }: { payload: FinishedPayload })
   // for next time -- without a reload, and the sheet you saved from stays open.
   const [payload, setPayload] = useState(initial)
   const [saveError, setSaveError] = useState<string | null>(null)
+  // The partner whose list is open ("mit <Name>").
+  const [partnerShown, setPartnerShown] = useState<PartnerRef | null>(null)
   // What "Routine aktualisieren" would change; null: nothing, so no offer.
   const routineDiff = payload.session.template_id !== null && payload.total_sets > 0
     ? templateDiff(payload) : null
@@ -314,6 +319,13 @@ export function FinishedPage({ payload: initial }: { payload: FinishedPayload })
               {`Ø ${clock(payload.set_pace_seconds)} min je Satz (inkl. Pause)`}
             </span>
           )}
+          {/* Whom it was done with, and their list as it ended (D14). */}
+          {payload.partners.map((partner) => (
+            <MitPartner key={partner.id} partner={partner} onOpen={(p) => {
+              setPartnerShown(p)
+              openSheet(PARTNER_SHEET)
+            }} />
+          ))}
         </span>
         {/* A label, not a state (4.2): the word in an outline, at the 13px
             floor where the header's caps pill was 11px. */}
@@ -537,6 +549,8 @@ export function FinishedPage({ payload: initial }: { payload: FinishedPayload })
           </div>
         </Sheet>
       )}
+
+      {payload.partners.length > 0 && <PartnerSheet target={partnerShown} dated />}
 
       {/* Bodyweight and the session note: editable "at any point during or
           after the workout" per spec, but this screen -- the ONLY one a

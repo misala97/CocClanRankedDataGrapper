@@ -8,6 +8,11 @@ import { instant, kg, kg1, localParts, roundTo, shortDate, signedKg1, volume as 
 import { apart, find, fold, isQuery, mentions } from '../search'
 import { NearMisses } from '../components/NearMisses'
 import { morphFrom } from '../vt'
+import { useSheets } from '../session/stores'
+import { useSheetHistory } from '../session/useSheetHistory'
+import { PARTNER_SHEET } from '../partner/PartnerLine'
+import { MitPartner, PartnerSheet } from '../partner/PartnerSheet'
+import type { PartnerRef } from '../partner/types'
 
 /** A figure never parts from its unit at a line end. */
 const NB = ' '
@@ -179,7 +184,7 @@ function RecordItem({ record }: { record: HistoryRecord }) {
   )
 }
 
-function Row({ entry, weekdayShort, hit, biggest, onlyRecords }: {
+function Row({ entry, weekdayShort, hit, biggest, onlyRecords, onPartner }: {
   entry: HistoryEntry
   weekdayShort: string[]
   /** Whether an exercise of the row is what the search found it by; null
@@ -188,6 +193,7 @@ function Row({ entry, weekdayShort, hit, biggest, onlyRecords }: {
   biggest: boolean
   /** "Nur Rekorde": the workout's records stand in for its exercise line. */
   onlyRecords: boolean
+  onPartner(partner: PartnerRef): void
 }) {
   const exporting = useHistoryUi((s) => s.exporting)
   const selected = useHistoryUi((s) => s.selected.includes(entry.session_id))
@@ -265,6 +271,11 @@ function Row({ entry, weekdayShort, hit, biggest, onlyRecords }: {
               have silently recoloured Deload -- which must never carry a hue. */}
           {entry.is_deload && <span className="vtag vtag--deload">Deload</span>}
         </span>
+        {/* Beside the row's link, not inside it: the row opens the workout,
+            this opens the partner's list (D14 screen 2). */}
+        {entry.partners.map((partner) => (
+          <MitPartner key={partner.id} partner={partner} onOpen={onPartner} />
+        ))}
       </div>
       {onlyRecords && entry.records.length > 0 && (
         <ul className="recs" aria-label={`${plural(entry.records.length, 'Rekord', 'Rekorde')} in diesem Workout`}>
@@ -285,6 +296,15 @@ export function HistoryPage({ payload }: { payload: HistoryPayload }) {
   const cancelExport = useHistoryUi((s) => s.cancelExport)
   const selected = useHistoryUi((s) => s.selected)
   const replaceSelection = useHistoryUi((s) => s.replaceSelection)
+  // "mit <Name>" opens the partner's list as it ended (D14); Back closes it
+  // rather than leaving Verlauf.
+  useSheetHistory()
+  const openSheet = useSheets((s) => s.open)
+  const [partnerShown, setPartnerShown] = useState<PartnerRef | null>(null)
+  const showPartner = (partner: PartnerRef) => {
+    setPartnerShown(partner)
+    openSheet(PARTNER_SHEET)
+  }
 
   // What each row is searched by: its name and date words, and each of its
   // exercises' texts -- the add sheet's, so a word that finds an exercise
@@ -470,7 +490,7 @@ export function HistoryPage({ payload }: { payload: HistoryPayload }) {
                     )}
                     <Row entry={entry} weekdayShort={payload.weekday_short} hit={hit}
                       biggest={entry.session_id === payload.biggest_session_id}
-                      onlyRecords={onlyRecords} />
+                      onlyRecords={onlyRecords} onPartner={showPartner} />
                   </div>
                 ))}
               </section>
@@ -483,6 +503,7 @@ export function HistoryPage({ payload }: { payload: HistoryPayload }) {
           <a href="/gym">Auf Start ein Workout beginnen</a>
         </p>
       )}
+      <PartnerSheet target={partnerShown} dated />
     </>
   )
 }

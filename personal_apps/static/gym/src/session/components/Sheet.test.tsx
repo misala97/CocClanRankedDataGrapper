@@ -77,4 +77,17 @@ describe('Sheet', () => {
     expect(node).toHaveAttribute('aria-labelledby', 'sheet-a-title')
     expect(document.querySelector('#sheet-a-title')).toHaveTextContent('Erste')
   })
+
+  it('binds a lead to its title, and names itself by the title alone', () => {
+    // A training partner's tile before their name (D14): one unit in the
+    // head, while the dialog is still called by the name.
+    render(<Sheet id="sheet-p" title="jglaser" lead={<span className="tile">J</span>}>p</Sheet>)
+    act(() => { useSheets.getState().open('sheet-p') })
+    const who = document.querySelector('#sheet-p .sheet__who')!
+    expect([...who.children].map((child) => child.className)).toEqual(['tile', 'sheet__title'])
+    expect(screen.getByRole('dialog', { name: 'jglaser' })).toBeInTheDocument()
+    // Without one the title stands alone, as every other sheet has it.
+    render(<Fixture />)
+    expect(document.querySelector('#sheet-a .sheet__who')).toBeNull()
+  })
 })

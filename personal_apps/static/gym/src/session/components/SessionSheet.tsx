@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import type { Partner, PartnerStatus, SessionMeta } from '../types'
+import type { Partner, SessionMeta } from '../types'
 import type { SessionMetaPatch } from '../api'
 import {
   BODYWEIGHT_MAX_KG, BODYWEIGHT_MIN_KG, MAX_NOTE_CHARS, parseBodyweight,
@@ -14,7 +14,6 @@ interface Props {
    *  see the note on the skip-rest control below. */
   resting: boolean
   partners: Partner[]
-  partnerStatus: PartnerStatus[]
   /** This workout is the FOLLOWER half of a live shared one (the payload's
    *  session_is_shared): its order is the leader's. */
   following?: boolean
@@ -32,7 +31,7 @@ interface Props {
  * a single set.
  */
 export function SessionSheet({
-  session, resting, partners, partnerStatus, following = false, pushSupported,
+  session, resting, partners, following = false, pushSupported,
   onMetaSave, onSkipRest, onInvite, onEnablePush,
 }: Props) {
   const openSheet = useSheets((s) => s.open)
@@ -199,12 +198,6 @@ export function SessionSheet({
             onClick={() => onInvite(partnerId)}>Einladen</button>
         </div>
       )}
-
-      {partnerStatus.map((status) => (
-        <p className="shared-status" key={status.username}>
-          {`${status.username} ${status.accepted ? 'ist dabei' : 'wurde eingeladen'}`}
-        </p>
-      ))}
     </Sheet>
   )
 }

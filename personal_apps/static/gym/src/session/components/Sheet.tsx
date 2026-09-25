@@ -16,6 +16,10 @@ interface Props {
    *  closed by a name collision and reopened to fix the name. Never for one
    *  that displays stored values: those must re-read them on open. */
   keepMounted?: boolean
+  /** Before the title and bound to it -- a training partner's round tile
+   *  (D14). The title then takes up to two lines, where it otherwise has
+   *  one: a username runs as long as it likes. */
+  lead?: ReactNode
   children: ReactNode
 }
 
@@ -41,7 +45,7 @@ interface Props {
  * current state" true rather than merely intended.
  */
 export function Sheet({
-  id, title, closeLabel = 'Fertig', onBack, keepMounted = false, children,
+  id, title, closeLabel = 'Fertig', onBack, keepMounted = false, lead, children,
 }: Props) {
   const dialog = useRef<HTMLDialogElement>(null)
   const openId = useSheets((s) => s.openId)
@@ -79,7 +83,14 @@ export function Sheet({
             <Icon name="back" />
           </button>
         )}
-        <h2 className="sheet__title" id={`${id}-title`}>{title}</h2>
+        {lead === undefined
+          ? <h2 className="sheet__title" id={`${id}-title`}>{title}</h2>
+          : (
+            <span className="sheet__who">
+              {lead}
+              <h2 className="sheet__title" id={`${id}-title`}>{title}</h2>
+            </span>
+          )}
         <button type="button" className="sheet__close" onClick={close}>
           {closeLabel}
         </button>

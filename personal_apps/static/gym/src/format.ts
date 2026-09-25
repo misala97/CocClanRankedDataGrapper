@@ -139,6 +139,12 @@ export function shortDate(iso: string): string {
   return `${pad(d.day)}.${pad(d.month)}.${d.year}`
 }
 
+/** `(x|local).strftime('%H:%M')`: a time of day on Berlin's clock. */
+export function clockTime(iso: string): string {
+  const d = localParts(iso)
+  return `${pad(d.hour)}:${pad(d.minute)}`
+}
+
 /** `(x|local).strftime('%d.%m.')` */
 export function dayMonth(iso: string): string {
   const d = localParts(iso)

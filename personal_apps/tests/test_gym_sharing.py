@@ -1440,7 +1440,9 @@ def test_accepting_seeds_from_the_leaders_current_structure(leader_with_partner)
             se.exercise.name for se in follower_session.exercises]
 
 
-def test_declining_removes_the_invite(leader_with_partner):
+def test_declining_ends_the_invite_and_keeps_it_for_the_leaders_line(leader_with_partner):
+    """Declined, the invite cannot be taken up any more -- but the row stays,
+    stamped, so the leader's line can say so (D14; test_gym_partner_view.py)."""
     from extensions import db
     from models import SharedSession
 
@@ -1451,10 +1453,15 @@ def test_declining_removes_the_invite(leader_with_partner):
         shared_id = SharedSession.query.filter_by(
             leader_session_id=leader_with_partner['session']).first().id
 
-    _client_for(leader_with_partner['partner']).post(f'/gym/shared/{shared_id}/decline')
+    partner = _client_for(leader_with_partner['partner'])
+    partner.post(f'/gym/shared/{shared_id}/decline')
 
     with flask_app.app_context():
-        assert db.session.get(SharedSession, shared_id) is None
+        shared = db.session.get(SharedSession, shared_id)
+        assert shared.declined_at is not None
+        assert shared.accepted_at is None
+    assert partner.get(f'/gym/shared/{shared_id}/confirm').status_code == 404
+    assert partner.post(f'/gym/shared/{shared_id}/decline').status_code == 404
 
 
 def _partner_with_own_workout(leader_with_partner, logged):
@@ -1991,8 +1998,10 @@ def test_the_follower_can_read_their_own_seeded_queue(joined_pair):
 
 
 def test_the_leader_cannot_read_the_followers_workout(joined_pair):
-    """Structure travels; performance does not. Sharing must not have opened a
-    door to the partner's numbers on any route that serves them."""
+    """Structure travels as writes; what the partner lifts is only SHOWN,
+    read-only, through partner_view (D14, M5; test_gym_partner_view.py). The
+    partner's workout itself -- its page, its payloads, its export -- stays
+    theirs on every route that serves it."""
     leader_client = _client_for(joined_pair['leader'])
     follower_session = joined_pair['follower_session']
     for url in (f'/gym/session/{follower_session}',

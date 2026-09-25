@@ -1,9 +1,10 @@
-import { act, render, screen, within } from '@testing-library/react'
+import { act, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { SessionPage, type SessionActions } from './SessionPage'
 import { useAnnouncer, usePush, useSaveState, useSheets, useWorkoutUi } from './stores'
 import { payload } from './types.test-d'
+import type { PartnerLink } from '../partner/types'
 
 beforeEach(() => {
   useSheets.setState(useSheets.getInitialState(), true)
@@ -187,5 +188,100 @@ describe('SessionPage', () => {
     expect(useSheets.getState().openId).toBe('sheet-session')
     expect(useWorkoutUi.getState().reorderUnlocked).toBe(true)
     expect(document.querySelector('#sheet-session')).toHaveAttribute('open')
+  })
+})
+
+describe('the partner lines (D14)', () => {
+  const line = (over: Partial<PartnerLink> = {}): PartnerLink => ({
+    id: 7, username: 'jglaser', viewer_leads: true, state: 'joined',
+    since: '2026-09-25T09:26:00', finished_at: null,
+    exercise: 'Rudern', set_no: 2, done_in_exercise: 1, sets_in_exercise: 3,
+    last_set: { weight: 60, reps: 8 }, rest_left: null, sets_done: 4, sets_total: 12, list_key: 1,
+    ...over,
+  })
+  const partnerList = (over: Record<string, unknown> = {}) => ({
+    id: 7, username: 'jglaser', viewer_leads: true, link_live: true,
+    since: '2026-09-25T09:26:00', started_at: '2026-09-25T09:20:00', finished_at: null,
+    sets_done: 4, sets_total: 12, rest_left: null,
+    rows: [{ id: 1, name: 'Rudern', picture: null, state: 'now',
+      sets: [{ weight: 60, reps: 8 }], done: 1, open: 2, set_no: 2 }],
+    ...over,
+  })
+  afterEach(() => { vi.unstubAllGlobals() })
+
+  it('sits right under the header, one line per partner', () => {
+    const { container } = mount({ partners: {
+      links: [line(), line({ id: 9, username: 'anna', state: 'invited', exercise: null })],
+      receivedAt: Date.now(), dismiss: vi.fn(),
+    } })
+    const lines = container.querySelector('.partners')!
+    expect(container.querySelector('.session-top')!.nextElementSibling).toBe(lines)
+    expect(lines.querySelectorAll('.partner')).toHaveLength(2)
+  })
+
+  it('shows none while nobody trains along', () => {
+    const { container } = mount()
+    expect(container.querySelector('.partners')).toBeNull()
+  })
+
+  it("opens a partner's list from their line, and follows the line as it moves", async () => {
+    const user = userEvent.setup()
+    let answer = partnerList()
+    const fetchMock = vi.fn(async () => new Response(JSON.stringify(answer)))
+    vi.stubGlobal('fetch', fetchMock)
+    const a = actions()
+    const { rerender } = mount({ actions: a, partners: {
+      links: [line()], receivedAt: Date.now(), dismiss: vi.fn(),
+    } })
+    await user.click(screen.getByRole('button', { name: /^jglaser: Satz 2 von 3, Rudern/ }))
+    const sheet = screen.getByRole('dialog', { name: 'jglaser' })
+    await waitFor(() => expect(sheet).toHaveTextContent('Zusammen seit 11:26 · 4 von 12 Sätzen'))
+
+    // The next poll moved them on: the open list is fetched again.
+    answer = partnerList({ sets_done: 5 })
+    rerender(<SessionPage payload={payload} actions={a} pushSupported partners={{
+      links: [line({ set_no: 3, done_in_exercise: 2, sets_done: 5, list_key: 2 })],
+      receivedAt: Date.now(), dismiss: vi.fn(),
+    }} />)
+    await waitFor(() => expect(sheet).toHaveTextContent('5 von 12 Sätzen'))
+    expect(fetchMock).toHaveBeenCalledTimes(2)
+    await user.click(within(sheet).getByRole('button', { name: 'Fertig' }))
+    expect(sheet).not.toHaveAttribute('open')
+  })
+
+  it("keeps a sheet as its line last was once the poll drops it", async () => {
+    // Declined, then put away on the other phone while this one had it open:
+    // the sheet asked for a list nobody has, and said it could not be loaded.
+    const user = userEvent.setup()
+    const fetchMock = vi.fn(async () => new Response('{}', { status: 404 }))
+    vi.stubGlobal('fetch', fetchMock)
+    const a = actions()
+    const invite = { exercise: null, last_set: null }
+    const show = (links: PartnerLink[]) => rerender(
+      <SessionPage payload={payload} actions={a} pushSupported partners={{
+        links, receivedAt: Date.now(), dismiss: vi.fn(),
+      }} />)
+    const { rerender } = mount({ actions: a, partners: {
+      links: [line({ state: 'invited', ...invite })], receivedAt: Date.now(), dismiss: vi.fn(),
+    } })
+    await user.click(screen.getByRole('button', { name: /^jglaser ist eingeladen/ }))
+    const sheet = screen.getByRole('dialog', { name: 'jglaser' })
+    show([line({ state: 'declined', since: '2026-09-25T09:30:00', ...invite })])
+    show([])
+    // As last carried, not as opened: the no, not "noch keine Antwort".
+    expect(sheet).toHaveTextContent('Abgelehnt um 11:30')
+    expect(fetchMock).not.toHaveBeenCalled()
+    await user.click(within(sheet).getByRole('button', { name: 'Fertig' }))
+  })
+
+  it("hands a declined invite's OK to the sync", async () => {
+    const user = userEvent.setup()
+    const dismiss = vi.fn()
+    mount({ partners: {
+      links: [line({ state: 'declined', exercise: null, last_set: null })],
+      receivedAt: 0, dismiss,
+    } })
+    await user.click(screen.getByRole('button', { name: 'OK' }))
+    expect(dismiss).toHaveBeenCalledWith(7)
   })
 })

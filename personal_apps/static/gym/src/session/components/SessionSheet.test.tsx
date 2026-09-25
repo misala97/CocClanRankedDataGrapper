@@ -13,12 +13,11 @@ beforeEach(() => {
 })
 
 // Typed explicitly: an empty literal infers as never[], so any test passing a
-// populated partnerStatus would fail to compile while the suite stayed green.
+// populated partners list would fail to compile while the suite stayed green.
 const base: ComponentProps<typeof SessionSheet> = {
   session: payload.session,
   resting: false,
   partners: [{ id: 7, username: 'Anna' }],
-  partnerStatus: [],
   pushSupported: true,
   onMetaSave: vi.fn(), onSkipRest: vi.fn(), onInvite: vi.fn(), onEnablePush: vi.fn(),
 }
@@ -144,14 +143,5 @@ describe('SessionSheet', () => {
   it('omits the picker when there is nobody to invite', () => {
     open({ partners: [] })
     expect(screen.queryByLabelText('Trainingspartner einladen')).not.toBeInTheDocument()
-  })
-
-  it('reports who is in and who was asked', () => {
-    open({ partnerStatus: [
-      { username: 'Anna', accepted: true },
-      { username: 'Ben', accepted: false },
-    ] })
-    expect(screen.getByText('Anna ist dabei')).toBeInTheDocument()
-    expect(screen.getByText('Ben wurde eingeladen')).toBeInTheDocument()
   })
 })

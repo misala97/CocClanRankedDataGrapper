@@ -393,6 +393,11 @@ SHARED_ROUTES = [
     ('GET',  '/gym/shared/{}/confirm', 'shared_id'),
     ('POST', '/gym/shared/{}/accept',  'shared_id'),
     ('POST', '/gym/shared/{}/decline', 'shared_id'),
+    # The leader's own two (I5) refuse a PENDING invite too: a list exists
+    # only once the invite was accepted, the OK only once it was declined --
+    # test_gym_partner_view.py has who may use them then.
+    ('GET',  '/gym/shared/{}/list.json', 'shared_id'),
+    ('POST', '/gym/shared/{}/dismiss', 'shared_id'),
 ]
 
 

@@ -23,7 +23,7 @@ from models import (
 from auth import login_required
 from features.gym import art, plan, stats
 from features.gym.library import BY_KEY, LIST_GROUPS, MOVEMENT_GROUP
-from features.gym.schemas import FinishedPayload, HeutePayload, SessionDetailPayload
+from features.gym.schemas import FinishedPayload, HeutePayload, SessionDetailPayload, SyncPayload
 from features.gym.exercises import (
     REST_MAX_SECONDS, REST_NUDGE_SECONDS,
     exercise_or_404, library_exercises, search_text,
@@ -50,6 +50,8 @@ from .helpers import (
     _username, _wants_json, planned_set_count,
 )
 from .history import counts, done_sets, load_performed, performed_from_session, _session_rest_entries
+from .live import _live_context, _load_rows
+from .partner_view import followed_a_leader, partner_links, partner_refs
 
 
 def _template_exercises_from_session(session_):
@@ -302,6 +304,7 @@ def _heute_payload():
         for link in SharedSession.query.filter(
             SharedSession.follower_user_id == current_user_id(),
             SharedSession.accepted_at.is_(None),
+            SharedSession.declined_at.is_(None),
             SharedSession.ended_at.is_(None)).all()
     ]
 
@@ -389,88 +392,6 @@ def gym_start():
     return redirect(url_for('gym.session_detail', session_id=session_.id))
 
 
-def _load_rows(session_):
-    """Every row of the workout with its sets and its exercise, in two
-    queries, before anything walks them. Walked lazily, each row cost a query
-    for its sets and one for its exercise -- two per exercise on every live
-    payload, each set tick's included (walkthrough G-140).
-
-    The rows land in the identity map, so session_.exercises and each row's
-    .sets and .exercise read them from there -- for as long as the caller
-    holds the list this returns: the map only keeps weak references, and a
-    row nobody holds is gone again before session_.exercises is read."""
-    return (SessionExercise.query
-            .filter(SessionExercise.session_id == session_.id)
-            .options(joinedload(SessionExercise.exercise), selectinload(SessionExercise.sets))
-            .all())
-
-
-def _live_context(session_, keep_started=False):
-    """The ordered, visible exercise list and which one of them is live.
-
-    `keep_started` is True for the follower half of a live shared workout --
-    see the branch below for what it changes and why only there.
-
-    session_detail computes both anyway for its own purposes (suggestions,
-    the tick strip, the rest lookup...), so this is a straight extraction --
-    not a new computation. It was extracted for the queue-polling endpoint,
-    which the React port removed; it stays because _live_data still builds on
-    it, and having one rule for "which exercise is live" is the point either
-    way.
-    """
-    # A replaced original is hidden from the active view, so its suggestion
-    # would never be used -- skip computing it there. Visibility is derived
-    # from replaces_id (already loaded on every row) rather than by touching
-    # se.replaced_by, which would lazy-load a separate query per row.
-    replaced_original_ids = {se.replaces_id for se in session_.exercises if se.replaces_id}
-    visible_exercises = [se for se in session_.exercises if se.id not in replaced_original_ids]
-
-    # The live exercise: the first visible, non-skipped one that is not yet
-    # fully logged, or the last visible one when everything is done.
-    #
-    # This used to be computed in the template. It moved here because three
-    # surfaces now have to agree on the answer -- the session body, the resume
-    # strip's "current exercise", and the rail that marks which segment is
-    # live -- and a rule expressed three times in Jinja is a rule that drifts.
-    live_se = None
-    if keep_started:
-        # The follower half of a live shared workout: whatever they have
-        # STARTED stays live until it is finished or skipped. They are
-        # physically at that exercise, and the order is not theirs -- so the
-        # leader dragging another row to the top used to swap this panel
-        # under their thumb, and the next "Satz geschafft" logged a set on a
-        # lift they never touched. Alone, or leading, the rule below is left
-        # as it was: there the drag is the lifter's own instruction, and
-        # pulling another exercise above a started one is how you step away
-        # from a busy machine. Most recently logged wins if there are two.
-        started = [
-            se for se in visible_exercises
-            if not se.skipped
-            and any(s.completed for s in se.sets)
-            and not all(s.completed for s in se.sets)]
-        if started:
-            live_se = max(started, key=lambda se: max(
-                (s.completed_at or dt.datetime.min) for s in se.sets if s.completed))
-    if live_se is None:
-        for se in visible_exercises:
-            done = sum(1 for s in se.sets if s.completed)
-            if not se.skipped and not (se.sets and done == len(se.sets)):
-                live_se = se
-                break
-    if live_se is None:
-        # Everything is logged: the last exercise that still counts stays live,
-        # so "Satz geschafft" appends to it. Never a skipped one -- skipping the
-        # last exercise and finishing the rest used to bring it back as "Jetzt"
-        # with an empty plan, and a set logged there counted nowhere. With
-        # everything skipped nothing is live, and the panel says so.
-        counting = [se for se in visible_exercises if not se.skipped]
-        if counting:
-            live_se = counting[-1]
-
-    return {'visible_exercises': visible_exercises,
-            'live_id': live_se.id if live_se else None}
-
-
 def _live_exercise_name(session_):
     """What the live screen has live, by name, for the lines that say what
     the lifter was on: Heute's card and the strip every other gym page
@@ -545,7 +466,7 @@ def _typed_bests(history, session_):
     return bests
 
 
-def _live_data(session_, catalogue=True):
+def _live_data(session_, catalogue=True, links=True):
     """Every value session_detail.html renders from, ORM objects included.
 
     Split out so _session_payload can serialize this same computation
@@ -553,6 +474,7 @@ def _live_data(session_, catalogue=True):
     able to disagree about which exercise is live.
 
     `catalogue`: whether the add sheet's list is wanted (see _session_payload).
+    `links`: whether the partner lines are (the same).
     """
     # visible_exercises and which one is live: see _live_context's own
     # docstring for why this is a call rather than the computation itself.
@@ -739,8 +661,11 @@ def _live_data(session_, catalogue=True):
                                              .filter(AppUser.id != current_user_id())
                                              .order_by(AppUser.username)
                                              .all())
+    # Inert since I5 (partner_links replaced it): a page open across the
+    # deploy still reads it off every answer. Drop it once I5 is deployed.
     shared_out = (SharedSession.query
                   .filter(SharedSession.leader_session_id == session_.id,
+                          SharedSession.declined_at.is_(None),
                           SharedSession.ended_at.is_(None))
                   .all())
     partner_status = [
@@ -813,12 +738,17 @@ def _live_data(session_, catalogue=True):
         deload_default_pct=stats.DELOAD_DEFAULT_PCT,
         partners=partners,
         partner_status=partner_status,
+        # The training partners' lines (D14, M5). Left out of a write's
+        # answer, like the catalogue: the page keeps what the page and
+        # sync.json sent, so a write's answer and a poll's cannot overwrite
+        # each other with an older partner.
+        partner_links=partner_links(session_) if links else None,
         session_is_shared=session_is_shared,
         setups=setups,
     )
 
 
-def _session_payload(session_, catalogue=True):
+def _session_payload(session_, catalogue=True, links=True):
     """_live_data as a validated, JSON-safe payload.
 
     Fields are listed explicitly rather than dumping ORM rows. extra='forbid'
@@ -832,9 +762,10 @@ def _session_payload(session_, catalogue=True):
     Pydantic coerce keeps the client contract explicit.
 
     `catalogue=False` leaves the add sheet's list out (None), for a write's
-    answer: see SessionDetailPayload.exercises.
+    answer: see SessionDetailPayload.exercises. `links=False` the partner
+    lines, for the same answer.
     """
-    data = _live_data(session_, catalogue)
+    data = _live_data(session_, catalogue, links)
     row = data['session']
 
     def as_exercise(se):
@@ -929,6 +860,7 @@ def _session_payload(session_, catalogue=True):
             {'id': p.id, 'username': p.username} for p in data['partners']
         ],
         'partner_status': data['partner_status'],
+        'partner_links': data['partner_links'],
         'session_is_shared': data['session_is_shared'],
     })
 
@@ -1026,9 +958,12 @@ def _mutation_response(session_, endpoint, **values):
         # (session/api.ts, from the page or detail.json -- G-140). A page
         # from before that client, open across a deploy, reads the list off
         # every answer and would come apart without it: it still gets it.
+        # The partner lines stay out the same way: the page keeps its own,
+        # from sync.json (_live_data).
         if request.headers.get('X-Gym-Catalogue') == 'kept':
-            return jsonify(_session_payload(session_, catalogue=False)
-                           .model_dump(mode='json', exclude={'exercises', 'list_groups'}))
+            return jsonify(_session_payload(session_, catalogue=False, links=False)
+                           .model_dump(mode='json',
+                                       exclude={'exercises', 'list_groups', 'partner_links'}))
         return jsonify(_session_payload(session_).model_dump(mode='json'))
     return redirect(url_for(endpoint, **values))
 
@@ -1330,8 +1265,11 @@ def _finished_payload(session_):
     # template's current list; "after" comes from the SAME function
     # gym_update_template writes with, so the preview cannot drift from the
     # write -- and it is NOT the performed list: skipped and zero-set slots
-    # go into a template, substitutes never do.
-    if session_.template:
+    # go into a template, substitutes never do. None for a workout that
+    # followed a partner (Michi, D14): its order was the leader's, and the
+    # offer would write it into the follower's own routine.
+    data['partners'] = partner_refs([session_.id]).get(session_.id, [])
+    if session_.template and not followed_a_leader(session_):
         data['template_exercises'] = [
             te.exercise.name for te in session_.template.exercises]
         names_by_id = {se.exercise_id: se.exercise.name for se in session_.exercises}
@@ -2262,11 +2200,11 @@ def gym_discard_session(session_id):
 @gym_bp.route('/gym/session/<int:session_id>/sync.json')
 @login_required
 def gym_session_sync(session_id):
-    """What the follower's page polls.
-
-    Reads the caller's OWN session. Propagation is a write, so by the time this
-    is asked the change is already in their rows -- there is no cross-user read
-    on this path at all.
+    """What the live page polls while a partner line can still change: the
+    follower for the leader's structure (propagation is a write, so by the
+    time this is asked the change is already in their own rows), both of
+    them for the partner lines -- read through partner_view, the one place
+    a partner's workout is read.
     """
     session_ = owned_session(session_id)
     shared = SharedSession.query.filter(
@@ -2274,7 +2212,10 @@ def gym_session_sync(session_id):
         SharedSession.accepted_at.isnot(None),
         db.or_(SharedSession.leader_session_id == session_.id,
                SharedSession.follower_session_id == session_.id)).first()
-    return jsonify({'version': session_.structure_version or 0,
-                    'shared': shared is not None})
+    return jsonify(SyncPayload.model_validate({
+        'version': session_.structure_version or 0,
+        'shared': shared is not None,
+        'partner_links': partner_links(session_),
+    }).model_dump(mode='json'))
 
 

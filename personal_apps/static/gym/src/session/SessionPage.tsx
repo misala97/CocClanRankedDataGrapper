@@ -1,6 +1,11 @@
+import { useEffect, useState } from 'react'
 import type { SessionDetailPayload } from './types'
 import type { SessionMetaPatch } from './api'
+import type { PartnerSync } from './usePartnerSync'
 import { useAnnouncer, useSheets } from './stores'
+import { PARTNER_SHEET, PartnerLines } from '../partner/PartnerLine'
+import { PartnerSheet } from '../partner/PartnerSheet'
+import type { PartnerLink } from '../partner/types'
 import { useSheetHistory } from './useSheetHistory'
 import { FinishSheet } from './components/FinishSheet'
 import { SessionHeader } from './components/SessionHeader'
@@ -69,7 +74,11 @@ interface Props {
   finishing?: boolean
   /** Which add-exercise row is waiting on the server -- see AddExerciseSheet. */
   busyExerciseId?: number | null
+  /** The training partners' lines (usePartnerSync); none when left out. */
+  partners?: PartnerSync
 }
+
+const NO_PARTNERS: PartnerSync = { links: [], receivedAt: 0, dismiss: () => {} }
 
 /**
  * The live workout.
@@ -84,11 +93,23 @@ interface Props {
  */
 export function SessionPage({
   payload, actions, pushSupported, finishing = false, busyExerciseId = null,
+  partners = NO_PARTNERS,
 }: Props) {
   // Back closes the open sheet instead of leaving the workout (G-066).
   useSheetHistory()
   const announce = useAnnouncer((s) => s.announce)
   const openSheet = useSheets((s) => s.open)
+  // Whose list is open. The line itself is looked up on every render, so
+  // an open list follows the poll, and it is remembered as last carried: a
+  // line the poll drops (put away on the other phone, a partner gone) keeps
+  // its sheet as it last was, rather than turning into a list nobody has.
+  const [partnerShown, setPartnerShown] = useState<PartnerLink | null>(null)
+  const shownLine = partnerShown === null
+    ? undefined : partners.links.find((link) => link.id === partnerShown.id)
+  useEffect(() => { if (shownLine !== undefined) setPartnerShown(shownLine) }, [shownLine])
+  const partnerTarget = partnerShown === null ? null : {
+    id: partnerShown.id, username: partnerShown.username, line: shownLine ?? partnerShown,
+  }
   const inWorkout = payload.visible_exercises.map((se) => se.exercise_id)
 
   return (
@@ -99,6 +120,14 @@ export function SessionPage({
       <SessionHeader session={payload.session}
           deloadApplied={payload.deload_applied}
           deloadDefaultPct={payload.deload_default_pct} />
+
+      {/* Right under the header, one 52 px line per partner (D14, M5). */}
+      <PartnerLines links={partners.links} receivedAt={partners.receivedAt}
+        onOpen={(link) => {
+          setPartnerShown(link)
+          openSheet(PARTNER_SHEET)
+        }}
+        onDismiss={partners.dismiss} />
 
       <SaveErrorBanner />
       <OutboxStatus onSendNow={actions.onSendNow} onReload={actions.onReload} />
@@ -139,13 +168,15 @@ export function SessionPage({
           and a closed one is display:none -- so nesting them costs no layout
           and saves the wrapper that did. */}
       <SessionSheet session={payload.session} resting={payload.resting}
-        partners={payload.partners} partnerStatus={payload.partner_status}
+        partners={payload.partners}
         following={payload.session_is_shared}
         pushSupported={pushSupported}
         onMetaSave={actions.onSessionMetaSave}
         onSkipRest={actions.onSkipRest}
         onInvite={actions.onInvite}
         onEnablePush={actions.onEnablePush} />
+
+      <PartnerSheet target={partnerTarget} />
 
       <DeloadSheet session={payload.session}
         deloadApplied={payload.deload_applied}

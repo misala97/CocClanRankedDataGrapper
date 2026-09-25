@@ -9,6 +9,7 @@ import { useUndo } from '../undo'
 import { OUTBOX_VERSION } from './outbox'
 import * as optimistic from './optimistic'
 import { payload } from './types.test-d'
+import type { PartnerLink } from '../partner/types'
 
 /**
  * The island with its real outbox, against a stubbed network: what the
@@ -633,8 +634,17 @@ describe('SessionIsland', () => {
 
     it("leaves a follower's order to the leader", async () => {
       // The server refuses a follower's reorder, and the lift a follower
-      // started stays live without one.
-      await plan({ ...withDone(payload.visible_exercises[0]!), session_is_shared: true })
+      // started stays live without one. A follower's page carries the line
+      // to the leader: without it the page asks after itself (I5).
+      const leader: PartnerLink = {
+        id: 7, username: 'anna', viewer_leads: false, state: 'joined',
+        since: '2026-09-25T09:26:00', finished_at: null, exercise: 'Kniebeuge', set_no: 2,
+        done_in_exercise: 1, sets_in_exercise: 3, last_set: { weight: 100, reps: 5 },
+        rest_left: null, sets_done: 1, sets_total: 9, list_key: 1,
+      }
+      await plan({
+        ...withDone(payload.visible_exercises[0]!), session_is_shared: true, partner_links: [leader],
+      })
       expect(kept().map((e) => e.kind)).toEqual(['planSet'])
     })
   })

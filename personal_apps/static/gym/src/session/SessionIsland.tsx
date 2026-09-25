@@ -16,7 +16,7 @@ import {
   failureCheckpoint, useDeleting, useOutbox, usePush, useSaveState, useSheets,
 } from './stores'
 import { useWakeLock } from './useWakeLock'
-import { useFollowerSync } from './useFollowerSync'
+import { usePartnerSync } from './usePartnerSync'
 import { leavePage } from './useSheetHistory'
 import { SessionPage, type SessionActions } from './SessionPage'
 import type { ExerciseSheetActions } from './components/ExerciseSheet'
@@ -161,11 +161,13 @@ function SessionIslandInner({ initial }: { initial: SessionDetailPayload }) {
     if (error instanceof MutationFailed && error.reason === 'gone') window.location.assign('/gym')
   }, [error])
 
-  // Training with a partner: the leader's structural edits land in these rows
-  // as writes, so the page only has to notice they happened. Server-gated to
-  // the follower half of a live link.
-  useFollowerSync(sessionId, {
-    enabled: data.session_is_shared,
+  // Training with a partner: their lines under the header, and for the
+  // follower the leader's structural edits, which land in these rows as
+  // writes -- the page only has to notice they happened. The page's own
+  // lines seed it; sync.json keeps them after that.
+  const partners = usePartnerSync(sessionId, {
+    initial: initial.partner_links ?? [],
+    follower: data.session_is_shared,
     knownVersion: data.session.structure_version,
   })
 
@@ -490,7 +492,7 @@ function SessionIslandInner({ initial }: { initial: SessionDetailPayload }) {
 
   return (
     <SessionPage payload={view} actions={actions} pushSupported={pushSupported}
-      finishing={finishing} busyExerciseId={addingExerciseId} />
+      finishing={finishing} busyExerciseId={addingExerciseId} partners={partners} />
   )
 }
 

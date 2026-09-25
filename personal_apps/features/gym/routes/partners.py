@@ -7,7 +7,7 @@ from .. import plan, sharing
 import datetime as dt
 
 from flask import (
-    abort, flash, redirect, render_template, request, url_for,
+    abort, flash, jsonify, redirect, render_template, request, url_for,
 )
 from sqlalchemy.orm import joinedload
 from extensions import (
@@ -81,8 +81,8 @@ def gym_invite_partner(session_id):
     # is on (leader_session_id, follower_user_id) alone, so a row surviving
     # here after ending is exactly why a genuinely fresh invite is
     # impossible for this (session, partner) pair -- the insert below would
-    # collide with it regardless of end state. The three branches below have
-    # to tell those apart, or a picker re-submission after the partner
+    # collide with it regardless of end state. The branches below have to
+    # tell those apart, or a picker re-submission after the partner
     # already finished flashes success while creating nothing and sending no
     # push, with no way to ever retry.
     existing = SharedSession.query.filter_by(
@@ -93,19 +93,26 @@ def gym_invite_partner(session_id):
             leader_user_id=current_user_id(),
             follower_user_id=partner_id,
         ))
-        db.session.commit()
-        # Off the request's thread: the invite is saved, and the answer must
-        # not wait on -- or fail with -- the partner's push service (G-133).
-        push.send_push_later(partner_id, {
-            'title': f'{_username(current_user_id())} trainiert',
-            'body': f'{session_.name or "Workout"} — mitmachen?',
-        })
-        flash(f'{partner.username} wurde eingeladen.', 'success')
+    elif existing.declined_at is not None and existing.ended_at is None:
+        # Asked again after a no (D14): the same row -- the key allows no
+        # other -- sent afresh, its "seit" from now.
+        existing.declined_at = None
+        existing.created_at = dt.datetime.utcnow()
     elif existing.ended_at is not None:
         flash(f'Das gemeinsame Workout mit {partner.username} ist bereits beendet '
               f'und kann nicht neu gestartet werden.', 'error')
+        return redirect(url_for('gym.session_detail', session_id=session_.id))
     else:
         flash(f'{partner.username} ist bereits eingeladen.', 'error')
+        return redirect(url_for('gym.session_detail', session_id=session_.id))
+    db.session.commit()
+    # Off the request's thread: the invite is saved, and the answer must
+    # not wait on -- or fail with -- the partner's push service (G-133).
+    push.send_push_later(partner_id, {
+        'title': f'{_username(current_user_id())} trainiert',
+        'body': f'{session_.name or "Workout"} — mitmachen?',
+    })
+    flash(f'{partner.username} wurde eingeladen.', 'success')
     return redirect(url_for('gym.session_detail', session_id=session_.id))
 
 
@@ -118,7 +125,8 @@ def _invite_for_recipient(shared_id):
     shared = db.session.get(SharedSession, shared_id)
     if shared is None or shared.follower_user_id != current_user_id():
         abort(404)
-    if shared.accepted_at is not None or shared.ended_at is not None:
+    if (shared.accepted_at is not None or shared.declined_at is not None
+            or shared.ended_at is not None):
         abort(404)
     return shared
 
@@ -313,8 +321,33 @@ def gym_shared_accept(shared_id):
 @gym_bp.route('/gym/shared/<int:shared_id>/decline', methods=['POST'])
 @login_required
 def gym_shared_decline(shared_id):
-    """Declining is not an event. The card disappears and nobody is notified."""
+    """Declining is not an event: the card disappears and nobody is pushed.
+    The row stays, stamped, so the leader's line can say "hat abgelehnt"
+    (D14) until their OK deletes it.
+
+    Under the recipient's lock, as the accept is: a "Nein" from one phone and
+    a "Mitmachen" from the other both read the invite as open and stamped it
+    twice, and the leader's OK on the "no" deleted a link somebody trained on."""
+    lock_user(current_user_id())
     shared = _invite_for_recipient(shared_id)
-    db.session.delete(shared)
+    shared.declined_at = dt.datetime.utcnow()
     db.session.commit()
     return redirect(url_for('gym.gym_heute'))
+
+
+@gym_bp.route('/gym/shared/<int:shared_id>/dismiss', methods=['POST'])
+@login_required
+def gym_shared_dismiss(shared_id):
+    """The leader's OK on a declined invite: the line goes, and the row with
+    it. 404 for anything but a declined invite to the caller's own workout.
+    409 for one that was also joined -- never a link somebody trains on; the
+    page asks sync.json again and shows them."""
+    shared = db.session.get(SharedSession, shared_id)
+    if (shared is None or shared.leader_user_id != current_user_id()
+            or shared.declined_at is None):
+        abort(404)
+    if shared.accepted_at is not None:
+        abort(409)
+    db.session.delete(shared)
+    db.session.commit()
+    return jsonify({'ok': True})

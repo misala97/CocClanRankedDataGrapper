@@ -422,6 +422,8 @@ class VariantRef(_Model):
 
 
 class PartnerStatus(_Model):
+    """Inert since I5 (partner_links replaced it): kept one deploy for a page
+    open across it, whose sheet still reads it off every answer."""
     username: str
     accepted: bool
 
@@ -429,6 +431,94 @@ class PartnerStatus(_Model):
 class Partner(_Model):
     id: int
     username: str
+
+
+class PartnerSet(_Model):
+    weight: float
+    reps: int
+
+
+class PartnerLink(_Model):
+    """One training partner's line on the live screen (D14, M5), as the
+    viewer sees it: the leader sees each link of their workout, a follower
+    the one to their leader (routes/partner_view.py)."""
+    #: The SharedSession: what the list and the OK ask for.
+    id: int
+    username: str
+    viewer_leads: bool
+    state: Literal['invited', 'declined', 'joined', 'finished']
+    #: invited: when it was sent; declined: when; joined, finished: accepted.
+    since: datetime
+    #: The partner's own finish.
+    finished_at: datetime | None
+    # joined: the partner's live row, by the partner's own rule -- its name,
+    # the 1-based place of its first open set (None: every set is done), its
+    # counted sets and all its sets, and the newest counted one (None until
+    # the row has one: a chip beside an exercise is a set OF it).
+    exercise: str | None
+    set_no: int | None
+    done_in_exercise: int
+    sets_in_exercise: int
+    last_set: PartnerSet | None
+    #: Seconds of the partner's rest left when this was built: an age, not a
+    #: time -- a phone's clock can be minutes off the server's.
+    rest_left: int | None
+    #: The partner's own tick strip: every counted set, and the sets it holds.
+    sets_done: int
+    sets_total: int
+    #: joined: a fingerprint of their list (partner_view._list_key) -- an
+    #: open sheet asks again when it moves. 0 in every other state.
+    list_key: int
+
+
+class PartnerListRow(_Model):
+    """One exercise of the partner's list: what they lifted and how many are
+    still open -- never what they plan to lift, and nothing else of theirs."""
+    id: int
+    name: str
+    picture: str | None
+    state: Literal['done', 'now', 'open', 'skipped']
+    sets: list[PartnerSet]
+    #: Ticked sets, one without reps too: the count their own queue gives.
+    done: int
+    open: int
+    #: On the row they are at: the 1-based place of its first open set, as
+    #: the line says it. None everywhere else.
+    set_no: int | None
+
+
+class PartnerList(_Model):
+    """The partner's workout behind the line or a "mit <Name>", read-only
+    (GET /gym/shared/<id>/list.json): to their own finish, past the link's
+    end (Michi)."""
+    id: int
+    username: str
+    viewer_leads: bool
+    #: Still training together: the order is the leader's.
+    link_live: bool
+    since: datetime
+    started_at: datetime
+    finished_at: datetime | None
+    sets_done: int
+    sets_total: int
+    rest_left: int | None
+    rows: list[PartnerListRow]
+
+
+class PartnerRef(_Model):
+    """A finished workout's training partner, for "mit <Name>": the link to
+    open their list by."""
+    id: int
+    username: str
+
+
+class SyncPayload(_Model):
+    """What the live screen polls: the follower's structure version, and
+    every page's partner lines."""
+    version: int
+    #: Inert since I5: a page open across the deploy stops polling on False.
+    shared: bool
+    partner_links: list[PartnerLink]
 
 
 class SessionDetailPayload(_Model):
@@ -514,6 +604,9 @@ class SessionDetailPayload(_Model):
 
     partners: list[Partner]
     partner_status: list[PartnerStatus]
+    #: None in a write's answer, which leaves it out: the line keeps what the
+    #: page and sync.json sent (session/usePartnerSync.ts).
+    partner_links: list[PartnerLink] | None
     session_is_shared: bool
 
 
@@ -601,6 +694,8 @@ class HistoryEntry(_Model):
     # every SessionExercise including ones swapped out mid-workout, so a
     # session showed 10 names next to a total built from 7.
     exercises: list[str]
+    #: Whom it was done with ("mit <Name>"): a partner who joined and lifted.
+    partners: list[PartnerRef]
     # The name and the date words ("push\n31.07.2026 juli 2026"), folded
     # apart (library.fold_apart): session names stopped carrying the date, so
     # date search was degrading to nothing as history accumulated. The
@@ -987,6 +1082,8 @@ class FinishedPayload(_Model):
     #: A deload plans from what came before it: the one workout every row's
     #: "Nächstes Mal" builds on, or None -- not a deload, or several.
     plan_base: WorkoutRef | None
+    #: Whom it was done with ("mit <Name>"): a partner who joined and lifted.
+    partners: list[PartnerRef]
     is_deload: bool
     # No top-level deload_pct: session_report reports one as None for shape
     # stability, and the real value lives on the session row. Carrying it
@@ -1012,7 +1109,8 @@ class FinishedPayload(_Model):
     just_finished: bool
     # The update prompt's diff, both halves: the template's current list, and
     # what updating it would write -- computed by the same function the route
-    # writes with, so the preview cannot drift. Both None for freeform.
+    # writes with, so the preview cannot drift. Both None for freeform, and
+    # for a workout that followed a partner: its order was the leader's (D14).
     template_exercises: list[str] | None
     template_next_exercises: list[str] | None
 

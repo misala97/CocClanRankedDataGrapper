@@ -2227,6 +2227,7 @@ button.pic { cursor: zoom-in; }
     grid-template-columns: minmax(0, 440px) minmax(0, 1fr);
     grid-template-areas:
       "top   top"
+      "part  part"
       "note  note"
       "bar   bar"
       "rail  rail"
@@ -2241,6 +2242,9 @@ button.pic { cursor: zoom-in; }
   /* the children carry their own phone gutters; the grid supplies them here */
   .session-view > * { margin-inline: 0; }
   .session-view > .session-top { grid-area: top; }
+  /* under the header, as wide as the workspace column it reports beside */
+  .session-view > .partners { grid-area: part; max-inline-size: 440px; }
+  .session-view .partner { margin-inline: 0; }
   .session-view > .note-save { grid-area: note; }
   .session-view > .reorder-bar { grid-area: bar; }
   .session-view > .rail { grid-area: rail; }
@@ -3430,8 +3434,161 @@ summary.sheet-row::-webkit-details-marker { display: none; }
 .invite-card__who  { font-weight: 600; }
 .invite-card__what { color: var(--dim); font-size: var(--t-meta); }
 
-/* Quiet: whether your partner accepted is context, not an event. */
-.shared-status { margin: var(--sp-2) 0 0; color: var(--dim); font-size: var(--t-meta); }
+/* --------------------------------------------------------------------------
+   The partner line and the partner's read-only list (D14b, M5). Structure is
+   shared as writes; what each of you lifts is only SHOWN.
+   - One-Now: the partner never gets --live. Their logged sets are LOGGED, so
+     they take the done-chip look (rose tint + check).
+   - One-Lifted-Plane: the line sits on the ground like the header above it,
+     no surface, no shadow. Only the live card is lifted.
+   - One height in every state, so a poll that changes the state never moves
+     "Satz geschafft" under a thumb.
+   - Word-Plus-Colour: every state is a word ("Pause", "fertig",
+     "eingeladen"); the tile's shape (dashed = not dabei) and tint only
+     repeat it.
+   -------------------------------------------------------------------------- */
+.partner { margin: var(--sp-1) var(--sp-4) 0; }
+
+.partner__hit {
+  display: grid; grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center; column-gap: var(--sp-3);
+  inline-size: calc(100% + var(--sp-2) * 2); block-size: 52px;
+  margin-inline: calc(var(--sp-2) * -1);
+  padding: 6px var(--sp-2);
+  border-radius: var(--r-inset);
+  text-align: start;
+  transition: background var(--dur-1) var(--ease);
+}
+button.partner__hit:active { background: var(--raised); }
+
+/* the person: a round tile, so it never reads as an exercise drawing */
+.partner__tile {
+  inline-size: 32px; block-size: 32px; border-radius: 50%;
+  display: grid; place-items: center; flex: none;
+  font-size: var(--t-sm); font-weight: var(--w-max); line-height: 1;
+  background: var(--chassis); color: var(--ink);
+  box-shadow: inset 0 0 0 1.5px var(--edge-hi);
+}
+/* not dabei (yet, or any more): the outline breaks */
+.partner.is-invited .partner__tile,
+.partner.is-declined .partner__tile {
+  background: transparent; box-shadow: none; color: var(--dim);
+  outline: 1.5px dashed var(--edge-hi); outline-offset: -1.5px;
+}
+.partner.is-finished .partner__tile {
+  background: color-mix(in oklab, var(--done) 13%, var(--chassis));
+  color: var(--done-ink); box-shadow: none;
+}
+
+.partner__main { min-inline-size: 0; }
+.partner__who {
+  display: block; font-size: var(--t-sm); line-height: 18px; color: var(--ink);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.partner__who b { font-weight: var(--w-bold); }
+.partner__state { font-weight: var(--w-med); }
+
+.partner__what {
+  display: flex; align-items: center; gap: var(--sp-2);
+  margin-block-start: 2px; min-inline-size: 0;
+}
+.partner__ex {
+  flex: 1 1 auto; min-inline-size: 0;
+  font-size: var(--t-meta); line-height: 18px; color: var(--dim);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+
+/* a LOGGED set of theirs: the done-chip look, smaller than yours */
+.partner__set {
+  flex: none; display: inline-flex; align-items: center; justify-content: center; gap: 4px;
+  block-size: 20px; padding-inline: 6px 8px; border-radius: 7px;
+  font-size: var(--t-meta); font-weight: var(--w-bold); line-height: 1;
+  font-variant-numeric: tabular-nums; white-space: nowrap;
+  background: color-mix(in oklab, var(--done) 13%, var(--chassis)); color: var(--done-ink);
+}
+.partner__set .icon { inline-size: 12px; block-size: 12px; stroke-width: 2.2; flex: none; }
+
+.partner__chev { display: grid; color: var(--dim); }
+.partner__chev .icon { inline-size: 16px; block-size: 16px; }
+
+/* declined: nothing to open, one quiet way to put it away -- not orange,
+   "Satz geschafft" stays the only NOW on the screen */
+.partner__ok {
+  min-block-size: var(--tap); min-inline-size: 56px; padding-inline: var(--sp-4);
+  border-radius: var(--r-control); box-shadow: inset 0 0 0 1.5px var(--edge-hi);
+  font-size: var(--t-sm); font-weight: var(--w-bold); color: var(--ink);
+}
+
+/* The list: their workout, read-only, in the queue's grammar. The sheet's
+   head carries their tile beside the name (Sheet's `lead`). */
+.sheet__who { display: flex; align-items: center; gap: var(--sp-3); flex: 1; min-inline-size: 0; }
+.sheet__who .partner__tile { inline-size: 30px; block-size: 30px; }
+/* the full name, up to two lines: usernames are free text, up to 80 */
+.sheet__who .sheet__title {
+  overflow-wrap: anywhere;
+  display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden;
+}
+.psheet__meta { margin: 0 0 var(--sp-3); font-size: var(--t-sm); color: var(--dim); }
+.psheet__list { margin-block-end: var(--sp-2); }
+.psheet__row { flex-wrap: nowrap; min-block-size: 52px; position: relative; }
+.psheet__row .row__main { flex: 1 1 auto; min-inline-size: 0; }
+.psheet__row .row__name { font-size: var(--t-sm); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.psheet__row .row__meta {
+  display: block; margin-block-start: 1px; color: var(--dim); font-variant-numeric: tabular-nums;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.psheet__row.is-open .row__name { font-weight: var(--w-body); color: var(--dim); }
+/* where they are: weight and a plain tint, never the live wash. An ink wash,
+   not --raised or --ground: in dark both are wells darker than the sheet and
+   read as a black bar. A shade darker in light and a shade lighter in dark --
+   the NOW row's --wash-live, without the hue. */
+.psheet__row.is-cur {
+  background: color-mix(in oklab, var(--ink) 8%, transparent);
+  border-radius: var(--r-inset); padding-inline: var(--sp-2);
+}
+.psheet__row.is-cur .row__name { font-weight: var(--w-bold); }
+.psheet__row.is-cur .row__meta { color: var(--ink); }
+.psheet__row.is-cur .queue__load { color: var(--ink); font-weight: var(--w-bold); }
+.psheet__row.is-skipped .row__name { text-decoration: line-through; color: var(--unlit); }
+.psheet__end { border-block-start: 1px solid var(--edge); margin-block-start: var(--sp-2); }
+.psheet__end .sheet__note { padding-block: var(--sp-3) var(--sp-1); margin: 0; }
+
+/* "mit <Name>" on a finished workout, in the debrief head and on the Verlauf
+   row: quiet text with the tile, only a target -- the sheet it opens is the
+   one disclosure pattern. */
+.mit {
+  display: inline-flex; align-items: center; gap: var(--sp-2);
+  min-block-size: var(--tap); min-inline-size: 0;
+  /* the tile lines up with the text above it; the target reaches past it */
+  margin-inline: calc(var(--sp-2) * -1); padding-inline: var(--sp-2);
+  border-radius: var(--r-inset);
+  /* the debrief head is set in the display face, bold and tracked: the line
+     is body text wherever it sits */
+  font-family: var(--font-body); font-weight: var(--w-body); letter-spacing: 0;
+  font-size: var(--t-sm); line-height: 18px; color: var(--dim); text-align: start;
+  -webkit-tap-highlight-color: transparent;
+  transition: background var(--dur-1) var(--ease);
+}
+.mit:active { background: var(--raised); }
+.mit:focus-visible { outline: 2px solid var(--ink); outline-offset: -2px; }
+.mit .partner__tile { inline-size: 28px; block-size: 28px; font-size: var(--t-meta); }
+/* the name is the one part that can run long: one line, ellipsised -- the
+   sheet says it in full */
+.mit__txt { flex: 0 1 auto; min-inline-size: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.mit__txt b { color: var(--ink); font-weight: var(--w-semi); }
+.mit .icon { flex: none; inline-size: 14px; block-size: 14px; color: var(--dim); }
+/* Debrief: a line of the name stack, under the pace. The stack makes every
+   child a block; this one stays a row of tile, text, chevron. */
+.finished .session-top__name > .mit {
+  display: flex; inline-size: fit-content; max-inline-size: calc(100% + var(--sp-2) * 2);
+}
+/* Verlauf: a line of its own under the roster, beside -- not inside -- the
+   row's link, so the row still opens the workout and this opens the list.
+   It takes the whole width, so the row's wrap puts it last; the negative
+   top margin gives back the row gap, the 44px box carries its own air. */
+.verlauf__row > .mit {
+  display: flex; flex: 1 0 100%; margin-block: calc(var(--sp-2) * -1) calc(var(--sp-1) * -1);
+}
 
 /* rename/delete: closed by default, anchored under its own toggle so opening
    it never reflows the card it sits in */

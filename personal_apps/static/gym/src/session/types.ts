@@ -3,6 +3,8 @@
 // The Pydantic models use extra='forbid', so drift fails on the Python side
 // first -- which is the intended order.
 
+import type { PartnerLink } from '../partner/types'
+
 export interface SessionMeta {
   id: number
   name: string | null
@@ -266,11 +268,17 @@ export interface SessionDetailPayload {
   deload_default_pct: number
 
   partners: Partner[]
+  /** Inert since I5 (partner_links replaced it); nothing here reads it. */
   partner_status: PartnerStatus[]
+  /** The training partners' lines (D14). Only the page and detail.json send
+   *  them, and only the page's are read: usePartnerSync takes them as its
+   *  first answer and keeps its own from sync.json after that. */
+  partner_links?: PartnerLink[]
   session_is_shared: boolean
 }
 
 /** A write's answer: the payload without the add sheet's list, which never
- *  changes under a running workout (walkthrough G-140). */
+ *  changes under a running workout (walkthrough G-140), nor the partner
+ *  lines, which sync.json keeps. */
 export type SessionReply = Omit<SessionDetailPayload, 'exercises' | 'list_groups'>
   & Partial<Pick<SessionDetailPayload, 'exercises' | 'list_groups'>>

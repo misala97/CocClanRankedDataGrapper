@@ -18,7 +18,7 @@
       "muscle_group": "Gesäß",
       "name": "Abduktion (Kabel)",
       "rank": null,
-      "search": "abduktion kabel cable hip abduction",
+      "search": "abduktion kabel\ncable hip abduction",
       "workouts": 0
     },
     {
@@ -31,7 +31,7 @@
       "muscle_group": "Gesäß",
       "name": "Abduktoren (Maschine)",
       "rank": null,
-      "search": "abduktoren maschine abductor machine hip abduction",
+      "search": "abduktoren maschine\nabductor machine\nhip abduction",
       "workouts": 0
     },
     {
@@ -44,7 +44,7 @@
       "muscle_group": "Beine",
       "name": "Adduktoren (Maschine)",
       "rank": null,
-      "search": "adduktoren maschine adductor machine adduktion hip adduction",
+      "search": "adduktoren maschine\nadductor machine\nadduktion\nhip adduction",
       "workouts": 0
     },
     {
@@ -57,7 +57,7 @@
       "muscle_group": "Schultern",
       "name": "Arnold Press (Kurzhantel)",
       "rank": null,
-      "search": "arnold press kurzhantel arnold drucken",
+      "search": "arnold press kurzhantel\narnold drucken",
       "workouts": 0
     },
     {
@@ -70,7 +70,7 @@
       "muscle_group": "Schultern",
       "name": "Aufrechtes Rudern (Kabel)",
       "rank": null,
-      "search": "aufrechtes rudern kabel cable upright row",
+      "search": "aufrechtes rudern kabel\ncable upright row",
       "workouts": 0
     },
     {
@@ -83,7 +83,7 @@
       "muscle_group": "Schultern",
       "name": "Aufrechtes Rudern (Langhantel)",
       "rank": null,
-      "search": "aufrechtes rudern langhantel upright row barbell upright row",
+      "search": "aufrechtes rudern langhantel\nupright row\nbarbell upright row",
       "workouts": 0
     },
     {
@@ -96,7 +96,7 @@
       "muscle_group": "Schultern",
       "name": "Aufrechtes Rudern (SZ-Stange)",
       "rank": null,
-      "search": "aufrechtes rudern sz stange ez bar upright row",
+      "search": "aufrechtes rudern sz stange\nez bar upright row",
       "workouts": 0
     },
     {
@@ -109,7 +109,7 @@
       "muscle_group": "Schultern",
       "name": "Außenrotation (Kabel)",
       "rank": null,
-      "search": "aussenrotation kabel external rotation rotatorenmanschette",
+      "search": "aussenrotation kabel\nexternal rotation\nrotatorenmanschette",
       "workouts": 0
     },
     {
@@ -122,7 +122,7 @@
       "muscle_group": "Beine",
       "name": "Ausfallschritte (Kurzhantel)",
       "rank": null,
-      "search": "ausfallschritte kurzhantel dumbbell lunge lunges",
+      "search": "ausfallschritte kurzhantel\ndumbbell lunge\nlunges",
       "workouts": 0
     },
     {
@@ -135,7 +135,7 @@
       "muscle_group": "Beine",
       "name": "Ausfallschritte (Langhantel)",
       "rank": null,
-      "search": "ausfallschritte langhantel barbell lunge",
+      "search": "ausfallschritte langhantel\nbarbell lunge",
       "workouts": 0
     },
     {
@@ -148,7 +148,7 @@
       "muscle_group": "Brust",
       "name": "Bankdrücken (Kurzhantel)",
       "rank": 5,
-      "search": "bankdrucken kurzhantel dumbbell bench press bench press dumbbell kurzhanteldrucken kh bankdrucken",
+      "search": "bankdrucken kurzhantel\ndumbbell bench press\nbench press dumbbell\nkurzhanteldrucken\nkh bankdrucken\nbench press\nflachbankdrucken",
       "workouts": 20
     },
     {
@@ -161,7 +161,7 @@
       "muscle_group": "Brust",
       "name": "Bankdrücken (Langhantel)",
       "rank": null,
-      "search": "bankdrucken langhantel bench press barbell bench press flachbankdrucken",
+      "search": "bankdrucken langhantel\nbench press\nbarbell bench press\nflachbankdrucken\nbench press\nflachbankdrucken",
       "workouts": 0
     },
     {
@@ -174,7 +174,7 @@
       "muscle_group": "Trizeps",
       "name": "Bankdrücken (Langhantel, eng)",
       "rank": null,
-      "search": "bankdrucken langhantel eng close grip bench press enges bankdrucken",
+      "search": "bankdrucken langhantel eng\nclose grip bench press\nenges bankdrucken\nbench press\nflachbankdrucken",
       "workouts": 0
     },
     {
@@ -187,7 +187,7 @@
       "muscle_group": "Brust",
       "name": "Bankdrücken (Maschine, Scheiben)",
       "rank": 6,
-      "search": "bankdrucken maschine scheiben iso lateral bench press lying chest press chest press machine lying brustpresse liegend",
+      "search": "bankdrucken maschine scheiben\niso lateral bench press\nlying chest press\nchest press machine lying\nbrustpresse liegend\nbench press\nflachbankdrucken",
       "workouts": 20
     },
     {
@@ -200,7 +200,7 @@
       "muscle_group": "Brust",
       "name": "Bankdrücken (Multipresse)",
       "rank": null,
-      "search": "bankdrucken multipresse smith machine bench press",
+      "search": "bankdrucken multipresse\nsmith machine bench press\nbench press\nflachbankdrucken",
       "workouts": 0
     },
     {
@@ -213,7 +213,7 @@
       "muscle_group": "Bizeps",
       "name": "Bayesian Curls (Kabel)",
       "rank": null,
-      "search": "bayesian curls kabel bayesian curl",
+      "search": "bayesian curls kabel\nbayesian curl",
       "workouts": 0
     },
     {
@@ -226,7 +226,7 @@
       "muscle_group": "Beine",
       "name": "Beinbeuger (Maschine, liegend)",
       "rank": null,
-      "search": "beinbeuger maschine liegend lying leg curl",
+      "search": "beinbeuger maschine liegend\nlying leg curl",
       "workouts": 0
     },
     {
@@ -239,7 +239,7 @@
       "muscle_group": "Beine",
       "name": "Beinbeuger (Maschine, sitzend)",
       "rank": null,
-      "search": "beinbeuger maschine sitzend seated leg curl",
+      "search": "beinbeuger maschine sitzend\nseated leg curl",
       "workouts": 0
     },
     {
@@ -252,7 +252,7 @@
       "muscle_group": "Beine",
       "name": "Beinbeuger (Maschine, stehend)",
       "rank": null,
-      "search": "beinbeuger maschine stehend standing leg curl",
+      "search": "beinbeuger maschine stehend\nstanding leg curl",
       "workouts": 0
     },
     {
@@ -265,7 +265,7 @@
       "muscle_group": "Beine",
       "name": "Beinpresse (Maschine)",
       "rank": null,
-      "search": "beinpresse maschine leg press machine seated leg press sitzbeinpresse",
+      "search": "beinpresse maschine\nleg press machine\nseated leg press\nsitzbeinpresse",
       "workouts": 0
     },
     {
@@ -278,7 +278,7 @@
       "muscle_group": "Beine",
       "name": "Beinpresse (Maschine, Scheiben)",
       "rank": null,
-      "search": "beinpresse maschine scheiben leg press leg press plate loaded 45 beinpresse",
+      "search": "beinpresse maschine scheiben\nleg press\nleg press plate loaded\n45 beinpresse",
       "workouts": 0
     },
     {
@@ -291,7 +291,7 @@
       "muscle_group": "Beine",
       "name": "Beinstrecker (Maschine)",
       "rank": null,
-      "search": "beinstrecker maschine leg extension beinstrecken",
+      "search": "beinstrecker maschine\nleg extension\nbeinstrecken",
       "workouts": 0
     },
     {
@@ -304,7 +304,7 @@
       "muscle_group": "Beine",
       "name": "Belt Squat (Maschine, Scheiben)",
       "rank": null,
-      "search": "belt squat maschine scheiben gurtelkniebeuge",
+      "search": "belt squat maschine scheiben\ngurtelkniebeuge",
       "workouts": 0
     },
     {
@@ -317,7 +317,7 @@
       "muscle_group": "Bizeps",
       "name": "Bizepscurls (Kabel)",
       "rank": null,
-      "search": "bizepscurls kabel cable curl kabelcurls bizeps sz kabel",
+      "search": "bizepscurls kabel\ncable curl\nkabelcurls\nbizeps sz kabel\nbiceps curl",
       "workouts": 0
     },
     {
@@ -330,7 +330,7 @@
       "muscle_group": "Bizeps",
       "name": "Bizepscurls (Kabel, einarmig)",
       "rank": null,
-      "search": "bizepscurls kabel einarmig single arm cable curl",
+      "search": "bizepscurls kabel einarmig\nsingle arm cable curl\nbiceps curl",
       "workouts": 0
     },
     {
@@ -343,7 +343,7 @@
       "muscle_group": "Bizeps",
       "name": "Bizepscurls (Kurzhantel)",
       "rank": 11,
-      "search": "bizepscurls kurzhantel dumbbell curl biceps curl biceps curl rotating kurzhantelcurls",
+      "search": "bizepscurls kurzhantel\ndumbbell curl\nbiceps curl\nbiceps curl rotating\nkurzhantelcurls\nbiceps curl",
       "workouts": 19
     },
     {
@@ -356,7 +356,7 @@
       "muscle_group": "Bizeps",
       "name": "Bizepscurls (Langhantel)",
       "rank": null,
-      "search": "bizepscurls langhantel barbell curl langhantelcurls",
+      "search": "bizepscurls langhantel\nbarbell curl\nlanghantelcurls\nbiceps curl",
       "workouts": 0
     },
     {
@@ -369,7 +369,7 @@
       "muscle_group": "Bizeps",
       "name": "Bizepscurls (SZ-Stange)",
       "rank": null,
-      "search": "bizepscurls sz stange ez bar curl sz curls",
+      "search": "bizepscurls sz stange\nez bar curl\nsz curls\nbiceps curl",
       "workouts": 0
     },
     {
@@ -382,7 +382,7 @@
       "muscle_group": "Brust",
       "name": "Brustpresse (Maschine)",
       "rank": null,
-      "search": "brustpresse maschine chest press chest press machine",
+      "search": "brustpresse maschine\nchest press\nchest press machine",
       "workouts": 0
     },
     {
@@ -395,7 +395,7 @@
       "muscle_group": "Brust",
       "name": "Brustpresse (Maschine, Scheiben)",
       "rank": null,
-      "search": "brustpresse maschine scheiben iso lateral chest press chest press plate loaded",
+      "search": "brustpresse maschine scheiben\niso lateral chest press\nchest press plate loaded",
       "workouts": 0
     },
     {
@@ -408,7 +408,7 @@
       "muscle_group": "Brust",
       "name": "Brustpresse (Maschine, schräg)",
       "rank": null,
-      "search": "brustpresse maschine schrag incline chest press machine",
+      "search": "brustpresse maschine schrag\nincline chest press machine",
       "workouts": 0
     },
     {
@@ -421,7 +421,7 @@
       "muscle_group": "Beine",
       "name": "Bulgarische Kniebeugen (Kurzhantel)",
       "rank": null,
-      "search": "bulgarische kniebeugen kurzhantel bulgarian split squat split squat",
+      "search": "bulgarische kniebeugen kurzhantel\nbulgarian split squat\nsplit squat\nbulgarian split squat",
       "workouts": 0
     },
     {
@@ -434,7 +434,7 @@
       "muscle_group": "Beine",
       "name": "Bulgarische Kniebeugen (Multipresse)",
       "rank": null,
-      "search": "bulgarische kniebeugen multipresse smith machine split squat",
+      "search": "bulgarische kniebeugen multipresse\nsmith machine split squat\nbulgarian split squat",
       "workouts": 0
     },
     {
@@ -447,7 +447,7 @@
       "muscle_group": "Brust",
       "name": "Butterfly (Maschine)",
       "rank": 2,
-      "search": "butterfly maschine pec deck chest fly machine butterflymaschine",
+      "search": "butterfly maschine\npec deck\nchest fly machine\nbutterflymaschine",
       "workouts": 21
     },
     {
@@ -460,7 +460,7 @@
       "muscle_group": "Bauch",
       "name": "Crunches (Kabel)",
       "rank": null,
-      "search": "crunches kabel cable crunch kabelcrunch",
+      "search": "crunches kabel\ncable crunch\nkabelcrunch",
       "workouts": 0
     },
     {
@@ -473,7 +473,7 @@
       "muscle_group": "Bauch",
       "name": "Crunches (Maschine)",
       "rank": null,
-      "search": "crunches maschine ab crunch machine bauchmaschine",
+      "search": "crunches maschine\nab crunch machine\nbauchmaschine",
       "workouts": 0
     },
     {
@@ -486,7 +486,7 @@
       "muscle_group": "Trizeps",
       "name": "Dips (Maschine)",
       "rank": null,
-      "search": "dips maschine dip machine seated dip",
+      "search": "dips maschine\ndip machine\nseated dip",
       "workouts": 0
     },
     {
@@ -499,7 +499,7 @@
       "muscle_group": "Schultern",
       "name": "Face Pulls (Kabel)",
       "rank": 16,
-      "search": "face pulls kabel face pull",
+      "search": "face pulls kabel\nface pull",
       "workouts": 1
     },
     {
@@ -512,7 +512,7 @@
       "muscle_group": "Brust",
       "name": "Fliegende (Kabel)",
       "rank": null,
-      "search": "fliegende kabel cable fly cable crossover kabelzug uber kreuz kabelziehen",
+      "search": "fliegende kabel\ncable fly\ncable crossover\nkabelzug uber kreuz\nkabelziehen",
       "workouts": 0
     },
     {
@@ -525,7 +525,7 @@
       "muscle_group": "Brust",
       "name": "Fliegende (Kabel, von oben)",
       "rank": null,
-      "search": "fliegende kabel von oben high to low cable fly",
+      "search": "fliegende kabel von oben\nhigh to low cable fly",
       "workouts": 0
     },
     {
@@ -538,7 +538,7 @@
       "muscle_group": "Brust",
       "name": "Fliegende (Kabel, von unten)",
       "rank": null,
-      "search": "fliegende kabel von unten low to high cable fly",
+      "search": "fliegende kabel von unten\nlow to high cable fly",
       "workouts": 0
     },
     {
@@ -551,7 +551,7 @@
       "muscle_group": "Brust",
       "name": "Fliegende (Kurzhantel)",
       "rank": null,
-      "search": "fliegende kurzhantel dumbbell fly flys kurzhantel fliegende",
+      "search": "fliegende kurzhantel\ndumbbell fly\nflys\nkurzhantel fliegende",
       "workouts": 0
     },
     {
@@ -564,7 +564,7 @@
       "muscle_group": "Brust",
       "name": "Fliegende (Kurzhantel, schräg)",
       "rank": null,
-      "search": "fliegende kurzhantel schrag incline dumbbell fly",
+      "search": "fliegende kurzhantel schrag\nincline dumbbell fly",
       "workouts": 0
     },
     {
@@ -577,7 +577,7 @@
       "muscle_group": "Brust",
       "name": "Floor Press (Langhantel)",
       "rank": null,
-      "search": "floor press langhantel bodendrucken",
+      "search": "floor press langhantel\nbodendrucken",
       "workouts": 0
     },
     {
@@ -590,7 +590,7 @@
       "muscle_group": "Trizeps",
       "name": "French Press (Kurzhantel)",
       "rank": null,
-      "search": "french press kurzhantel dumbbell skull crusher",
+      "search": "french press kurzhantel\ndumbbell skull crusher\nskull crusher\nstirndrucken",
       "workouts": 0
     },
     {
@@ -603,7 +603,7 @@
       "muscle_group": "Trizeps",
       "name": "French Press (SZ-Stange)",
       "rank": null,
-      "search": "french press sz stange skull crusher stirndrucken lying triceps extension",
+      "search": "french press sz stange\nskull crusher\nstirndrucken\nlying triceps extension\nskull crusher\nstirndrucken",
       "workouts": 0
     },
     {
@@ -616,7 +616,7 @@
       "muscle_group": "Schultern",
       "name": "Frontheben (Kabel)",
       "rank": null,
-      "search": "frontheben kabel cable front raise",
+      "search": "frontheben kabel\ncable front raise",
       "workouts": 0
     },
     {
@@ -629,7 +629,7 @@
       "muscle_group": "Schultern",
       "name": "Frontheben (Kabel, einarmig)",
       "rank": null,
-      "search": "frontheben kabel einarmig single arm cable front raise front raises cable one arm",
+      "search": "frontheben kabel einarmig\nsingle arm cable front raise\nfront raises cable one arm",
       "workouts": 0
     },
     {
@@ -642,7 +642,7 @@
       "muscle_group": "Schultern",
       "name": "Frontheben (Kurzhantel)",
       "rank": null,
-      "search": "frontheben kurzhantel front raise dumbbell front raise",
+      "search": "frontheben kurzhantel\nfront raise\ndumbbell front raise",
       "workouts": 0
     },
     {
@@ -655,7 +655,7 @@
       "muscle_group": "Beine",
       "name": "Frontkniebeugen (Langhantel)",
       "rank": null,
-      "search": "frontkniebeugen langhantel front squat",
+      "search": "frontkniebeugen langhantel\nfront squat",
       "workouts": 0
     },
     {
@@ -668,7 +668,7 @@
       "muscle_group": "Gesäß",
       "name": "Glute Bridge (Langhantel)",
       "rank": null,
-      "search": "glute bridge langhantel barbell glute bridge beckenheben",
+      "search": "glute bridge langhantel\nbarbell glute bridge\nbeckenheben",
       "workouts": 0
     },
     {
@@ -681,7 +681,7 @@
       "muscle_group": "Gesäß",
       "name": "Glute-Kickbacks (Kabel)",
       "rank": null,
-      "search": "glute kickbacks kabel cable kickback glute kickback",
+      "search": "glute kickbacks kabel\ncable kickback\nglute kickback",
       "workouts": 0
     },
     {
@@ -694,7 +694,7 @@
       "muscle_group": "Gesäß",
       "name": "Glute-Kickbacks (Maschine)",
       "rank": null,
-      "search": "glute kickbacks maschine glute machine glute kickback machine",
+      "search": "glute kickbacks maschine\nglute machine\nglute kickback machine",
       "workouts": 0
     },
     {
@@ -707,7 +707,7 @@
       "muscle_group": "Beine",
       "name": "Goblet Squat (Kettlebell)",
       "rank": null,
-      "search": "goblet squat kettlebell kettlebell goblet squat",
+      "search": "goblet squat kettlebell\nkettlebell goblet squat\ngoblet kniebeuge",
       "workouts": 0
     },
     {
@@ -720,7 +720,7 @@
       "muscle_group": "Beine",
       "name": "Goblet Squat (Kurzhantel)",
       "rank": null,
-      "search": "goblet squat kurzhantel goblet squat goblet kniebeuge",
+      "search": "goblet squat kurzhantel\ngoblet squat\ngoblet kniebeuge\ngoblet kniebeuge",
       "workouts": 0
     },
     {
@@ -733,7 +733,7 @@
       "muscle_group": "Beine",
       "name": "Good Mornings (Langhantel)",
       "rank": null,
-      "search": "good mornings langhantel good morning",
+      "search": "good mornings langhantel\ngood morning",
       "workouts": 0
     },
     {
@@ -746,7 +746,7 @@
       "muscle_group": "Beine",
       "name": "Hackenschmidt (Maschine, Scheiben)",
       "rank": null,
-      "search": "hackenschmidt maschine scheiben hack squat hackenschmidt kniebeuge",
+      "search": "hackenschmidt maschine scheiben\nhack squat\nhackenschmidt kniebeuge",
       "workouts": 0
     },
     {
@@ -759,7 +759,7 @@
       "muscle_group": "Bizeps",
       "name": "Hammercurls (Kabel, Seil)",
       "rank": null,
-      "search": "hammercurls kabel seil cable hammer curl rope hammer curl",
+      "search": "hammercurls kabel seil\ncable hammer curl\nrope hammer curl",
       "workouts": 0
     },
     {
@@ -772,7 +772,7 @@
       "muscle_group": "Bizeps",
       "name": "Hammercurls (Kurzhantel)",
       "rank": 13,
-      "search": "hammercurls kurzhantel hammer curl hammer curl dumbbell",
+      "search": "hammercurls kurzhantel\nhammer curl\nhammer curl dumbbell",
       "workouts": 18
     },
     {
@@ -785,7 +785,7 @@
       "muscle_group": "Unterarme",
       "name": "Handgelenkcurls (Kurzhantel)",
       "rank": null,
-      "search": "handgelenkcurls kurzhantel dumbbell wrist curl",
+      "search": "handgelenkcurls kurzhantel\ndumbbell wrist curl",
       "workouts": 0
     },
     {
@@ -798,7 +798,7 @@
       "muscle_group": "Unterarme",
       "name": "Handgelenkcurls (Langhantel)",
       "rank": null,
-      "search": "handgelenkcurls langhantel wrist curl",
+      "search": "handgelenkcurls langhantel\nwrist curl",
       "workouts": 0
     },
     {
@@ -811,7 +811,7 @@
       "muscle_group": "Rücken",
       "name": "High Row (Maschine, Scheiben)",
       "rank": null,
-      "search": "high row maschine scheiben iso lateral high row rudern von oben",
+      "search": "high row maschine scheiben\niso lateral high row\nrudern von oben",
       "workouts": 0
     },
     {
@@ -824,7 +824,7 @@
       "muscle_group": "Gesäß",
       "name": "Hip Thrust (Langhantel)",
       "rank": null,
-      "search": "hip thrust langhantel barbell hip thrust hip thrusts",
+      "search": "hip thrust langhantel\nbarbell hip thrust\nhip thrusts",
       "workouts": 0
     },
     {
@@ -837,7 +837,7 @@
       "muscle_group": "Gesäß",
       "name": "Hip Thrust (Maschine)",
       "rank": null,
-      "search": "hip thrust maschine hip thrust machine",
+      "search": "hip thrust maschine\nhip thrust machine",
       "workouts": 0
     },
     {
@@ -850,7 +850,7 @@
       "muscle_group": "Gesäß",
       "name": "Hip Thrust (Maschine, Scheiben)",
       "rank": null,
-      "search": "hip thrust maschine scheiben glute drive",
+      "search": "hip thrust maschine scheiben\nglute drive",
       "workouts": 0
     },
     {
@@ -863,7 +863,7 @@
       "muscle_group": "Gesäß",
       "name": "Hip Thrust (Multipresse)",
       "rank": null,
-      "search": "hip thrust multipresse smith machine hip thrust",
+      "search": "hip thrust multipresse\nsmith machine hip thrust",
       "workouts": 0
     },
     {
@@ -876,7 +876,7 @@
       "muscle_group": "Bauch",
       "name": "Holzhacker (Kabel)",
       "rank": null,
-      "search": "holzhacker kabel woodchopper wood chop",
+      "search": "holzhacker kabel\nwoodchopper\nwood chop",
       "workouts": 0
     },
     {
@@ -889,7 +889,7 @@
       "muscle_group": "Beine",
       "name": "Kniebeugen (Kurzhantel, Sumo)",
       "rank": null,
-      "search": "kniebeugen kurzhantel sumo sumo squat sumo kniebeuge",
+      "search": "kniebeugen kurzhantel sumo\nsumo squat\nsumo kniebeuge\nsquat",
       "workouts": 0
     },
     {
@@ -902,7 +902,7 @@
       "muscle_group": "Beine",
       "name": "Kniebeugen (Langhantel)",
       "rank": null,
-      "search": "kniebeugen langhantel squat back squat kniebeuge",
+      "search": "kniebeugen langhantel\nsquat\nback squat\nkniebeuge\nsquat",
       "workouts": 0
     },
     {
@@ -915,7 +915,7 @@
       "muscle_group": "Beine",
       "name": "Kniebeugen (Multipresse)",
       "rank": null,
-      "search": "kniebeugen multipresse smith machine squat",
+      "search": "kniebeugen multipresse\nsmith machine squat\nsquat",
       "workouts": 0
     },
     {
@@ -928,7 +928,7 @@
       "muscle_group": "Bizeps",
       "name": "Konzentrationscurls (Kurzhantel)",
       "rank": null,
-      "search": "konzentrationscurls kurzhantel concentration curl",
+      "search": "konzentrationscurls kurzhantel\nconcentration curl",
       "workouts": 0
     },
     {
@@ -941,7 +941,7 @@
       "muscle_group": "Rücken",
       "name": "Kreuzheben (Langhantel)",
       "rank": null,
-      "search": "kreuzheben langhantel deadlift conventional deadlift",
+      "search": "kreuzheben langhantel\ndeadlift\nconventional deadlift",
       "workouts": 0
     },
     {
@@ -954,7 +954,7 @@
       "muscle_group": "Beine",
       "name": "Kreuzheben (Langhantel, gestreckte Beine)",
       "rank": null,
-      "search": "kreuzheben langhantel gestreckte beine stiff leg deadlift steifbeiniges kreuzheben",
+      "search": "kreuzheben langhantel gestreckte beine\nstiff leg deadlift\nsteifbeiniges kreuzheben",
       "workouts": 0
     },
     {
@@ -967,7 +967,7 @@
       "muscle_group": "Beine",
       "name": "Kreuzheben (Langhantel, Sumo)",
       "rank": null,
-      "search": "kreuzheben langhantel sumo sumo deadlift",
+      "search": "kreuzheben langhantel sumo\nsumo deadlift",
       "workouts": 0
     },
     {
@@ -980,7 +980,7 @@
       "muscle_group": "Beine",
       "name": "Kreuzheben (Trap-Bar)",
       "rank": null,
-      "search": "kreuzheben trap bar trap bar deadlift hex bar deadlift hexbar",
+      "search": "kreuzheben trap bar\ntrap bar deadlift\nhex bar deadlift\nhexbar",
       "workouts": 0
     },
     {
@@ -993,7 +993,7 @@
       "muscle_group": "Rücken",
       "name": "Latzug (Kabel)",
       "rank": 17,
-      "search": "latzug kabel lat pulldown lat pulldown kabelzug latziehen latzug breit",
+      "search": "latzug kabel\nlat pulldown\nlat pulldown kabelzug\nlatziehen\nlatzug breit\nlat pulldown\nlatziehen",
       "workouts": 2
     },
     {
@@ -1006,7 +1006,7 @@
       "muscle_group": "Rücken",
       "name": "Latzug (Kabel, einarmig)",
       "rank": null,
-      "search": "latzug kabel einarmig single arm lat pulldown",
+      "search": "latzug kabel einarmig\nsingle arm lat pulldown\nlat pulldown\nlatziehen",
       "workouts": 0
     },
     {
@@ -1019,7 +1019,7 @@
       "muscle_group": "Rücken",
       "name": "Latzug (Kabel, eng)",
       "rank": null,
-      "search": "latzug kabel eng close grip lat pulldown latzug v griff",
+      "search": "latzug kabel eng\nclose grip lat pulldown\nlatzug v griff\nlat pulldown\nlatziehen",
       "workouts": 0
     },
     {
@@ -1032,7 +1032,7 @@
       "muscle_group": "Rücken",
       "name": "Latzug (Kabel, Untergriff)",
       "rank": null,
-      "search": "latzug kabel untergriff reverse grip lat pulldown",
+      "search": "latzug kabel untergriff\nreverse grip lat pulldown\nlat pulldown\nlatziehen",
       "workouts": 0
     },
     {
@@ -1045,7 +1045,7 @@
       "muscle_group": "Rücken",
       "name": "Latzug (Maschine)",
       "rank": null,
-      "search": "latzug maschine lat pulldown machine",
+      "search": "latzug maschine\nlat pulldown machine\nlat pulldown\nlatziehen",
       "workouts": 0
     },
     {
@@ -1058,7 +1058,7 @@
       "muscle_group": "Rücken",
       "name": "Latzug (Maschine, Scheiben)",
       "rank": 1,
-      "search": "latzug maschine scheiben iso lateral lat pulldown lat pulldown plate loaded lat pulldown single arm",
+      "search": "latzug maschine scheiben\niso lateral lat pulldown\nlat pulldown plate loaded\nlat pulldown single arm\nlat pulldown\nlatziehen",
       "workouts": 21
     },
     {
@@ -1071,7 +1071,7 @@
       "muscle_group": "Brust",
       "name": "Negativbankdrücken (Kurzhantel)",
       "rank": null,
-      "search": "negativbankdrucken kurzhantel decline dumbbell press",
+      "search": "negativbankdrucken kurzhantel\ndecline dumbbell press\ndecline bench press",
       "workouts": 0
     },
     {
@@ -1084,7 +1084,7 @@
       "muscle_group": "Brust",
       "name": "Negativbankdrücken (Langhantel)",
       "rank": null,
-      "search": "negativbankdrucken langhantel decline bench press",
+      "search": "negativbankdrucken langhantel\ndecline bench press\ndecline bench press",
       "workouts": 0
     },
     {
@@ -1097,7 +1097,7 @@
       "muscle_group": "Brust",
       "name": "Negativbankdrücken (Maschine, Scheiben)",
       "rank": null,
-      "search": "negativbankdrucken maschine scheiben iso lateral decline press",
+      "search": "negativbankdrucken maschine scheiben\niso lateral decline press\ndecline bench press",
       "workouts": 0
     },
     {
@@ -1110,7 +1110,7 @@
       "muscle_group": "Brust",
       "name": "Negativbankdrücken (Multipresse)",
       "rank": null,
-      "search": "negativbankdrucken multipresse smith machine decline press",
+      "search": "negativbankdrucken multipresse\nsmith machine decline press\ndecline bench press",
       "workouts": 0
     },
     {
@@ -1123,7 +1123,7 @@
       "muscle_group": "Bauch",
       "name": "Pallof Press (Kabel)",
       "rank": null,
-      "search": "pallof press kabel pallof",
+      "search": "pallof press kabel\npallof",
       "workouts": 0
     },
     {
@@ -1136,7 +1136,7 @@
       "muscle_group": "Beine",
       "name": "Pendulum Squat (Maschine, Scheiben)",
       "rank": null,
-      "search": "pendulum squat maschine scheiben pendel kniebeuge",
+      "search": "pendulum squat maschine scheiben\npendel kniebeuge",
       "workouts": 0
     },
     {
@@ -1149,7 +1149,7 @@
       "muscle_group": "Gesäß",
       "name": "Pull-Through (Kabel)",
       "rank": null,
-      "search": "pull through kabel cable pull through",
+      "search": "pull through kabel\ncable pull through",
       "workouts": 0
     },
     {
@@ -1162,7 +1162,7 @@
       "muscle_group": "Rücken",
       "name": "Rack Pulls (Langhantel)",
       "rank": null,
-      "search": "rack pulls langhantel rack pull teilkreuzheben",
+      "search": "rack pulls langhantel\nrack pull\nteilkreuzheben",
       "workouts": 0
     },
     {
@@ -1175,7 +1175,7 @@
       "muscle_group": "Schultern",
       "name": "Reverse Butterfly (Kabel)",
       "rank": null,
-      "search": "reverse butterfly kabel cable reverse fly rear delt cable fly",
+      "search": "reverse butterfly kabel\ncable reverse fly\nrear delt cable fly",
       "workouts": 0
     },
     {
@@ -1188,7 +1188,7 @@
       "muscle_group": "Schultern",
       "name": "Reverse Butterfly (Maschine)",
       "rank": 10,
-      "search": "reverse butterfly maschine reverse fly machine rear delt machine butterfly reverse",
+      "search": "reverse butterfly maschine\nreverse fly machine\nrear delt machine\nbutterfly reverse",
       "workouts": 19
     },
     {
@@ -1201,7 +1201,7 @@
       "muscle_group": "Unterarme",
       "name": "Reverse Curls (SZ-Stange)",
       "rank": null,
-      "search": "reverse curls sz stange reverse curl obergriff curls",
+      "search": "reverse curls sz stange\nreverse curl\nobergriff curls",
       "workouts": 0
     },
     {
@@ -1214,7 +1214,7 @@
       "muscle_group": "Rücken",
       "name": "Rückenstrecker (Maschine)",
       "rank": null,
-      "search": "ruckenstrecker maschine back extension machine lower back machine",
+      "search": "ruckenstrecker maschine\nback extension machine\nlower back machine",
       "workouts": 0
     },
     {
@@ -1227,7 +1227,7 @@
       "muscle_group": "Rücken",
       "name": "Rudern (Kabel)",
       "rank": null,
-      "search": "rudern kabel seated cable row kabelrudern rudern sitzend",
+      "search": "rudern kabel\nseated cable row\nkabelrudern\nrudern sitzend\nrow\nrowing",
       "workouts": 0
     },
     {
@@ -1240,7 +1240,7 @@
       "muscle_group": "Rücken",
       "name": "Rudern (Kabel, breit)",
       "rank": null,
-      "search": "rudern kabel breit wide grip cable row",
+      "search": "rudern kabel breit\nwide grip cable row\nrow\nrowing",
       "workouts": 0
     },
     {
@@ -1253,7 +1253,7 @@
       "muscle_group": "Rücken",
       "name": "Rudern (Kabel, einarmig)",
       "rank": null,
-      "search": "rudern kabel einarmig single arm cable row",
+      "search": "rudern kabel einarmig\nsingle arm cable row\nrow\nrowing",
       "workouts": 0
     },
     {
@@ -1266,7 +1266,7 @@
       "muscle_group": "Rücken",
       "name": "Rudern (Kurzhantel)",
       "rank": null,
-      "search": "rudern kurzhantel dumbbell row bent over dumbbell row",
+      "search": "rudern kurzhantel\ndumbbell row\nbent over dumbbell row\nrow\nrowing",
       "workouts": 0
     },
     {
@@ -1279,7 +1279,7 @@
       "muscle_group": "Rücken",
       "name": "Rudern (Kurzhantel, brustgestützt)",
       "rank": null,
-      "search": "rudern kurzhantel brustgestutzt chest supported dumbbell row incline dumbbell row seal row",
+      "search": "rudern kurzhantel brustgestutzt\nchest supported dumbbell row\nincline dumbbell row\nseal row\nrow\nrowing",
       "workouts": 0
     },
     {
@@ -1292,7 +1292,7 @@
       "muscle_group": "Rücken",
       "name": "Rudern (Kurzhantel, einarmig)",
       "rank": null,
-      "search": "rudern kurzhantel einarmig one arm dumbbell row kurzhantelrudern",
+      "search": "rudern kurzhantel einarmig\none arm dumbbell row\nkurzhantelrudern\nrow\nrowing",
       "workouts": 0
     },
     {
@@ -1305,7 +1305,7 @@
       "muscle_group": "Rücken",
       "name": "Rudern (Langhantel)",
       "rank": null,
-      "search": "rudern langhantel barbell row bent over row langhantelrudern vorgebeugtes rudern",
+      "search": "rudern langhantel\nbarbell row\nbent over row\nlanghantelrudern\nvorgebeugtes rudern\nrow\nrowing",
       "workouts": 0
     },
     {
@@ -1318,7 +1318,7 @@
       "muscle_group": "Rücken",
       "name": "Rudern (Langhantel, Pendlay)",
       "rank": null,
-      "search": "rudern langhantel pendlay pendlay row",
+      "search": "rudern langhantel pendlay\npendlay row\nrow\nrowing",
       "workouts": 0
     },
     {
@@ -1331,7 +1331,7 @@
       "muscle_group": "Rücken",
       "name": "Rudern (Langhantel, Untergriff)",
       "rank": null,
-      "search": "rudern langhantel untergriff underhand barbell row yates row",
+      "search": "rudern langhantel untergriff\nunderhand barbell row\nyates row\nrow\nrowing",
       "workouts": 0
     },
     {
@@ -1344,7 +1344,7 @@
       "muscle_group": "Rücken",
       "name": "Rudern (Maschine)",
       "rank": 7,
-      "search": "rudern maschine seated row machine row machine rudermaschine",
+      "search": "rudern maschine\nseated row machine\nrow machine\nrudermaschine\nrow\nrowing",
       "workouts": 19
     },
     {
@@ -1357,7 +1357,7 @@
       "muscle_group": "Rücken",
       "name": "Rudern (Maschine, Scheiben)",
       "rank": null,
-      "search": "rudern maschine scheiben iso lateral row low row",
+      "search": "rudern maschine scheiben\niso lateral row\nlow row\nrow\nrowing",
       "workouts": 0
     },
     {
@@ -1370,7 +1370,7 @@
       "muscle_group": "Rücken",
       "name": "Rudern (Multipresse)",
       "rank": null,
-      "search": "rudern multipresse smith machine row",
+      "search": "rudern multipresse\nsmith machine row\nrow\nrowing",
       "workouts": 0
     },
     {
@@ -1383,7 +1383,7 @@
       "muscle_group": "Rücken",
       "name": "Rudern (T-Bar, liegend)",
       "rank": 18,
-      "search": "rudern t bar liegend chest supported t bar row t bar row lying t bar rudern liegend",
+      "search": "rudern t bar liegend\nchest supported t bar row\nt bar row lying\nt bar rudern liegend\nrow\nrowing",
       "workouts": 2
     },
     {
@@ -1396,7 +1396,7 @@
       "muscle_group": "Rücken",
       "name": "Rudern (T-Bar, stehend)",
       "rank": 12,
-      "search": "rudern t bar stehend t bar row t bar row standing t bar rudern",
+      "search": "rudern t bar stehend\nt bar row\nt bar row standing\nt bar rudern\nrow\nrowing",
       "workouts": 17
     },
     {
@@ -1409,7 +1409,7 @@
       "muscle_group": "Beine",
       "name": "Rumänisches Kreuzheben (Kurzhantel)",
       "rank": null,
-      "search": "rumanisches kreuzheben kurzhantel dumbbell romanian deadlift dumbbell rdl",
+      "search": "rumanisches kreuzheben kurzhantel\ndumbbell romanian deadlift\ndumbbell rdl\nromanian deadlift\nrdl",
       "workouts": 0
     },
     {
@@ -1422,7 +1422,7 @@
       "muscle_group": "Beine",
       "name": "Rumänisches Kreuzheben (Kurzhantel, einbeinig)",
       "rank": null,
-      "search": "rumanisches kreuzheben kurzhantel einbeinig single leg rdl",
+      "search": "rumanisches kreuzheben kurzhantel einbeinig\nsingle leg rdl\nromanian deadlift\nrdl",
       "workouts": 0
     },
     {
@@ -1435,7 +1435,7 @@
       "muscle_group": "Beine",
       "name": "Rumänisches Kreuzheben (Langhantel)",
       "rank": null,
-      "search": "rumanisches kreuzheben langhantel romanian deadlift rdl",
+      "search": "rumanisches kreuzheben langhantel\nromanian deadlift\nrdl\nromanian deadlift\nrdl",
       "workouts": 0
     },
     {
@@ -1448,7 +1448,7 @@
       "muscle_group": "Bauch",
       "name": "Rumpfrotation (Maschine)",
       "rank": null,
-      "search": "rumpfrotation maschine torso rotation rotationsmaschine",
+      "search": "rumpfrotation maschine\ntorso rotation\nrotationsmaschine",
       "workouts": 0
     },
     {
@@ -1461,7 +1461,7 @@
       "muscle_group": "Bizeps",
       "name": "Schrägbankcurls (Kurzhantel)",
       "rank": null,
-      "search": "schragbankcurls kurzhantel incline dumbbell curl",
+      "search": "schragbankcurls kurzhantel\nincline dumbbell curl",
       "workouts": 0
     },
     {
@@ -1474,7 +1474,7 @@
       "muscle_group": "Brust",
       "name": "Schrägbankdrücken (Kurzhantel)",
       "rank": null,
-      "search": "schragbankdrucken kurzhantel incline dumbbell press kh schragbankdrucken",
+      "search": "schragbankdrucken kurzhantel\nincline dumbbell press\nkh schragbankdrucken\nincline bench press",
       "workouts": 0
     },
     {
@@ -1487,7 +1487,7 @@
       "muscle_group": "Brust",
       "name": "Schrägbankdrücken (Langhantel)",
       "rank": null,
-      "search": "schragbankdrucken langhantel incline bench press barbell incline press",
+      "search": "schragbankdrucken langhantel\nincline bench press\nbarbell incline press\nincline bench press",
       "workouts": 0
     },
     {
@@ -1500,7 +1500,7 @@
       "muscle_group": "Brust",
       "name": "Schrägbankdrücken (Maschine, Scheiben)",
       "rank": null,
-      "search": "schragbankdrucken maschine scheiben iso lateral incline press",
+      "search": "schragbankdrucken maschine scheiben\niso lateral incline press\nincline bench press",
       "workouts": 0
     },
     {
@@ -1513,7 +1513,7 @@
       "muscle_group": "Brust",
       "name": "Schrägbankdrücken (Multipresse)",
       "rank": null,
-      "search": "schragbankdrucken multipresse smith machine incline press",
+      "search": "schragbankdrucken multipresse\nsmith machine incline press\nincline bench press",
       "workouts": 0
     },
     {
@@ -1526,7 +1526,7 @@
       "muscle_group": "Schultern",
       "name": "Schulterdrücken (Kurzhantel, sitzend)",
       "rank": null,
-      "search": "schulterdrucken kurzhantel sitzend dumbbell shoulder press seated dumbbell press",
+      "search": "schulterdrucken kurzhantel sitzend\ndumbbell shoulder press\nseated dumbbell press\nshoulder press\noverhead press",
       "workouts": 0
     },
     {
@@ -1539,7 +1539,7 @@
       "muscle_group": "Schultern",
       "name": "Schulterdrücken (Kurzhantel, stehend)",
       "rank": null,
-      "search": "schulterdrucken kurzhantel stehend standing dumbbell press",
+      "search": "schulterdrucken kurzhantel stehend\nstanding dumbbell press\nshoulder press\noverhead press",
       "workouts": 0
     },
     {
@@ -1552,7 +1552,7 @@
       "muscle_group": "Schultern",
       "name": "Schulterdrücken (Landmine, einarmig)",
       "rank": null,
-      "search": "schulterdrucken landmine einarmig landmine press",
+      "search": "schulterdrucken landmine einarmig\nlandmine press\nshoulder press\noverhead press",
       "workouts": 0
     },
     {
@@ -1565,7 +1565,7 @@
       "muscle_group": "Schultern",
       "name": "Schulterdrücken (Langhantel, sitzend)",
       "rank": null,
-      "search": "schulterdrucken langhantel sitzend seated barbell press seated military press",
+      "search": "schulterdrucken langhantel sitzend\nseated barbell press\nseated military press\nshoulder press\noverhead press",
       "workouts": 0
     },
     {
@@ -1578,7 +1578,7 @@
       "muscle_group": "Schultern",
       "name": "Schulterdrücken (Langhantel, stehend)",
       "rank": 3,
-      "search": "schulterdrucken langhantel stehend military press overhead press ohp uberkopfdrucken",
+      "search": "schulterdrucken langhantel stehend\nmilitary press\noverhead press\nohp\nuberkopfdrucken\nshoulder press\noverhead press",
       "workouts": 21
     },
     {
@@ -1591,7 +1591,7 @@
       "muscle_group": "Schultern",
       "name": "Schulterdrücken (Multipresse)",
       "rank": null,
-      "search": "schulterdrucken multipresse smith machine shoulder press",
+      "search": "schulterdrucken multipresse\nsmith machine shoulder press\nshoulder press\noverhead press",
       "workouts": 0
     },
     {
@@ -1604,7 +1604,7 @@
       "muscle_group": "Schultern",
       "name": "Schulterpresse (Maschine)",
       "rank": null,
-      "search": "schulterpresse maschine shoulder press machine shoulder press",
+      "search": "schulterpresse maschine\nshoulder press machine\nshoulder press",
       "workouts": 0
     },
     {
@@ -1617,7 +1617,7 @@
       "muscle_group": "Schultern",
       "name": "Schulterpresse (Maschine, Scheiben)",
       "rank": null,
-      "search": "schulterpresse maschine scheiben iso lateral shoulder press",
+      "search": "schulterpresse maschine scheiben\niso lateral shoulder press",
       "workouts": 0
     },
     {
@@ -1630,7 +1630,7 @@
       "muscle_group": "Bizeps",
       "name": "Scottcurls (Kurzhantel)",
       "rank": null,
-      "search": "scottcurls kurzhantel dumbbell preacher curl",
+      "search": "scottcurls kurzhantel\ndumbbell preacher curl",
       "workouts": 0
     },
     {
@@ -1643,7 +1643,7 @@
       "muscle_group": "Bizeps",
       "name": "Scottcurls (Maschine)",
       "rank": 14,
-      "search": "scottcurls maschine preacher curl machine preacher curl bilateral bizepsmaschine bizeps curl maschine",
+      "search": "scottcurls maschine\npreacher curl machine\npreacher curl bilateral\nbizepsmaschine\nbizeps curl maschine",
       "workouts": 8
     },
     {
@@ -1656,7 +1656,7 @@
       "muscle_group": "Bizeps",
       "name": "Scottcurls (Maschine, Scheiben)",
       "rank": 15,
-      "search": "scottcurls maschine scheiben preacher curl machine plate loaded iso lateral preacher curl",
+      "search": "scottcurls maschine scheiben\npreacher curl machine plate loaded\niso lateral preacher curl",
       "workouts": 9
     },
     {
@@ -1669,7 +1669,7 @@
       "muscle_group": "Bizeps",
       "name": "Scottcurls (SZ-Stange)",
       "rank": null,
-      "search": "scottcurls sz stange preacher curl preacher curl ez bar scott curls",
+      "search": "scottcurls sz stange\npreacher curl\npreacher curl ez bar\nscott curls",
       "workouts": 0
     },
     {
@@ -1682,7 +1682,7 @@
       "muscle_group": "Bauch",
       "name": "Seitbeugen (Kurzhantel)",
       "rank": null,
-      "search": "seitbeugen kurzhantel side bend",
+      "search": "seitbeugen kurzhantel\nside bend",
       "workouts": 0
     },
     {
@@ -1695,7 +1695,7 @@
       "muscle_group": "Schultern",
       "name": "Seitheben (Kabel, einarmig)",
       "rank": null,
-      "search": "seitheben kabel einarmig cable lateral raise",
+      "search": "seitheben kabel einarmig\ncable lateral raise\nlateral raise\nseitenheben",
       "workouts": 0
     },
     {
@@ -1708,7 +1708,7 @@
       "muscle_group": "Schultern",
       "name": "Seitheben (Kurzhantel)",
       "rank": null,
-      "search": "seitheben kurzhantel lateral raise dumbbell lateral raise seitenheben",
+      "search": "seitheben kurzhantel\nlateral raise\ndumbbell lateral raise\nseitenheben\nlateral raise\nseitenheben",
       "workouts": 0
     },
     {
@@ -1721,7 +1721,7 @@
       "muscle_group": "Schultern",
       "name": "Seitheben (Maschine)",
       "rank": 8,
-      "search": "seitheben maschine lateral raise machine seitheben maschine",
+      "search": "seitheben maschine\nlateral raise machine\nseitheben maschine\nlateral raise\nseitenheben",
       "workouts": 19
     },
     {
@@ -1734,7 +1734,7 @@
       "muscle_group": "Schultern",
       "name": "Seitheben (Maschine, Scheiben)",
       "rank": 19,
-      "search": "seitheben maschine scheiben lateral raise plate loaded iso lateral lateral raise",
+      "search": "seitheben maschine scheiben\nlateral raise plate loaded\niso lateral lateral raise\nlateral raise\nseitenheben",
       "workouts": 1
     },
     {
@@ -1747,7 +1747,7 @@
       "muscle_group": "Rücken",
       "name": "Shrugs (Kurzhantel)",
       "rank": null,
-      "search": "shrugs kurzhantel dumbbell shrug",
+      "search": "shrugs kurzhantel\ndumbbell shrug\nshrug\nschulterheben",
       "workouts": 0
     },
     {
@@ -1760,7 +1760,7 @@
       "muscle_group": "Rücken",
       "name": "Shrugs (Langhantel)",
       "rank": null,
-      "search": "shrugs langhantel barbell shrug schulterheben",
+      "search": "shrugs langhantel\nbarbell shrug\nschulterheben\nshrug\nschulterheben",
       "workouts": 0
     },
     {
@@ -1773,7 +1773,7 @@
       "muscle_group": "Rücken",
       "name": "Shrugs (Multipresse)",
       "rank": null,
-      "search": "shrugs multipresse smith machine shrug",
+      "search": "shrugs multipresse\nsmith machine shrug\nshrug\nschulterheben",
       "workouts": 0
     },
     {
@@ -1786,7 +1786,7 @@
       "muscle_group": "Rücken",
       "name": "Shrugs (Trap-Bar)",
       "rank": null,
-      "search": "shrugs trap bar trap bar shrug",
+      "search": "shrugs trap bar\ntrap bar shrug\nshrug\nschulterheben",
       "workouts": 0
     },
     {
@@ -1799,7 +1799,7 @@
       "muscle_group": "Beine",
       "name": "Step-ups (Kurzhantel)",
       "rank": null,
-      "search": "step ups kurzhantel step up aufsteiger",
+      "search": "step ups kurzhantel\nstep up\naufsteiger",
       "workouts": 0
     },
     {
@@ -1812,7 +1812,7 @@
       "muscle_group": "Gesäß",
       "name": "Swings (Kettlebell)",
       "rank": null,
-      "search": "swings kettlebell kettlebell swing kb swings",
+      "search": "swings kettlebell\nkettlebell swing\nkb swings",
       "workouts": 0
     },
     {
@@ -1825,7 +1825,7 @@
       "muscle_group": "Trizeps",
       "name": "Trizeps-Kickbacks (Kabel)",
       "rank": null,
-      "search": "trizeps kickbacks kabel cable triceps kickback",
+      "search": "trizeps kickbacks kabel\ncable triceps kickback",
       "workouts": 0
     },
     {
@@ -1838,7 +1838,7 @@
       "muscle_group": "Trizeps",
       "name": "Trizeps-Kickbacks (Kurzhantel)",
       "rank": null,
-      "search": "trizeps kickbacks kurzhantel triceps kickback",
+      "search": "trizeps kickbacks kurzhantel\ntriceps kickback",
       "workouts": 0
     },
     {
@@ -1851,7 +1851,7 @@
       "muscle_group": "Trizeps",
       "name": "Trizepsdrücken (Kabel, einarmig)",
       "rank": null,
-      "search": "trizepsdrucken kabel einarmig single arm pushdown",
+      "search": "trizepsdrucken kabel einarmig\nsingle arm pushdown\ntriceps pushdown",
       "workouts": 0
     },
     {
@@ -1864,7 +1864,7 @@
       "muscle_group": "Trizeps",
       "name": "Trizepsdrücken (Kabel, Seil)",
       "rank": null,
-      "search": "trizepsdrucken kabel seil rope pushdown",
+      "search": "trizepsdrucken kabel seil\nrope pushdown\ntriceps pushdown",
       "workouts": 0
     },
     {
@@ -1877,7 +1877,7 @@
       "muscle_group": "Trizeps",
       "name": "Trizepsdrücken (Kabel, Stange)",
       "rank": 4,
-      "search": "trizepsdrucken kabel stange triceps pushdown triceps pushdown cable ez bar pushdown trizepsdrucken am kabel trizepsdrucken v griff",
+      "search": "trizepsdrucken kabel stange\ntriceps pushdown\ntriceps pushdown cable ez bar\npushdown\ntrizepsdrucken am kabel\ntrizepsdrucken v griff\ntriceps pushdown",
       "workouts": 21
     },
     {
@@ -1890,7 +1890,7 @@
       "muscle_group": "Trizeps",
       "name": "Trizepsdrücken (Kabel, Untergriff)",
       "rank": null,
-      "search": "trizepsdrucken kabel untergriff reverse grip pushdown",
+      "search": "trizepsdrucken kabel untergriff\nreverse grip pushdown\ntriceps pushdown",
       "workouts": 0
     },
     {
@@ -1903,7 +1903,7 @@
       "muscle_group": "Trizeps",
       "name": "Trizepsstrecken (Maschine)",
       "rank": null,
-      "search": "trizepsstrecken maschine triceps extension machine trizepsmaschine",
+      "search": "trizepsstrecken maschine\ntriceps extension machine\ntrizepsmaschine",
       "workouts": 0
     },
     {
@@ -1916,7 +1916,7 @@
       "muscle_group": "Trizeps",
       "name": "Trizepsstrecken über Kopf (Kabel)",
       "rank": 9,
-      "search": "trizepsstrecken uber kopf kabel overhead cable extension overhead triceps extension cable",
+      "search": "trizepsstrecken uber kopf kabel\noverhead cable extension\noverhead triceps extension cable\noverhead triceps extension",
       "workouts": 19
     },
     {
@@ -1929,7 +1929,7 @@
       "muscle_group": "Trizeps",
       "name": "Trizepsstrecken über Kopf (Kurzhantel)",
       "rank": null,
-      "search": "trizepsstrecken uber kopf kurzhantel overhead triceps extension dumbbell",
+      "search": "trizepsstrecken uber kopf kurzhantel\noverhead triceps extension dumbbell\noverhead triceps extension",
       "workouts": 0
     },
     {
@@ -1942,7 +1942,7 @@
       "muscle_group": "Trizeps",
       "name": "Trizepsstrecken über Kopf (Kurzhantel, einarmig)",
       "rank": null,
-      "search": "trizepsstrecken uber kopf kurzhantel einarmig single arm overhead extension",
+      "search": "trizepsstrecken uber kopf kurzhantel einarmig\nsingle arm overhead extension\noverhead triceps extension",
       "workouts": 0
     },
     {
@@ -1955,7 +1955,7 @@
       "muscle_group": "Trizeps",
       "name": "Trizepsstrecken über Kopf (SZ-Stange)",
       "rank": null,
-      "search": "trizepsstrecken uber kopf sz stange ez bar overhead extension",
+      "search": "trizepsstrecken uber kopf sz stange\nez bar overhead extension\noverhead triceps extension",
       "workouts": 0
     },
     {
@@ -1968,7 +1968,7 @@
       "muscle_group": "Rücken",
       "name": "Überzüge (Kabel)",
       "rank": null,
-      "search": "uberzuge kabel straight arm pulldown lat pullover pullover am kabel",
+      "search": "uberzuge kabel\nstraight arm pulldown\nlat pullover\npullover am kabel",
       "workouts": 0
     },
     {
@@ -1981,7 +1981,7 @@
       "muscle_group": "Brust",
       "name": "Überzüge (Kurzhantel)",
       "rank": null,
-      "search": "uberzuge kurzhantel dumbbell pullover pullover",
+      "search": "uberzuge kurzhantel\ndumbbell pullover\npullover",
       "workouts": 0
     },
     {
@@ -1994,7 +1994,7 @@
       "muscle_group": "Schultern",
       "name": "Vorgebeugtes Seitheben (Kurzhantel)",
       "rank": null,
-      "search": "vorgebeugtes seitheben kurzhantel rear delt fly reverse fly dumbbell reverse flys",
+      "search": "vorgebeugtes seitheben kurzhantel\nrear delt fly\nreverse fly dumbbell\nreverse flys",
       "workouts": 0
     },
     {
@@ -2007,7 +2007,7 @@
       "muscle_group": "Waden",
       "name": "Wadenheben (Beinpresse)",
       "rank": null,
-      "search": "wadenheben beinpresse calf press wadendrucken",
+      "search": "wadenheben beinpresse\ncalf press\nwadendrucken\ncalf raise",
       "workouts": 0
     },
     {
@@ -2020,7 +2020,7 @@
       "muscle_group": "Waden",
       "name": "Wadenheben (Kurzhantel, einbeinig)",
       "rank": null,
-      "search": "wadenheben kurzhantel einbeinig single leg calf raise",
+      "search": "wadenheben kurzhantel einbeinig\nsingle leg calf raise\ncalf raise",
       "workouts": 0
     },
     {
@@ -2033,7 +2033,7 @@
       "muscle_group": "Waden",
       "name": "Wadenheben (Maschine, sitzend)",
       "rank": null,
-      "search": "wadenheben maschine sitzend seated calf raise",
+      "search": "wadenheben maschine sitzend\nseated calf raise\ncalf raise",
       "workouts": 0
     },
     {
@@ -2046,7 +2046,7 @@
       "muscle_group": "Waden",
       "name": "Wadenheben (Maschine, stehend)",
       "rank": null,
-      "search": "wadenheben maschine stehend standing calf raise",
+      "search": "wadenheben maschine stehend\nstanding calf raise\ncalf raise",
       "workouts": 0
     },
     {
@@ -2059,7 +2059,7 @@
       "muscle_group": "Waden",
       "name": "Wadenheben (Multipresse)",
       "rank": null,
-      "search": "wadenheben multipresse smith machine calf raise",
+      "search": "wadenheben multipresse\nsmith machine calf raise\ncalf raise",
       "workouts": 0
     }
   ],
@@ -2111,6 +2111,7 @@
       }
     ]
   },
+  "partner_links": [],
   "partner_status": [],
   "partners": [
     {
@@ -2193,7 +2194,7 @@
     "notes": null,
     "rest_ends_at": null,
     "resting_set_id": null,
-    "started_at": "2026-09-25T02:42:41",
+    "started_at": "2026-09-25T17:53:44",
     "structure_version": 0,
     "template_id": null,
     "template_name": null
@@ -2233,6 +2234,7 @@
       "floor": 2.0,
       "id": 10,
       "increment": 2.0,
+      "is_substitute": false,
       "is_unilateral": true,
       "mirrored": false,
       "muscle_group": "Brust",
@@ -2243,7 +2245,6 @@
       "position": 1,
       "replaced_sets_done": 0,
       "replaced_volume": 0.0,
-      "is_substitute": false,
       "rest_seconds": null,
       "rest_setting": 150,
       "rest_setting_mine": false,
@@ -2284,6 +2285,7 @@
       "floor": 8.0,
       "id": 11,
       "increment": 8.0,
+      "is_substitute": false,
       "is_unilateral": false,
       "mirrored": false,
       "muscle_group": "Brust",
@@ -2294,7 +2296,6 @@
       "position": 2,
       "replaced_sets_done": 0,
       "replaced_volume": 0.0,
-      "is_substitute": false,
       "rest_seconds": null,
       "rest_setting": 150,
       "rest_setting_mine": true,

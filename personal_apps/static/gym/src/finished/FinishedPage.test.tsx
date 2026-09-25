@@ -40,6 +40,7 @@ const base: FinishedPayload = {
   comparison: null,
   plan_moved_to: null,
   plan_base: null,
+  partners: [],
   is_deload: false,
   deload_default_pct: 60,
   deload_applied: false,
@@ -689,6 +690,42 @@ describe('FinishedPage', () => {
     expect(within(quiet as HTMLElement).getAllByRole('button').map((b) => b.textContent))
       .toEqual(['Routine „Pull“ aktualisieren …', 'Körpergewicht & Notiz',
         'Als Deload markieren', 'Workout löschen'])
+  })
+
+  it('says whom it was done with, and opens their list as it ended (D14)', async () => {
+    const user = userEvent.setup()
+    const fetchMock = vi.fn(async (_url: string) => new Response(JSON.stringify({
+      id: 5, username: 'jglaser', viewer_leads: true, link_live: false,
+      since: '2026-08-09T16:02:00', started_at: '2026-08-09T15:58:00',
+      finished_at: '2026-08-09T17:01:00', sets_done: 9, sets_total: 9, rest_left: null,
+      rows: [{ id: 1, name: 'Bankdrücken', picture: null, state: 'done',
+        sets: [{ weight: 60, reps: 8 }], open: 0 }],
+    })))
+    vi.stubGlobal('fetch', fetchMock)
+    try {
+      mount({ partners: [{ id: 5, username: 'jglaser' }] })
+      // In the name stack, under the pace: part of what the workout was.
+      const head = document.querySelector('.session-top__name') as HTMLElement
+      await user.click(within(head).getByRole('button', {
+        name: 'Zusammen mit jglaser. Liste von jglaser ansehen',
+      }))
+      const sheet = screen.getByRole('dialog', { name: 'jglaser' })
+      // The day is said: opened from a workout in the past.
+      await waitFor(() => expect(sheet)
+        .toHaveTextContent(/So 09\.08\.\S* · fertig um 19:01 · 9 von 9 Sätzen/))
+      expect(String(fetchMock.mock.calls[0]![0])).toBe('/gym/shared/5/list.json')
+      // Closed, it takes its history entry back: none is left for the next test.
+      await user.click(within(sheet).getByRole('button', { name: 'Fertig' }))
+      expect(sheet).not.toHaveAttribute('open')
+    } finally {
+      vi.unstubAllGlobals()
+    }
+  })
+
+  it('names no partner for a workout done alone', () => {
+    mount()
+    expect(screen.queryByRole('button', { name: /^Zusammen mit/ })).toBeNull()
+    expect(document.getElementById('sheet-partner')).toBeNull()
   })
 
   it.each([false, true])(

@@ -22,6 +22,7 @@ from . import helpers          # noqa: F401
 from . import history          # noqa: F401
 from . import workout          # noqa: F401
 from . import partners         # noqa: F401
+from . import partner_view     # noqa: F401
 from . import session_admin    # noqa: F401
 from . import reports          # noqa: F401
 from . import catalogue        # noqa: F401

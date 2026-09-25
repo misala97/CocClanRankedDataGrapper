@@ -1,5 +1,7 @@
 // Mirrors the history models in features/gym/schemas.py.
 
+import type { PartnerRef } from '../partner/types'
+
 /** A record the workout set: the set that made it and the best it beat. */
 export interface HistoryRecord {
   exercise_id: number
@@ -26,6 +28,8 @@ export interface HistoryEntry {
   /** The same exercises the volume beside it was computed from -- swapped-out
    *  ones excluded, so the roster and the total agree. */
   exercises: string[]
+  /** Whom it was done with ("mit <Name>"): a partner who joined and lifted. */
+  partners: PartnerRef[]
   /** The name and the date words ("31.07.2026 juli 2026"), folded on the
    *  server (../search); the exercises' texts are the payload's
    *  exercise_search. */

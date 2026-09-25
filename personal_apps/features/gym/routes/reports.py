@@ -29,6 +29,7 @@ from .helpers import (
 from .history import (
     done_sets, load_performed,
 )
+from .partner_view import partner_refs
 from ._blueprint import (
     gym_bp,
 )
@@ -117,6 +118,9 @@ def gym_verlauf():
     # word finds a workout here that finds its exercise there (G-145) --
     # Verlauf matched the bare names, and "bench" or "Bankdrucken" found
     # nothing. Once per exercise, not once per row it is in.
+    # Whom each workout was done with ("mit <Name>", D14): four queries for
+    # the whole history, never one per row.
+    partners = partner_refs(s.id for s in sessions)
     exercise_search = {exercise.name: search_text(exercise)
                        for exercises in shown.values() for exercise in exercises}
 
@@ -187,6 +191,7 @@ def gym_verlauf():
                         'record_count': len(entry['records']),
                         'records': entry['records'],
                         'exercises': entry['exercises'],
+                        'partners': partners.get(entry['session'].id, []),
                         'search': entry['search'],
                         'gap_days': entry['gap_days'],
                     }

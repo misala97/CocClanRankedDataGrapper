@@ -1,6 +1,7 @@
 // Mirrors the finished-workout models in features/gym/schemas.py.
 
 import type { LiveBest } from '../session/types'
+import type { PartnerRef } from '../partner/types'
 
 export interface FinishedSession {
   id: number
@@ -100,6 +101,8 @@ export interface FinishedPayload {
   plan_moved_to: WorkoutRef | null
   /** A deload's one base workout for every "Nächstes Mal", or null. */
   plan_base: WorkoutRef | null
+  /** Whom it was done with ("mit <Name>"): a partner who joined and lifted. */
+  partners: PartnerRef[]
   is_deload: boolean
   deload_default_pct: number
   deload_applied: boolean

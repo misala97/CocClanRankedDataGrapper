@@ -489,12 +489,15 @@ class SharedSession(db.Model):
     """One live workout carried across to a training partner.
 
     Two people training together share structure -- which exercises, in what
-    order -- and nothing else. Weight and reps are the one thing that cannot
-    transfer between two bodies, so each side owns an ordinary WorkoutSession
-    and this row only links them.
+    order -- as writes into the follower's rows. Weight and reps are the one
+    thing that cannot transfer between two bodies, so each side owns an
+    ordinary WorkoutSession and this row only links them. What each of them
+    lifted is SHOWN to the other, read-only (D14, M5: the partner line, the
+    partner's list, "mit <Name>"), through routes/partner_view.py alone.
 
     State is derived from the timestamps rather than a status column:
-    pending (accepted_at IS NULL), active (accepted, ended_at IS NULL), ended.
+    pending (accepted_at IS NULL), declined (declined_at set), active
+    (accepted, ended_at IS NULL), ended.
     """
     __tablename__ = 'gym_shared_sessions'
     id                  = db.Column(db.Integer, primary_key=True, autoincrement=True)
@@ -507,6 +510,10 @@ class SharedSession(db.Model):
     follower_user_id    = db.Column(db.Integer, db.ForeignKey('app_user.id'), nullable=False, index=True)
     created_at          = db.Column(db.DateTime, nullable=False, default=dt.datetime.utcnow)
     accepted_at         = db.Column(db.DateTime, nullable=True)
+    # A declined invite stays until the leader has seen it: their line says
+    # "hat abgelehnt" until OK deletes the row, and inviting the same person
+    # again clears the stamp. Never a push (D14).
+    declined_at         = db.Column(db.DateTime, nullable=True)
     # Stamped when EITHER session finishes, whichever comes first. Propagation
     # stops from that moment; the follower trains on alone.
     ended_at            = db.Column(db.DateTime, nullable=True)

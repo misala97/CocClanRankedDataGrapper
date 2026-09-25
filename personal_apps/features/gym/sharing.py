@@ -1,7 +1,9 @@
 """Shared live sessions: the link's lifecycle, and the one cross-user write.
 
-Two people training together share structure and nothing else. Each owns an
-ordinary WorkoutSession; a SharedSession links them. Since the one exercise
+Two people training together share structure, as writes. Each owns an
+ordinary WorkoutSession; a SharedSession links them. What each of them lifts
+is only ever SHOWN to the other, read-only (D14, M5), and routes/partner_view.py
+is the one place that reads it. Since the one exercise
 list (2026-09-23) both log the same exercise rows, so a lift needs no
 translating: the follower's row names the leader's exercise, and what differs
 between them -- settings, history, plans -- is keyed by user, not by row.

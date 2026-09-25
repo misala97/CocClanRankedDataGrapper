@@ -25,6 +25,7 @@ from .helpers import (
     _to_int, _to_name, _wants_json,
 )
 from .history import counts
+from .partner_view import followed_a_leader
 from .workout import (
     _heute_payload, _mutation_response, _template_exercises_from_session,
 )
@@ -193,7 +194,9 @@ def gym_update_template(session_id):
     # the rows the first one wrote, and writes the same list.
     lock_user(current_user_id())
     session_ = owned_session(session_id)
-    if session_.template_id:
+    # A workout that followed a partner is offered no update (D14): its order
+    # was the leader's. Refused here too, for a debrief still showing the offer.
+    if session_.template_id and not followed_a_leader(session_):
         template = my_templates().filter_by(id=session_.template_id).first()
         if template:
             plan.replace_routine_rows(template, _template_exercises_from_session(session_))

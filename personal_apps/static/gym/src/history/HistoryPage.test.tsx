@@ -1,9 +1,10 @@
-import { fireEvent, render, screen, within } from '@testing-library/react'
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { beforeEach, describe, expect, it } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { HistoryPage, tonnes } from './HistoryPage'
 import type { HistoryEntry, HistoryIndexMonth, HistoryPayload, HistoryRecord } from './types'
 import { recordsInAddress, useHistoryUi, withRecords } from './store'
+import { useSheets } from '../session/stores'
 
 beforeEach(() => {
   useHistoryUi.setState(useHistoryUi.getInitialState(), true)
@@ -13,7 +14,7 @@ beforeEach(() => {
 const entry = (over: Partial<HistoryEntry> = {}): HistoryEntry => ({
   session_id: 7, name: 'Push Day', started_at: '2026-09-23T16:00:00',
   finished_at: '2026-09-23T16:52:00', is_deload: false, auto_finished: false,
-  volume: 4200, record_count: 0, records: [], exercises: ['Bankdrücken', 'Dips'],
+  volume: 4200, record_count: 0, records: [], exercises: ['Bankdrücken', 'Dips'], partners: [],
   search: 'push day\n23.09.2026 september 2026', gap_days: null, ...over,
 })
 
@@ -475,5 +476,38 @@ describe('the filter in the address', () => {
     expect(withRecords('?x=1', true)).toBe('?x=1&rekorde')
     expect(withRecords('?rekorde&x=1', false)).toBe('?x=1')
     expect(withRecords('?rekorde', false)).toBe('')
+  })
+})
+
+describe('"mit <Name>" on a row (D14)', () => {
+  beforeEach(() => { useSheets.setState(useSheets.getInitialState(), true) })
+  afterEach(() => { vi.unstubAllGlobals() })
+
+  it("sits beside the row's link, and opens the partner's list as it ended", async () => {
+    const user = userEvent.setup()
+    vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify({
+      id: 5, username: 'jglaser', viewer_leads: false, link_live: false,
+      since: '2026-09-23T16:02:00', started_at: '2026-09-23T15:58:00',
+      finished_at: '2026-09-23T17:01:00', sets_done: 9, sets_total: 9, rest_left: null,
+      rows: [{ id: 1, name: 'Bankdrücken', picture: null, state: 'done',
+        sets: [{ weight: 60, reps: 8 }], open: 0 }],
+    }))))
+    render(<HistoryPage payload={payload([entry({ partners: [{ id: 5, username: 'jglaser' }] })])} />)
+    const mit = screen.getByRole('button', { name: 'Zusammen mit jglaser. Liste von jglaser ansehen' })
+    // Not inside the link: the row still opens the workout, this the list.
+    expect(mit.closest('a')).toBeNull()
+    expect(mit.closest('.verlauf__row')).not.toBeNull()
+    await user.click(mit)
+    const sheet = screen.getByRole('dialog', { name: 'jglaser' })
+    await waitFor(() => expect(sheet)
+      .toHaveTextContent(/Mi 23\.09\.\S* · fertig um 19:01 · 9 von 9 Sätzen/))
+    // Closed, it takes its history entry back: none is left for the next test.
+    await user.click(within(sheet).getByRole('button', { name: 'Fertig' }))
+    expect(sheet).not.toHaveAttribute('open')
+  })
+
+  it('names no partner for a workout done alone', () => {
+    render(<HistoryPage payload={payload([entry()])} />)
+    expect(screen.queryByRole('button', { name: /^Zusammen mit/ })).toBeNull()
   })
 })
