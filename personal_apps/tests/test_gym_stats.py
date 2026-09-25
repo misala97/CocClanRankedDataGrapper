@@ -187,6 +187,28 @@ def test_a_workout_with_no_judged_set_adds_nothing_to_the_drought():
     assert stats.sessions_since_pr(rows) == 1
 
 
+def test_a_bodyweight_set_is_judged_by_nothing():
+    """0 kg estimates 0 kg, which is no estimate (G-038): no record, no
+    drought, no stall. Reps climbing at bodyweight read "Seit 5 Workouts ohne
+    Rekord" and "Stagniert" -- under "Noch kein Rekord" on the exercise page."""
+    assert stats.judged_e1rm(0.0, 10) is None
+    assert stats.judged_e1rm(2.5, 10) == 3.3
+    rows = [perf([(0.0, 8 + i)], started_at=day(7 * i), session_id=i + 1) for i in range(6)]
+    assert stats.drought(rows) is None
+    assert stats.sessions_since_pr(rows) is None
+    assert stats.exercise_state(rows) is None
+    assert stats.stall_report({1: rows}) == []
+
+
+def test_the_first_weighted_workout_after_bodyweight_ones_is_its_debut():
+    """Nothing before it was an estimate, so it beat nothing."""
+    rows = [perf([(0.0, 12)], started_at=day(0), session_id=1),
+            perf([(0.0, 12)], started_at=day(7), session_id=2),
+            perf([(5.0, 10)], started_at=day(14), session_id=3)]
+    assert stats.record_marks(rows) == {}
+    assert stats.sessions_since_pr(rows) is None
+
+
 def test_the_stall_report_quotes_the_newest_attempt_and_the_last_record():
     """B3 review: `stuck_at` came from the last row of the slot, a
     15-rep row included, and `since` from the slot's peak."""
@@ -293,44 +315,46 @@ class FakeExercise:
 NOW = dt.datetime(2026, 7, 23, 12, 0)
 
 
-def test_exercise_progress_returns_newest_first_table_and_per_position_series():
+def test_exercise_progress_is_the_whole_exercise_newest_first():
+    # D9: no slot lenses the log, the record or the state -- the Rekordtreppe
+    # is the one part a pill can.
     rows = [
         perf([(80.0, 8)], position=1, started_at=day(0), session_id=1),
-        perf([(70.0, 8)], position=3, started_at=day(7), session_id=2),
+        perf([(70.0, 8), (70.0, 7)], position=3, started_at=day(7), session_id=2),
         perf([(82.5, 6)], position=1, started_at=day(14), session_id=3),
     ]
     result = stats.exercise_progress(rows)
 
-    assert [entry['session_id'] for entry in result['table']] == [3, 2, 1]
-    assert result['available_positions'] == [1, 3]
-    assert [series['position'] for series in result['series']] == [1, 3]
-    assert len(result['series'][0]['points']) == 2
-    assert result['pr_weight']['weight'] == 82.5
-    assert result['selected_position'] is None
+    assert set(result) == {'table', 'pr_e1rm', 'state', 'sessions_since_pr'}
+    assert [(entry['session_id'], entry['position']) for entry in result['table']] == [
+        (3, 1), (2, 3), (1, 1)]
+    assert result['table'][1] == {
+        'session_id': 2, 'started_at': day(7), 'position': 3, 'is_deload': False,
+        'is_record': False, 'sets': [{'weight': 70.0, 'reps': 8}, {'weight': 70.0, 'reps': 7}],
+        'volume': 1050.0, 'e1rm': 88.7,
+    }
+    # 80 x 8 estimates 101,3 -- above the heavier 82,5 x 6 at 99,0. The
+    # debut's, so no record: nothing came before it (D3).
+    assert (result['pr_e1rm']['weight'], result['pr_e1rm']['e1rm']) == (80.0, 101.3)
+    assert result['pr_e1rm']['is_record'] is False
 
 
-def test_exercise_progress_isolates_a_single_position_when_asked():
-    rows = [
-        perf([(80.0, 8)], position=1, started_at=day(0), session_id=1),
-        perf([(70.0, 8)], position=3, started_at=day(7), session_id=2),
-    ]
-    result = stats.exercise_progress(rows, position=3)
-
-    assert [entry['session_id'] for entry in result['table']] == [2]
-    assert [series['position'] for series in result['series']] == [3]
-    # available_positions always describes the unfiltered data, so the page
-    # can still offer the other slots as options.
-    assert result['available_positions'] == [1, 3]
+def test_the_pages_chip_judges_steigend_in_the_lifts_usual_slot_as_the_list_does():
+    # routes.catalogue lenses "Steigend" by dominant_position; the page read
+    # across slots, so one lift was "Steigend" in the list and had no chip on
+    # its page (I2 review). Slot 1 rose, 82 over 80; across slots 81 fell.
+    rows = [perf([(90.0, 1)], position=1, started_at=day(0), session_id=1),
+            perf([(80.0, 1)], position=1, started_at=day(7), session_id=2),
+            perf([(82.0, 1)], position=1, started_at=day(14), session_id=3),
+            perf([(81.0, 1)], position=3, started_at=day(21), session_id=4)]
+    assert stats.exercise_state(rows) is None
+    assert stats.exercise_progress(rows)['state'] == 'steigend' \
+        == stats.exercise_state(rows, position=stats.dominant_position(rows))
 
 
 def test_exercise_progress_on_an_exercise_with_no_history_is_empty_not_broken():
     result = stats.exercise_progress([])
-    assert result['table'] == []
-    assert result['series'] == []
-    assert result['pr_weight'] is None
-    assert result['pr_e1rm'] is None
-    assert result['state'] == 'neu'
-    assert result['last_progression'] is None
+    assert result == {'table': [], 'pr_e1rm': None, 'state': 'neu', 'sessions_since_pr': None}
 
 
 def test_session_report_totals_and_flags_an_e1rm_record():
@@ -890,7 +914,6 @@ def test_a_deload_session_can_hold_the_best():
     # the PR'; the heaviest set is a fact either way.)
     rows = [perf([(80.0, 8)], started_at=day(0)),
             perf([(200.0, 8)], started_at=day(7), is_deload=True)]
-    assert stats._pr_weight(rows)['weight'] == 200.0
     assert stats._pr_e1rm(rows)['weight'] == 200.0
 
 
@@ -1002,27 +1025,12 @@ def test_exercise_progress_keeps_deload_rows_but_marks_them():
     # table is newest-first
     assert progress['table'][0]['is_deload'] is True
     assert progress['table'][1]['is_deload'] is False
-    assert [point['is_deload'] for point in progress['series'][0]['points']] == [False, True]
-    assert progress['pr_weight']['weight'] == 80.0
 
 
-def test_exercise_progress_reports_the_last_non_deload_row():
-    # Three rows so "newest non-deload" is distinguishable from "any
-    # non-deload": an implementation returning the OLDEST would give 80.0.
-    rows = [perf([(80.0, 8)], started_at=day(0)),
-            perf([(85.0, 8)], started_at=day(7)),
-            perf([(60.0, 8)], started_at=day(14), is_deload=True)]
-    progress = stats.exercise_progress(rows)
-    assert progress['table'][0]['is_deload'] is True          # newest overall
-    assert progress['last_progression']['best_weight'] == 85.0
-
-
-def test_exercise_progress_has_no_last_progression_when_only_deloads_exist():
-    rows = [perf([(60.0, 8)], started_at=day(0), is_deload=True)]
-    progress = stats.exercise_progress(rows)
-    assert progress['last_progression'] is None
-    # The heaviest set is a fact, deload or not (D3).
-    assert progress['pr_weight']['weight'] == 60.0
+def test_exercise_progress_of_deloads_only_still_has_its_best():
+    # The best set is a fact, deload or not (D3).
+    progress = stats.exercise_progress([perf([(60.0, 8)], started_at=day(0), is_deload=True)])
+    assert progress['pr_e1rm']['weight'] == 60.0
     assert progress['table'] != []      # the row is still reported
 
 
@@ -1220,66 +1228,233 @@ def test_rest_medians_ignores_gaps_with_no_planned_time():
     assert stats.rest_medians([(180, 150), (200, None), (220, 150)]) == (150, 200)
 
 
-class TestE1rmProjection:
-    """The "bei diesem Tempo" gate: every rule errs toward silence."""
+class TestE1rmTrend:
+    """How fast the e1RM moves (D9 A), in kg per 30 days. It replaced the
+    chart's date promise, and says a falling pace too."""
 
-    @staticmethod
-    def _points(*values, spacing_days=7, end_days_ago=3, now=None):
-        now = now or dt.datetime(2026, 8, 11, 12, 0)
-        newest = now - dt.timedelta(days=end_days_ago)
+    NOW = dt.datetime(2026, 8, 11, 12, 0)
+
+    def _rows(self, *values, spacing_days=7, end_days_ago=3, deloads=()):
+        """One workout per value, `spacing_days` apart, the newest
+        `end_days_ago` before NOW: a single, whose e1RM is its weight."""
+        newest = self.NOW - dt.timedelta(days=end_days_ago)
         count = len(values)
-        return now, [
-            (newest - dt.timedelta(days=spacing_days * (count - 1 - i)), v)
-            for i, v in enumerate(values)
+        return [perf([(value, 1)], session_id=i + 1, is_deload=i in deloads,
+                     started_at=newest - dt.timedelta(days=spacing_days * (count - 1 - i)))
+                for i, value in enumerate(values)]
+
+    def test_says_kg_a_month_off_the_least_squares_line(self):
+        # +1 kg a week is 30/7 kg a month.
+        assert stats.e1rm_trend(self._rows(80.0, 81.0, 82.0, 83.0), self.NOW) \
+            == {'per_month': 4.3, 'workouts': 4}
+
+    def test_one_hot_day_does_not_make_the_pace(self):
+        # A line through all four, not the last step: 83 -> 90 alone is 30 kg a month.
+        trend = stats.e1rm_trend(self._rows(80.0, 81.0, 82.0, 90.0), self.NOW)
+        assert trend == {'per_month': 13.3, 'workouts': 4}
+
+    def test_says_a_falling_pace_too(self):
+        assert stats.e1rm_trend(self._rows(84.0, 83.0, 82.0, 81.0), self.NOW)['per_month'] == -4.3
+
+    def test_reads_only_the_newest_six(self):
+        # Six flat old workouts would flatten the line if they were read.
+        rows = self._rows(*[60.0] * 6, 80.0, 81.0, 82.0, 83.0, 84.0, 85.0)
+        assert stats.e1rm_trend(rows, self.NOW) == {'per_month': 4.3, 'workouts': 6}
+
+    def test_silent_below_four_workouts(self):
+        assert stats.e1rm_trend(self._rows(80.0, 82.0, 84.0), self.NOW) is None
+
+    def test_silent_over_less_than_two_weeks(self):
+        # Four workouts in six days said "+37,5 kg im Monat" (I2 review).
+        rows = self._rows(100.0, 102.5, 105.0, 107.5, spacing_days=2)
+        assert stats.e1rm_trend(rows, self.NOW) is None
+
+    def test_reaches_back_past_six_until_two_weeks_are_read(self):
+        # Six workouts two days apart span ten days; eight span fourteen.
+        rows = self._rows(*[70.0 + i for i in range(10)], spacing_days=2)
+        assert stats.e1rm_trend(rows, self.NOW) == {'per_month': 15.0, 'workouts': 8}
+
+    def test_reaches_back_no_further_than_twelve(self):
+        # Twelve daily workouts span eleven days: still no two weeks, no pace.
+        rows = self._rows(*[70.0 + i for i in range(20)], spacing_days=1)
+        assert stats.e1rm_trend(rows, self.NOW) is None
+
+    def test_silent_once_the_newest_is_past_the_window(self):
+        # The pace of a lifter who stopped is history, not a pace.
+        assert stats.e1rm_trend(self._rows(80.0, 81.0, 82.0, 83.0, end_days_ago=28), self.NOW)
+        assert stats.e1rm_trend(self._rows(80.0, 81.0, 82.0, 83.0, end_days_ago=29), self.NOW) is None
+
+    def test_leaves_deloads_out(self):
+        rows = self._rows(80.0, 81.0, 60.0, 82.0, 83.0, deloads=(2,))
+        assert stats.e1rm_trend(rows, self.NOW)['workouts'] == 4
+
+    def test_leaves_out_what_estimates_nothing(self):
+        # Past 12 reps no set is judged, and a bodyweight set estimates 0 kg
+        # (G-038): neither is a point on the line.
+        rows = self._rows(80.0, 81.0, 82.0, 83.0) + [
+            perf([(90.0, 15)], session_id=9, started_at=self.NOW - dt.timedelta(days=2)),
+            perf([(0.0, 10)], session_id=10, started_at=self.NOW - dt.timedelta(days=1)),
+        ]
+        assert stats.e1rm_trend(rows, self.NOW) == {'per_month': 4.3, 'workouts': 4}
+
+    def test_a_bodyweight_lift_has_no_pace(self):
+        rows = [perf([(0.0, 8 + i)], session_id=i + 1,
+                     started_at=self.NOW - dt.timedelta(days=7 * (4 - i))) for i in range(5)]
+        assert stats.e1rm_trend(rows, self.NOW) is None
+
+    def test_two_slots_of_one_workout_are_one_point(self):
+        rows = self._rows(80.0, 81.0, 82.0, 83.0)
+        rows.append(perf([(70.0, 1)], position=3, session_id=4, started_at=rows[-1].started_at))
+        assert stats.e1rm_trend(rows, self.NOW) == {'per_month': 4.3, 'workouts': 4}
+
+
+class TestWeightLadder:
+    """"Wiederholungen je Gewicht" (D9 A): how far each weight went."""
+
+    def test_most_reps_per_weight_heaviest_first_with_workouts_and_first_day(self):
+        rows = [
+            perf([(80.0, 8), (80.0, 7)], started_at=day(0), session_id=1),
+            perf([(82.5, 5), (80.0, 9)], started_at=day(7), session_id=2),
+            perf([(82.5, 6)], started_at=day(14), session_id=3),
+        ]
+        assert stats.weight_ladder(rows) == [
+            {'weight': 82.5, 'reps': 6, 'workouts': 2, 'first_at': day(7)},
+            {'weight': 80.0, 'reps': 9, 'workouts': 2, 'first_at': day(0)},
         ]
 
-    def test_projects_the_next_multiple_of_five(self):
-        # +1 kg per week from 80: 85 is ~4 weeks out from the fitted line.
-        now, points = self._points(80.0, 81.0, 82.0, 83.0)
-        result = stats.e1rm_projection(points, now)
-        assert result is not None
-        assert result['milestone'] == 85.0
-        assert abs(result['per_week'] - 1.0) < 0.01
-        days_out = (result['date'] - now).days
-        assert 5 <= days_out <= 14, 'fitted value ~83.4 at 1kg/wk puts 85 well inside two weeks'
+    def test_shows_the_heaviest_four(self):
+        rows = [perf([(float(weight), 8)], started_at=day(i), session_id=i + 1)
+                for i, weight in enumerate([60, 70, 80, 90, 100])]
+        assert [entry['weight'] for entry in stats.weight_ladder(rows)] == [100.0, 90.0, 80.0, 70.0]
 
-    def test_silent_below_four_points(self):
-        now, points = self._points(80.0, 82.0, 84.0)
-        assert stats.e1rm_projection(points, now) is None
+    def test_leaves_deloads_out_and_reads_high_reps(self):
+        # A deload's weight was lightened on purpose; 15 reps are what was done.
+        rows = [perf([(60.0, 15)], started_at=day(0), session_id=1),
+                perf([(90.0, 10)], started_at=day(7), session_id=2, is_deload=True)]
+        assert stats.weight_ladder(rows) == [
+            {'weight': 60.0, 'reps': 15, 'workouts': 1, 'first_at': day(0)}]
 
-    def test_silent_when_the_trend_is_stale(self):
-        now, points = self._points(80.0, 81.0, 82.0, 83.0, end_days_ago=35)
-        assert stats.e1rm_projection(points, now) is None
+    def test_counts_a_workout_once_for_a_weight_it_used_in_two_slots(self):
+        rows = [perf([(80.0, 8)], started_at=day(0), session_id=1, position=1),
+                perf([(80.0, 6)], started_at=day(0), session_id=1, position=3)]
+        assert stats.weight_ladder(rows) == [
+            {'weight': 80.0, 'reps': 8, 'workouts': 1, 'first_at': day(0)}]
 
-    def test_silent_on_a_flat_or_falling_trend(self):
-        now, flat = self._points(80.0, 80.0, 80.0, 80.0)
-        assert stats.e1rm_projection(flat, now) is None
-        now, falling = self._points(84.0, 83.0, 82.0, 81.0)
-        assert stats.e1rm_projection(falling, now) is None
+    def test_one_weight_is_one_line_however_the_float_came_out(self):
+        rows = [perf([(62.5, 8)], started_at=day(0), session_id=1),
+                perf([(62.500000001, 9)], started_at=day(7), session_id=2)]
+        assert stats.weight_ladder(rows) == [
+            {'weight': 62.5, 'reps': 9, 'workouts': 2, 'first_at': day(0)}]
 
-    def test_silent_when_the_milestone_is_too_far_out(self):
-        # +0.1 kg/week: the next multiple of five is years away. No date.
-        now, points = self._points(80.0, 80.1, 80.2, 80.3)
-        assert stats.e1rm_projection(points, now) is None
 
-    def test_one_hot_day_does_not_anchor_the_line(self):
-        # Last raw point spikes to 90, the fit stays on the trend: the
-        # projection anchors at the FITTED value, so the milestone is 90,
-        # not 95-from-the-spike.
-        now, points = self._points(80.0, 81.0, 82.0, 90.0)
-        result = stats.e1rm_projection(points, now)
-        assert result is not None
-        assert result['milestone'] == 90.0
+class TestRecordStair:
+    """The Rekordtreppe (D9, M2 chart 1): one col per workout, the best so
+    far as its tread."""
 
-    def test_fits_only_the_newest_eight(self):
-        # Eight flat old points would kill the slope if they were included;
-        # the newest eight rise cleanly.
-        now = dt.datetime(2026, 8, 11, 12, 0)
-        old = [(now - dt.timedelta(days=200 - i * 7), 60.0) for i in range(6)]
-        _, fresh = self._points(80.0, 81.0, 82.0, 83.0, 84.0, 85.0, 86.0, 87.0)
-        result = stats.e1rm_projection(old + fresh, now)
-        assert result is not None
-        assert abs(result['per_week'] - 1.0) < 0.05
+    @staticmethod
+    def _cols(stair, *keys):
+        return [tuple(col[key] for key in keys) for col in stair['cols']]
+
+    def test_a_tread_is_the_best_so_far_and_climbs_only_at_a_record(self):
+        rows = [perf([(90.0, 1)], started_at=day(0), session_id=1),
+                perf([(88.0, 1)], started_at=day(7), session_id=2),
+                perf([(95.0, 1)], started_at=day(14), session_id=3),
+                perf([(94.0, 1)], started_at=day(21), session_id=4)]
+        stair = stats.record_stair(rows)
+        # The debut is no record: nothing came before it (record_marks).
+        assert self._cols(stair, 'session_id', 'e1rm', 'best', 'kind') == [
+            (1, 90.0, 90.0, 'workout'), (2, 88.0, 90.0, 'workout'),
+            (3, 95.0, 95.0, 'record'), (4, 94.0, 95.0, 'workout')]
+        assert stair['cols'][2]['started_at'] == day(14)
+
+    def test_a_lift_twice_in_one_workout_is_one_col_its_better_row(self):
+        rows = [perf([(80.0, 1)], started_at=day(0), session_id=1, position=1),
+                perf([(85.0, 1)], started_at=day(7), session_id=2, position=1),
+                perf([(88.0, 1)], started_at=day(7), session_id=2, position=3)]
+        assert self._cols(stats.record_stair(rows), 'session_id', 'position', 'e1rm', 'kind') == [
+            (1, 1, 80.0, 'workout'), (2, 3, 88.0, 'record')]
+
+    def test_a_deload_sits_in_the_lane_unless_it_set_a_record(self):
+        # G-078: a deload can set a record; then it is one, on the stair.
+        rows = [perf([(90.0, 1)], started_at=day(0), session_id=1),
+                perf([(70.0, 1)], started_at=day(7), session_id=2, is_deload=True),
+                perf([(95.0, 1)], started_at=day(14), session_id=3, is_deload=True)]
+        assert self._cols(stats.record_stair(rows), 'kind', 'best') == [
+            ('workout', 90.0), ('deload', 90.0), ('record', 95.0)]
+
+    def test_a_deload_the_tread_climbs_at_is_drawn_on_it(self):
+        # Under a pill a slot's best can rise at a deload that set no record
+        # of the lift; in the lane, that step stood on nothing (I2 review).
+        rows = [perf([(100.0, 1)], started_at=day(0), session_id=1, position=1),
+                perf([(80.0, 1)], started_at=day(7), session_id=2, position=3),
+                perf([(85.0, 1)], started_at=day(14), session_id=3, position=3, is_deload=True),
+                perf([(70.0, 1)], started_at=day(21), session_id=4, position=3, is_deload=True)]
+        assert self._cols(stats.record_stair(rows, position=3), 'session_id', 'best', 'kind') == [
+            (2, 80.0, 'workout'), (3, 85.0, 'workout'), (4, 85.0, 'deload')]
+        # So is a debut that was a deload: the first tread stands on it.
+        debut = [perf([(80.0, 1)], started_at=day(0), session_id=1, is_deload=True),
+                 perf([(78.0, 1)], started_at=day(7), session_id=2)]
+        assert self._cols(stats.record_stair(debut), 'kind', 'best') == [
+            ('workout', 80.0), ('workout', 80.0)]
+
+    def test_draws_only_workouts_with_an_estimate(self):
+        # Past 12 reps nothing is judged; 0 kg estimates 0 kg (G-038).
+        rows = [perf([(90.0, 1)], started_at=day(0), session_id=1),
+                perf([(60.0, 15)], started_at=day(7), session_id=2),
+                perf([(0.0, 10)], started_at=day(14), session_id=3),
+                perf([(92.0, 1)], started_at=day(21), session_id=4)]
+        assert self._cols(stats.record_stair(rows), 'session_id') == [(1,), (4,)]
+
+    def test_no_stair_with_fewer_than_two_workouts_to_draw(self):
+        assert stats.record_stair([perf([(90.0, 1)])]) is None
+        bodyweight = [perf([(0.0, 10)], started_at=day(0), session_id=1),
+                      perf([(0.0, 12)], started_at=day(7), session_id=2)]
+        assert stats.record_stair(bodyweight) is None
+
+    def test_a_slot_draws_its_own_workouts_and_its_own_best(self):
+        # 92 is slot 1's best, not the lift's: the tread rises, the dot stays plain.
+        rows = [perf([(90.0, 1)], started_at=day(0), session_id=1, position=1),
+                perf([(100.0, 1)], started_at=day(7), session_id=2, position=3),
+                perf([(92.0, 1)], started_at=day(14), session_id=3, position=1)]
+        assert self._cols(stats.record_stair(rows, position=1), 'session_id', 'best', 'kind') == [
+            (1, 90.0, 'workout'), (3, 92.0, 'workout')]
+
+    def test_a_record_is_gold_in_the_slot_that_set_it(self):
+        # One workout ran the lift first and third; only the third set the record.
+        rows = [perf([(90.0, 1)], started_at=day(0), session_id=1, position=1),
+                perf([(88.0, 1)], started_at=day(7), session_id=2, position=1),
+                perf([(95.0, 1)], started_at=day(7), session_id=2, position=3),
+                perf([(89.0, 1)], started_at=day(14), session_id=3, position=3)]
+        assert self._cols(stats.record_stair(rows, position=1), 'kind') == [
+            ('workout',), ('workout',)]
+        assert self._cols(stats.record_stair(rows, position=3), 'kind') == [
+            ('record',), ('workout',)]
+
+    def test_spans_the_dots_and_the_treads_but_not_the_lane(self):
+        rows = [perf([(90.0, 1)], started_at=day(0), session_id=1),
+                perf([(50.0, 1)], started_at=day(7), session_id=2, is_deload=True),
+                perf([(100.0, 1)], started_at=day(14), session_id=3)]
+        stair = stats.record_stair(rows)
+        assert (stair['lo'], stair['hi'], stair['ticks']) == (90.0, 100.0, [90, 95, 100])
+
+    def test_widens_a_flat_stair_to_five_kg_around_its_middle(self):
+        # 0,5 kg over a year must draw flat, not as a cliff.
+        rows = [perf([(100.0, 1)], started_at=day(0), session_id=1),
+                perf([(100.5, 1)], started_at=day(7), session_id=2)]
+        stair = stats.record_stair(rows)
+        assert (stair['lo'], stair['hi'], stair['ticks']) == (97.75, 102.75, [98, 100, 102])
+
+    def test_widens_a_light_lift_up_from_zero_never_below_it(self):
+        # A 1 kg to 2 kg raise centred on 1,5 kg drew a "-1" gridline.
+        rows = [perf([(1.0, 1)], started_at=day(0), session_id=1),
+                perf([(2.0, 1)], started_at=day(7), session_id=2)]
+        stair = stats.record_stair(rows)
+        assert (stair['lo'], stair['hi']) == (0.0, 5.0)
+        assert min(stair['ticks']) >= 0
+
+    def test_ticks_are_the_widest_round_step_with_three_inside(self):
+        assert stats._stair_ticks(60.0, 140.0) == [75, 100, 125]
+        assert stats._stair_ticks(88.0, 95.0) == [88, 90, 92, 94]
 
 
 # --------------------------------------------------------------------------

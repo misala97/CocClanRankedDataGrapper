@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import {
-  dayMonth, kg, kg1, kgSetting, localParts, roundTo, setsLine, shortDate, signedWhole, volume,
-  whenSaid, whole,
+  dayDate, dayMonth, kg, kg1, kgSetting, localParts, roundTo, setsLine, shortDate, signedKg1,
+  signedWhole, volume, weekdayDate, whenSaid, whole,
 } from './format'
 
 describe('kg1', () => {
@@ -140,6 +140,40 @@ describe('whenSaid', () => {
   it('counts Berlin days, not UTC ones', () => {
     // 00:30 on Wednesday in Berlin is still Tuesday in UTC.
     expect(whenSaid('2026-09-22T22:30:00', now)).toBe('gestern')
+  })
+
+  it('says the year of a day in another year', () => {
+    // "15.12." under "Letztes Mal" named last December as this one.
+    expect(whenSaid('2025-12-15T16:00:00', now)).toBe('15.12.2025')
+  })
+})
+
+describe('dayDate and weekdayDate', () => {
+  const now = new Date('2026-09-24T10:00:00Z')
+
+  it('leave out this year, and say any other', () => {
+    expect(dayDate('2026-08-25T16:00:00', now)).toBe('25.08.')
+    expect(dayDate('2025-08-25T16:00:00', now)).toBe('25.08.2025')
+    expect(weekdayDate('2026-08-25T16:00:00', now)).toBe('Di 25.08.')
+    expect(weekdayDate('2025-12-15T16:00:00', now)).toBe('Mo 15.12.2025')
+  })
+
+  it('read the year in Berlin: New Year\'s Eve at 23:30 UTC is the new year', () => {
+    expect(dayDate('2025-12-31T23:30:00', now)).toBe('01.01.')
+    expect(weekdayDate('2025-12-31T23:30:00', now)).toBe('Do 01.01.')
+  })
+})
+
+describe('signedKg1', () => {
+  it('always carries a sign, a true minus below zero', () => {
+    expect(signedKg1(1.24)).toBe('+1,2')
+    expect(signedKg1(-0.4)).toBe('−0,4')
+  })
+
+  it('says a rate that rounds to nothing as ±0', () => {
+    expect(signedKg1(0)).toBe('±0')
+    expect(signedKg1(0.04)).toBe('±0')
+    expect(signedKg1(-0.04)).toBe('±0')
   })
 })
 

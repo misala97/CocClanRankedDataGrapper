@@ -59,6 +59,14 @@ export interface RestOverview {
   max_seconds: number
 }
 
+/** One set as done or aimed at. */
+export interface WeightReps {
+  weight: number
+  reps: number
+}
+
+/** One performed row of the exercise: a line of the Workouts log, and what
+ *  the Rekordtreppe's readout names. */
 export interface SessionRow {
   session_id: number
   started_at: string
@@ -67,21 +75,71 @@ export interface SessionRow {
   /** This workout's best e1RM beat every workout before it (D3). History: a
    *  record later overtaken keeps the tag. */
   is_record: boolean
-  sets_display: string
-  best_weight: number
+  /** The counted sets, as logged. */
+  sets: WeightReps[]
   volume: number
   e1rm: number
 }
 
-/** session_id is load-bearing: the log matches the record row on it, never on
- *  the date -- two sessions on one day both matched a date test and both went
- *  gold. */
-export interface WeightPR {
+/** "Nächstes Ziel" (D9 A; plan.exercise_target). */
+export interface ExerciseGoal {
+  sets: WeightReps[]
+  /** "Letztes Mal": the newest non-deload workout's counted sets. */
+  last_sets: WeightReps[]
+  last_at: string
+  rep_min: number
+  rep_max: number
+  /** This target already put a set's weight up (a set with no step goes on
+   *  by a rep instead, and is no step). */
+  stepped: boolean
+  /** Not stepped: where each set goes once the range's top is reached in
+   *  all -- null for a set with no step. Null when stepped. */
+  step_ups: (number | null)[] | null
+}
+
+/** A line of "Wiederholungen je Gewicht" (stats.weight_ladder). */
+export interface WeightRow {
   weight: number
   reps: number
+  workouts: number
+  first_at: string
+}
+
+/** stats.e1rm_trend: kg per 30 days over the newest `workouts`. */
+export interface E1rmTrend {
+  per_month: number
+  workouts: number
+}
+
+/** One workout on the Rekordtreppe (stats.record_stair). */
+export interface StairCol {
   session_id: number
-  started_at: string
   position: number
+  started_at: string
+  e1rm: number
+  /** The best so far, this workout included: its tread. */
+  best: number
+  kind: 'workout' | 'record' | 'deload'
+}
+
+/** The Rekordtreppe for "Alle" (position null) or one slot. */
+export interface Stair {
+  position: number | null
+  cols: StairCol[]
+  lo: number
+  hi: number
+  ticks: number[]
+  /** "N ohne Rekord" at the last tread: the lift's drought, "Alle" only. */
+  since: number | null
+  /** The drought is a stall: drawn in the stall hue. "Alle" only. */
+  stalled: boolean
+}
+
+/** The exercise itself: its drawing and the other variants of its movement. */
+export interface ExerciseAbout {
+  picture: string | null
+  movement: string | null
+  variants: { id: number; label: string }[]
 }
 
 export interface E1rmPR {
@@ -91,95 +149,35 @@ export interface E1rmPR {
   session_id: number
   started_at: string
   position: number
-}
-
-/** x/y are SVG coordinates. e1rm and started_at ride along for the readout.
- *  is_record as on SessionRow. */
-export interface ChartPoint {
-  x: number
-  y: number
-  e1rm: number
-  started_at: string
+  /** False while the debut holds the best: a first workout beats nothing
+   *  (D3), so the page says "Bestwert" and draws no gold. */
   is_record: boolean
-  is_deload: boolean
 }
 
-export interface ChartTick {
-  y_pct: number
-  text: string
-}
-
-/** One position slot. Series separate by weight rather than hue: the palette is
- *  fixed at three semantic hues and a slot number is not a state, so the slot
- *  with the most sessions draws solid (is_main) and occasional ones recede. */
-export interface ChartSeries {
-  position: number
-  points: ChartPoint[]
-  opacity: number
-  width: number
-  is_main: boolean
-  label_x: number
-  label_y: number
-  /** Only ever 'end' (label flipped left of a point near the right edge) or
-   *  'start'. Narrow rather than string, so SVG's textAnchor accepts it and a
-   *  third value added on the Python side fails here. */
-  label_anchor: 'start' | 'end'
-}
-
-/** lo/hi are the DATA range, which is what the accessible description quotes.
- *  axis_lo/axis_hi are the padded drawing range -- widened to a floor so a lift
- *  that drifted 0,7 kg over a year does not render as a cliff. */
-export interface ChartProjection {
-  x1: number
-  y1: number
-  x2: number
-  y2: number
-  milestone: number
-  date: string
-  per_week: number
-}
-
-export interface ChartGeometry {
-  series: ChartSeries[]
-  lo: number
-  hi: number
-  axis_lo: number
-  axis_hi: number
-  ticks: ChartTick[]
-  /** One or three entries: deduped, so an exercise whose whole history is one
-   *  day renders a single mark instead of the same date three times. */
-  dates: string[]
-  width: number
-  height: number
-  has_deload: boolean
-  has_record: boolean
-  /** The "bei diesem Tempo" overlay, or null when any silence gate holds.
-   *  Optional so captured fixtures from before the field keep type-checking. */
-  projection?: ChartProjection | null
-}
-
+/** The exercise page (D9, M2). Everything is the WHOLE exercise except the
+ *  stair a pill picks. */
 export interface ExerciseDetailPayload {
   exercise: ExerciseMeta
+  /** Every row, newest first. */
   table: SessionRow[]
-  /** Present in the payload but unread here: the page draws from `chart`, which
-   *  is this same data already turned into SVG coordinates. Typed loosely on
-   *  purpose rather than omitted, so this stays a true mirror of the schema. */
-  series: unknown[]
-  available_positions: number[]
-  selected_position: number | null
-  selected_position_is_default: boolean
-  selected_position_reason: string | null
-  last_overall: { started_at: string; position: number } | null
-  pr_weight: WeightPR | null
+  goal: ExerciseGoal | null
+  weights: WeightRow[]
   pr_e1rm: E1rmPR | null
-  last_progression: SessionRow | null
+  trend: E1rmTrend | null
+  /** "Alle" first, then one per pill; empty with fewer than two workouts to
+   *  draw. */
+  stairs: Stair[]
+  /** The slots an "Als N. Übung" pill offers. */
+  position_pills: number[]
+  /** The pill the page opens on; null is "Alle". */
+  selected_position: number | null
   /** 'neu' | 'rekord' | 'stagniert' | 'steigend', or null for stable -- null is
    *  a real answer here, not an absence. */
   state: string | null
   sessions_since_pr: number | null
-  chart: ChartGeometry | null
   chip_class: string | null
   chip_label: string | null
+  about: ExerciseAbout
   /** Unread since the settings sheet stopped repeating the list's facts
    *  (V3); kept so this stays a true mirror of the schema. */
   equipment_labels: Record<string, string>

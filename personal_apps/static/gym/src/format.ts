@@ -150,8 +150,8 @@ const WEEKDAY_DE = ['Mo', 'Di', 'Mi', 'Do', 'Fr', 'Sa', 'So']
 
 /** A past day as a lifter says it: "heute", "gestern", the weekday within the
  *  last week, the date before that -- a week ago was the same weekday as
- *  today. Calendar days in Berlin, like every other date here. `now` is for
- *  tests. */
+ *  today -- with its year when not this one (dayDate). Calendar days in
+ *  Berlin, like every other date here. `now` is for tests. */
 export function whenSaid(iso: string, now: Date = new Date()): string {
   const then = localParts(iso)
   const today = localParts(now.toISOString())
@@ -160,7 +160,29 @@ export function whenSaid(iso: string, now: Date = new Date()): string {
   if (days === 0) return 'heute'
   if (days === 1) return 'gestern'
   if (days > 1 && days < 7) return WEEKDAY_DE[then.weekday] ?? dayMonth(iso)
-  return dayMonth(iso)
+  return dayDate(iso, now)
+}
+
+/** A day in a sentence or a list: "25.08.", the year added when it is not
+ *  this one -- "25.08." alone names a day in every year. Berlin's calendar;
+ *  `now` is for tests. */
+export function dayDate(iso: string, now: Date = new Date()): string {
+  const then = localParts(iso)
+  return then.year === localParts(now.toISOString()).year
+    ? dayMonth(iso) : shortDate(iso)
+}
+
+/** "Mo 25.08.": a workout's day in the exercise page's log and readout. */
+export function weekdayDate(iso: string, now: Date = new Date()): string {
+  return `${WEEKDAY_DE[localParts(iso).weekday] ?? ''} ${dayDate(iso, now)}`.trim()
+}
+
+/** A kg rate with its sign, to the tenth: "+1,2", "−0,4" (a true minus), and
+ *  "±0" for what rounds to nothing. */
+export function signedKg1(value: number): string {
+  const text = kg1(Math.abs(value))
+  if (text === '0,0') return '±0'
+  return `${value > 0 ? '+' : '−'}${text}`
 }
 
 /** A workout's sets as one line, the weight said again only where it

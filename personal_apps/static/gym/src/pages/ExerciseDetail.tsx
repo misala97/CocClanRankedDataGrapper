@@ -1,62 +1,44 @@
-import { useEffect, useRef, useState } from 'react'
-import { flushSync } from 'react-dom'
-import type { ExerciseDetailPayload } from '../types'
+import { useEffect, useMemo, useState } from 'react'
+import type { ExerciseDetailPayload, SessionRow, StairCol } from '../types'
 import { getJson } from '../api'
-import { shortDate } from '../format'
 import { Icon } from '../components/Icon'
 import { ExerciseHeader } from '../components/ExerciseHeader'
-import { RecordsBand } from '../components/RecordsBand'
-import { ExerciseChart } from '../components/ExerciseChart'
+import { GoalPanel } from '../components/GoalPanel'
+import { WeightTable } from '../components/WeightTable'
+import { MaxSection } from '../components/MaxSection'
 import { SessionLog } from '../components/SessionLog'
+import { ExerciseAbout } from '../components/ExerciseAbout'
 import { EditSheet } from '../components/EditSheet'
 
 /** "Deine Pause" links an exception here: the page opens on the settings. */
 const SETTINGS_HASH = '#einstellungen'
-
-/** The URL's ?position=, '' when it has none. */
-const positionInUrl = () => new URLSearchParams(window.location.search).get('position') ?? ''
 
 interface Props {
   payload: ExerciseDetailPayload
 }
 
 /**
- * Exercise detail (Puls): the single-exercise instrument.
+ * Exercise detail (D9, M2 "A mit 1"): what to lift next and the workout it
+ * builds on, how far each weight went, the estimated max as the
+ * Rekordtreppe, every workout, the exercise itself, and last the lifter's
+ * own settings. Nothing here re-derives a number -- every value comes from
+ * routes._exercise_detail_payload. The exercise itself is the one list's:
+ * nobody renames or deletes it here.
  *
- * Order: what state it is in, the two records, the progression chart, every
- * session, and finally the lifter's own settings. Nothing here re-derives
- * anything -- every value comes from routes._exercise_detail_payload. The
- * exercise itself is the one list's: nobody renames or deletes it here.
- *
- * Position stays a SERIES, not just a filter: the same lift in slot 1 and slot
- * 3 is two different stories, and collapsing them would quietly drop that
- * dimension. The pills isolate one, and they are real links so deep links and
- * the back button keep working.
+ * Everything is the whole exercise. The "Als N. Übung" pills lens the stair
+ * alone, so a pill tap swaps it in place and only rewrites the address
+ * (replaceState: back leaves the page, it does not walk the pills).
  */
 export function ExerciseDetailPage({ payload }: Props) {
-  // State, not the prop: the position pills swap the whole payload in place
-  // (detail.json honours the filter exactly), so a pill tap is one fetch
-  // instead of a full navigation.
+  // State, not the prop: the settings sheet hands back the saved exercise.
   const [p, setP] = useState(payload)
-  // Each position's payload as it came, keyed like the URL's ?position=
-  // ('' for a bare URL, the server's pick): a pill tapped again, or the back
-  // button, swaps without asking (G-150). The page's own is known already.
-  const fetched = useRef(new Map<string, ExerciseDetailPayload>())
-  // A genuinely new server-rendered payload replaces any client-side swap.
+  const [selected, setSelected] = useState(payload.selected_position)
   useEffect(() => {
     setP(payload)
-    fetched.current = new Map([[positionInUrl(), payload]])
+    setSelected(payload.selected_position)
   }, [payload])
-  // The latest ask wins. Two quick taps applied their answers in whatever
-  // order they came, and could leave the page on the first pill under the
-  // second one's URL (G-150).
-  const latest = useRef(0)
-  const id = p.exercise.id
-  const count = p.table.length
-  // One row per slot: an exercise done at two positions in one workout is
-  // two rows here and still one workout (D16).
-  const workouts = new Set(p.table.map((row) => row.session_id)).size
   const [editing, setEditing] = useState(false)
+  const id = p.exercise.id
 
   // Arrived from an exception under "Deine Pause": open on the settings, and
   // drop the hash so a reload or the back button lands on the page itself.
@@ -66,162 +48,60 @@ export function ExerciseDetailPage({ payload }: Props) {
     history.replaceState(history.state, '', window.location.pathname + window.location.search)
   }, [])
 
-  /** The payload for `positionParam` -- asked once, then from `fetched` --
-   *  or null when a later ask has taken over by the time it is here. A
-   *  failure only counts for the latest ask as well. */
-  const load = async (positionParam: string): Promise<ExerciseDetailPayload | null> => {
-    const ask = ++latest.current
-    try {
-      let fresh = fetched.current.get(positionParam)
-      if (fresh === undefined) {
-        fresh = await getJson<ExerciseDetailPayload>(
-          `/gym/exercises/${id}/detail.json?position=${positionParam}`)
-        fetched.current.set(positionParam, fresh)
-      }
-      return ask === latest.current ? fresh : null
-    } catch (error) {
-      if (ask === latest.current) throw error
-      return null
-    }
+  const rows = useMemo(() => {
+    const byKey = new Map<string, SessionRow>()
+    for (const row of p.table) byKey.set(`${row.session_id}-${row.position}`, row)
+    return byKey
+  }, [p.table])
+  const rowOf = (col: StairCol) => rows.get(`${col.session_id}-${col.position}`)
+
+  const select = (position: number | null) => {
+    setSelected(position)
+    history.replaceState(history.state, '',
+      position === null ? `/gym/exercises/${id}` : `/gym/exercises/${id}?position=${position}`)
   }
 
-  // The swap is wrapped in a view transition where the platform has one --
-  // the chart crossfades between filters instead of cutting. flushSync so the
-  // new DOM exists inside the transition's capture window.
-  const applyPayload = (fresh: ExerciseDetailPayload) => {
-    if (document.startViewTransition !== undefined
-      && !window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
-      document.startViewTransition(() => { flushSync(() => setP(fresh)) })
-    } else {
-      setP(fresh)
-    }
-  }
-
-  const switchPosition = (positionParam: string) => {
-    load(positionParam)
-      .then((fresh) => {
-        if (fresh === null) return
-        applyPayload(fresh)
-        // pushState, so every pill stays a back-button step, the way the
-        // full navigations were.
-        history.pushState(null, '', `/gym/exercises/${id}?position=${positionParam}`)
-      })
-      // The pills are real links underneath; a failed fetch falls back to
-      // exactly the navigation the link always meant.
-      .catch(() => {
-        window.location.href = `/gym/exercises/${id}?position=${positionParam}`
-      })
-  }
-
-  // Back and forward through the pills. `load` and `applyPayload` read only
-  // refs, `id` and the state setter, so the listener of the first render
-  // stays right. A bare URL is the page as it was served -- the server's
-  // pick, which "all" was not.
-  useEffect(() => {
-    const onPop = () => {
-      load(positionInUrl())
-        .then((fresh) => { if (fresh !== null) applyPayload(fresh) })
-        .catch(() => { window.location.reload() })
-    }
-    window.addEventListener('popstate', onPop)
-    return () => window.removeEventListener('popstate', onPop)
-  }, [id])
-
-  const oldest = p.table[count - 1]
-  const newest = p.table[0]
+  const about = <ExerciseAbout exercise={p.exercise} about={p.about} />
 
   return (
     <>
       <div className="exdetail">
-        <ExerciseHeader exercise={p.exercise} lastOverall={p.last_overall}
-          chipClass={p.chip_class} chipLabel={p.chip_label} />
+        <ExerciseHeader exercise={p.exercise} chipClass={p.chip_class} chipLabel={p.chip_label} />
 
-        {count > 0 ? (
+        {p.table.length > 0 ? (
           <>
             {/* Two wrappers, so the desktop grid has two stable children to
                 place. They are inert on phones -- plain blocks whose children
                 still carry their own gutters -- and become the analysis column
                 and the log column at 900px. */}
             <div className="exdetail__main">
-              <RecordsBand prWeight={p.pr_weight} prE1rm={p.pr_e1rm} state={p.state}
-                sessionsSincePr={p.sessions_since_pr}
-                lastProgression={p.last_progression} />
-
-              <section className="sec sec--chart" aria-labelledby="sec-chart">
-                <div className="sec__head">
-                  {/* The band's tile names the 1RM in full first (D16); with no
-                      set of 1 to 12 reps there is no tile, and the chart below
-                      still plots an estimate, so the heading names it. */}
-                  <h2 className="label" id="sec-chart">
-                    {p.pr_e1rm !== null ? 'Verlauf 1RM' : 'Verlauf des geschätzten Maximums (1RM)'}
-                  </h2>
-                  <span className="sec__sp" />
-                  {/* The count is scoped, so it says what it is counting. It
-                      read "10 Workouts" under a chart already filtered to one
-                      slot. */}
-                  <span className="label">
-                    {(p.selected_position !== null ? `Pos. ${p.selected_position} · ` : '')
-                      + `${workouts} ${workouts === 1 ? 'Workout' : 'Workouts'}`}
-                  </span>
-                </div>
-
-                {p.available_positions.length > 1 && (
-                  <>
-                    <div className="pills">
-                      {/* ?position=all, not a bare URL: a bare URL means
-                          "decide for me" and lands on the default slot, so the
-                          comparison view needs to say so. Still real links --
-                          deep links, middle-click and no-JS keep working; a
-                          plain click swaps in place. */}
-                      <a className={`pill${p.selected_position === null ? ' is-on' : ''}`}
-                        href={`/gym/exercises/${id}?position=all`}
-                        onClick={(e) => { e.preventDefault(); switchPosition('all') }}>Alle</a>
-                      {p.available_positions.map((pos) => (
-                        <a key={pos}
-                          className={`pill${p.selected_position === pos ? ' is-on' : ''}`}
-                          href={`/gym/exercises/${id}?position=${pos}`}
-                          onClick={(e) => { e.preventDefault(); switchPosition(String(pos)) }}>
-                          Position {pos}</a>
-                      ))}
-                    </div>
-                    {/* Arriving on a filtered page with a pill already lit
-                        reads as a choice the reader made and forgot. It is the
-                        page's choice, so the page says so and says on what
-                        grounds -- otherwise the only way to learn the chart is
-                        not the whole exercise is to notice the count disagree
-                        with the record band. */}
-                    {p.selected_position_is_default && (
-                      <p className="exdetail__scope">
-                        {`Zeigt Position ${p.selected_position} — ` +
-                          (p.selected_position_reason === 'strongest'
-                            ? 'die stärkste mit mindestens zwei Workouts'
-                            : 'die einzige mit nennenswerter Historie') + '.'}
-                      </p>
-                    )}
-                  </>
-                )}
-
-                {p.chart !== null && oldest !== undefined && newest !== undefined && (
-                  <ExerciseChart chart={p.chart} sessionCount={workouts}
-                    firstDate={shortDate(oldest.started_at)}
-                    lastDate={shortDate(newest.started_at)} />
-                )}
-              </section>
+              {p.goal !== null && <GoalPanel goal={p.goal} />}
+              {p.weights.length > 0 && <WeightTable weights={p.weights} />}
+              {/* No judged set, or only 0 kg ones: no estimate to speak of
+                  (G-038) and no stair -- the section says so instead. */}
+              <MaxSection exerciseId={id} record={p.pr_e1rm}
+                weighted={p.table.some((row) => row.sets.some((set) => set.weight > 0))}
+                sinceRecord={p.sessions_since_pr} stalled={p.state === 'stagniert'} trend={p.trend}
+                stairs={p.stairs} pills={p.position_pills} selected={selected} onSelect={select}
+                rowOf={rowOf} />
             </div>
 
             <div className="exdetail__log">
-              <SessionLog table={p.table} selectedPosition={p.selected_position}
-                isUnilateral={p.exercise.is_unilateral} />
+              <SessionLog table={p.table} isUnilateral={p.exercise.is_unilateral} />
+              {about}
             </div>
           </>
         ) : (
-          /* Says what fills the page, not just that it is empty. The old line
-             was a dead end on a screen that has nothing else on it. */
-          <p className="empty">
-            Noch keine Sätze protokolliert. Sobald du diese Übung in einem
-            Workout loggst, stehen hier Rekorde, der Verlauf deines geschätzten
-            Maximums (1RM) und jedes einzelne Workout.
-          </p>
+          <>
+            {/* Says what fills the page, not just that it is empty. The page
+                of an exercise never done is I6's (M6 screen 2). */}
+            <p className="empty">
+              Noch keine Sätze protokolliert. Sobald du diese Übung in einem
+              Workout loggst, stehen hier dein nächstes Ziel, deine Rekorde
+              und jedes einzelne Workout.
+            </p>
+            {about}
+          </>
         )}
 
         <section className="sec sec--maint" aria-label="Deine Einstellungen">
@@ -236,9 +116,11 @@ export function ExerciseDetailPage({ payload }: Props) {
       <EditSheet exercise={p.exercise} open={editing} onClose={() => setEditing(false)}
         onSaved={(exercise) => {
           setP((current) => ({ ...current, exercise }))
-          // Every position's payload carries the exercise: none may bring
-          // the old settings back.
-          for (const [key, kept] of fetched.current) fetched.current.set(key, { ...kept, exercise })
+          // A new step moves the target's next weight: the rule sentence
+          // must not say the old one. The rest of the page is unchanged.
+          getJson<ExerciseDetailPayload>(`/gym/exercises/${id}/detail.json`)
+            .then((fresh) => setP((current) => ({ ...current, goal: fresh.goal, exercise: fresh.exercise })))
+            .catch(() => {})
         }} />
     </>
   )

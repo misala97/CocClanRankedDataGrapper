@@ -159,6 +159,11 @@ class PerformedExercise:
     # Carried per row for the same reason started_at is: this module never
     # touches the ORM, and every row of one session repeats the session's value.
     finished_at: Optional[dt.datetime] = None
+    # The SessionExercise id: of a lift twice in one workout, the row logged
+    # later has the higher one, whatever slot a reorder left it in -- the
+    # live card's base (seeding's pool order), which the exercise page's
+    # "Nächstes Ziel" must pick too. None on rows built without the ORM.
+    row_id: Optional[int] = None
 
 
 def set_counts(completed, reps):
@@ -195,12 +200,15 @@ RECORD_MAX_REPS = 12
 
 def judged_e1rm(weight, reps):
     """The e1RM a judgement may use, to the 0,1 kg it is shown at -- or None
-    for a set nothing is judged by: no reps, or more than RECORD_MAX_REPS.
+    for a set nothing is judged by: no reps, more than RECORD_MAX_REPS, or no
+    weight. A bodyweight set estimates 0 kg, which is no estimate (G-038): it
+    sets no record and fails none, so reps climbing at 0 kg never read as a
+    drought or "Stagniert".
 
     Rounded before any comparison, so a tie on screen is a tie in the rule:
     90 × 10 and 100 × 6 both read 120,0, and one of them "beating" the other
     by a float's last digit was a record nobody could see."""
-    if reps is None or reps < 1 or reps > RECORD_MAX_REPS:
+    if reps is None or reps < 1 or reps > RECORD_MAX_REPS or weight is None or weight <= 0:
         return None
     return round(epley_1rm(weight, reps), 1)
 
@@ -223,7 +231,8 @@ def best_weight(row):
 
 def best_e1rm(row):
     """A row's e1RM as shown: its best judged set -- or, for a row with none
-    (only sets above RECORD_MAX_REPS), the plain estimate of its best set.
+    (only sets above RECORD_MAX_REPS, or at 0 kg: 0), the plain estimate of
+    its best set.
     Shown, never judged: every judgement reads judged_best()."""
     judged = judged_best(row)
     if judged is not None:
@@ -524,24 +533,11 @@ def kg_text(weight):
     return (text[:-1] if text.endswith('0') else text).replace('.', ',')
 
 
-def _pr_weight(rows):
-    """The heaviest single set ever logged: a fact, not a kind of record (D3)
-    -- deloads included, the first to reach it kept. None when nothing was
-    loaded at all: "0,0 kg" is no heaviest set (G-038)."""
-    best = None
-    for row in _chronological(rows):
-        for weight, reps in row.sets:
-            if best is None or weight > best['weight']:
-                best = {'weight': weight, 'reps': reps, 'session_id': row.session_id,
-                        'started_at': row.started_at, 'position': row.position}
-    return best if best is not None and best['weight'] > 0 else None
-
-
 def _pr_e1rm(rows):
     """The set with the best judged e1RM -- not always the heaviest one,
     since more reps at less weight can estimate higher. The first set to
-    reach it, deloads included (D3); None when no set is judged or the best
-    is 0 kg (bodyweight: no estimate to speak of, G-038)."""
+    reach it, deloads included (D3); None when no set is judged -- a
+    bodyweight set never is (G-038)."""
     best = None
     for row in _chronological(rows):
         for weight, reps in row.sets:
@@ -550,32 +546,34 @@ def _pr_e1rm(rows):
                 best = {'e1rm': value, 'weight': weight, 'reps': reps,
                         'session_id': row.session_id,
                         'started_at': row.started_at, 'position': row.position}
-    return best if best is not None and best['e1rm'] > 0 else None
+    return best
 
 
-def exercise_progress(rows, position=None):
-    """History table and chart series for one exercise.
+def exercise_progress(rows):
+    """The exercise page's history (D9): every row, newest first, and what
+    is said about the whole exercise -- its best judged set, its state and
+    its drought. No slot lenses any of it; the Rekordtreppe (record_stair)
+    is the one part a slot can.
 
-    Position is a *series*, not a filter: every session is plotted, grouped by
-    the slot it was performed in, so a slot sitting consistently higher than
-    another is visible instead of having to be hunted for by hiding data.
-    `position` still isolates one slot when the user explicitly asks.
+    `table` keeps deload rows and marks them `is_deload`: it is the record
+    of what was performed. It marks `is_record` on every row that set one --
+    history, so a later best does not take the tag back (D3). `sets` are the
+    counted sets as logged, for the page to say ("85,0 × 11 · 10 · 10").
 
-    `available_positions` always describes the unfiltered data, so the page can
-    keep offering the other slots even while one is isolated.
-
-    `table` and `series` keep deload rows and mark them `is_deload`: they are
-    the record of what was performed, and dropping them would leave holes in
-    the chart. Both mark `is_record` on every row that set one -- history, so
-    a later best does not take the tag back (D3) -- judged over the WHOLE
-    exercise, whatever slot is shown.
-    """
+    `pr_e1rm` says `is_record`: the best set is a record unless the debut
+    set it and nothing has reached it since -- a first workout beats
+    nothing (D3), so the page says "Bestwert" then, not "Rekord". The chip
+    (`state`) is the Übungen list's: "Steigend" within the slot the lift is
+    mostly done in (routes.catalogue), or the list and the page disagree
+    about one lift -- and two slots of one workout compared each other."""
     chronological = _chronological(rows)
-    available_positions = sorted({row.position for row in chronological})
-    shown = ([row for row in chronological if row.position == position]
-             if position is not None else chronological)
     marks = record_marks(chronological)
-
+    pr = _pr_e1rm(chronological)
+    if pr is not None:
+        pr['is_record'] = any(row.session_id == pr['session_id'] and row.position == pr['position']
+                              for row in marks)
+    progression = progression_rows(rows)
+    position = dominant_position(progression) if progression else None
     table = [
         {
             'session_id': row.session_id,
@@ -583,58 +581,17 @@ def exercise_progress(rows, position=None):
             'position': row.position,
             'is_deload': row.is_deload,
             'is_record': row in marks,
-            'sets_display': _sets_display(row),
-            'best_weight': best_weight(row),
+            'sets': [{'weight': weight, 'reps': reps} for weight, reps in row.sets],
             'volume': round(row_volume(row), 1),
             'e1rm': round(best_e1rm(row), 1),
         }
-        for row in reversed(shown)
+        for row in reversed(chronological)
     ]
-
-    series = []
-    for slot in (available_positions if position is None else [position]):
-        points = [row for row in shown if row.position == slot]
-        if not points:
-            continue
-        series.append({
-            'position': slot,
-            'points': [
-                {
-                    'started_at': row.started_at,
-                    'is_deload': row.is_deload,
-                    'is_record': row in marks,
-                    'e1rm': round(best_e1rm(row), 1),
-                    'best_weight': best_weight(row),
-                    'volume': round(row_volume(row), 1),
-                }
-                for row in points
-            ],
-        })
-
     return {
         'table': table,
-        # The newest row of the WHOLE exercise, regardless of the position
-        # filter. `table` is the filtered view, so a page reading table[0] for
-        # "Zuletzt" reported the last session *in that slot* as the last time
-        # the lift was done at all.
-        'last_overall': ({
-            'started_at': chronological[-1].started_at,
-            'position': chronological[-1].position,
-        } if chronological else None),
-        'series': series,
-        'available_positions': available_positions,
-        'selected_position': position,
-        'pr_weight': _pr_weight(chronological),
-        'pr_e1rm': _pr_e1rm(chronological),
+        'pr_e1rm': pr,
         'state': exercise_state(rows, position=position),
         'sessions_since_pr': sessions_since_pr(rows),
-        # The newest row that counts as an attempt at progress. `table[0]` is
-        # the newest row of ANY kind and can be a deload, so anything quoting
-        # "the weight you are stuck at" must read this instead -- otherwise
-        # the stagnation advice tells you to add 2.5 kg to a weight you went
-        # deliberately light on. None when there is no non-deload history.
-        'last_progression': next(
-            (row for row in table if not row['is_deload']), None),
     }
 
 
@@ -830,13 +787,19 @@ def next_target(sets, rep_min, rep_max, target_sets, increment, stack_kg=None):
     """
     if not sets:
         return None
-    count = max(1, target_sets)
-    base = (list(sets) + [sets[-1]] * count)[:count]
-    if len(sets) >= count and all(reps >= rep_max for _weight, reps in base):
+    base = planned_sets(sets, target_sets)
+    if len(sets) >= len(base) and all(reps >= rep_max for _weight, reps in base):
         return [_stepped_up(weight, reps, rep_min, increment, stack_kg) for weight, reps in base]
     # A set already past the top waits there for the others: not one rep less.
     return [{'weight': weight, 'reps': reps if reps >= rep_max else reps + 1}
             for weight, reps in base]
+
+
+def planned_sets(sets, target_sets):
+    """The sets next_target aims from: `sets` cut to `target_sets`, or the
+    last one repeated up to it. Set i of a target builds on set i of these."""
+    count = max(1, target_sets)
+    return (list(sets) + [sets[-1]] * count)[:count]
 
 
 def _stepped_up(weight, reps, rep_min, increment, stack_kg):
@@ -977,8 +940,8 @@ def session_report(current, history, comparable_session_volumes=()):
                         'previous': mark['previous'], 'previous_at': mark['previous_at']})
 
     # By how much each beat the old one -- relative, so a heavy lift's +2 kg
-    # does not automatically outrank a light lift's +5 kg. A first load on a
-    # bodyweight lift (from 0) is the biggest step there is.
+    # does not automatically outrank a light lift's +5 kg. `previous` is a
+    # judged e1RM, so above 0 kg (G-038); the guard is only a guard.
     def _gain(record):
         previous = record['previous']
         return (record['value'] - previous) / previous if previous > 0 else math.inf
@@ -1224,72 +1187,158 @@ def _median(values):
 
 
 # --------------------------------------------------------------------------
-# e1RM projection: "bei diesem Tempo".
+# The exercise page (D9, M2): the trend, the reps per weight, the Rekordtreppe.
 # --------------------------------------------------------------------------
 
-#: How far ahead a projection may claim. Past this the extrapolation is
-#: fiction wearing a date, so the chart stays silent instead.
-PROJECTION_HORIZON_DAYS = 112
-#: Fit over at most this many of the newest points -- a year-old ramp says
-#: nothing about the current one.
-PROJECTION_FIT_POINTS = 8
-#: Milestones are the next multiple of this above the fitted value.
-PROJECTION_MILESTONE_KG = 5.0
+def _workout_bests(rows):
+    """[(session_order key, best judged e1RM, the row that holds it)] for
+    every workout with a judged set, oldest first -- a bodyweight set is
+    none, so it is neither drawn nor taken a pace from (G-038). A lift twice
+    in one workout is one workout: its better row, the earlier slot on a
+    tie."""
+    best = {}
+    for row in rows:
+        value = judged_best(row)
+        if value is None:
+            continue
+        key = session_order(row)
+        held = best.get(key)
+        if held is None or (value, -row.position) > (held[0], -held[1].position):
+            best[key] = (value, row)
+    return [(key, value, row) for key, (value, row) in sorted(best.items())]
 
 
-def e1rm_projection(points, now):
-    """Where the current trend puts the next round-number e1RM, or None.
+#: The trend reads this many of the newest workouts (D9 A)...
+TREND_WORKOUTS = 6
+#: ...more, up to this many, while they span less than TREND_MIN_DAYS...
+TREND_MAX_WORKOUTS = 12
+#: ...and says nothing on fewer than TREND_MIN_WORKOUTS, or over less than
+#: TREND_MIN_DAYS: four good workouts in one week read "+37,4 kg im Monat".
+TREND_MIN_WORKOUTS = 4
+TREND_MIN_DAYS = 14
 
-    `points` is [(started_at, e1rm), ...] for ONE series, deloads already
-    excluded. Least-squares over the newest PROJECTION_FIT_POINTS, and every
-    gate errs toward silence -- a wrong date on a chart outlives any caveat:
 
-    - fewer than 4 points: no trend to speak of;
-    - newest point older than ROLLING_WINDOW_DAYS: the trend describes a
-      lifter who stopped; projecting it forward is fiction;
-    - slope <= 0: stagnation already has its own vocabulary (cold cyan and
-      the word), a projected decline would just be a taunt;
-    - milestone further than PROJECTION_HORIZON_DAYS away: too slow to
-      promise a date on.
+def e1rm_trend(rows, now):
+    """How fast the e1RM moves, in kg per 30 days -- {'per_month',
+    'workouts'} -- or None. D9 A: it replaced the chart's date promise ("125 kg
+    am 28.09."), which read +8,8 kg in 6 days off four good sessions.
 
-    Returns {'milestone', 'date', 'per_week'} -- per_week is the fitted slope
-    in kg/week, carried for the copy.
-    """
-    if len(points) < 4:
+    The least-squares slope of the best judged e1RM over the newest
+    TREND_WORKOUTS attempts -- further back, up to TREND_MAX_WORKOUTS, while
+    they span less than TREND_MIN_DAYS, so a lift done three times a week has
+    a pace too: deloads out (a light week is no attempt), workouts without a
+    judged set out. Silent below TREND_MIN_WORKOUTS or TREND_MIN_DAYS -- a
+    month's pace out of one week is the same guess the date promise was --
+    and when the newest is older than ROLLING_WINDOW_DAYS: the pace of a
+    lifter who stopped is history, not a pace. A falling trend is said too:
+    the page hides the trend while the lift is stalled, and says the count
+    instead."""
+    bests = _workout_bests(progression_rows(rows))
+    count = min(TREND_WORKOUTS, len(bests))
+    while count < min(TREND_MAX_WORKOUTS, len(bests)) \
+            and (bests[-1][0][0] - bests[-count][0][0]).days < TREND_MIN_DAYS:
+        count += 1
+    points = bests[len(bests) - count:]
+    if len(points) < TREND_MIN_WORKOUTS:
         return None
-    ordered = sorted(points, key=lambda p: p[0])[-PROJECTION_FIT_POINTS:]
-    newest = ordered[-1][0]
-    if (now - newest).days > ROLLING_WINDOW_DAYS:
+    first, newest = points[0][0][0], points[-1][0][0]
+    if (newest - first).days < TREND_MIN_DAYS or (now - newest).days > ROLLING_WINDOW_DAYS:
         return None
+    days = [(key[0] - first).total_seconds() / 86400.0 for key, _, _ in points]
+    values = [value for _, value, _ in points]
+    mean_x, mean_y = sum(days) / len(days), sum(values) / len(values)
+    spread = sum((x - mean_x) ** 2 for x in days)
+    if spread == 0:
+        return None
+    slope = sum((x - mean_x) * (y - mean_y) for x, y in zip(days, values)) / spread
+    return {'per_month': round(slope * 30.0, 1), 'workouts': len(points)}
 
-    days = [(stamp - newest).total_seconds() / 86400.0 for stamp, _ in ordered]
-    values = [value for _, value in ordered]
-    n = float(len(ordered))
-    mean_x = sum(days) / n
-    mean_y = sum(values) / n
-    denominator = sum((x - mean_x) ** 2 for x in days)
-    if denominator == 0:
-        return None
-    slope = sum((x - mean_x) * (y - mean_y) for x, y in zip(days, values)) / denominator
-    if slope <= 0:
-        return None
 
-    # The fitted value NOW, not the last raw point: one hot day must not
-    # anchor the whole line.
-    at_newest = mean_y + slope * (0 - mean_x)
-    milestone = math.floor(at_newest / PROJECTION_MILESTONE_KG) * PROJECTION_MILESTONE_KG + PROJECTION_MILESTONE_KG
-    days_to = (milestone - at_newest) / slope
-    lead_days = (now - newest).total_seconds() / 86400.0
-    remaining = days_to - lead_days
-    if remaining <= 0 or days_to > PROJECTION_HORIZON_DAYS:
+#: "Wiederholungen je Gewicht" shows the heaviest this many weights.
+WEIGHT_LADDER_ROWS = 4
+
+
+def weight_ladder(rows, limit=WEIGHT_LADDER_ROWS):
+    """"Wiederholungen je Gewicht" (D9 A): per weight lifted, the most reps
+    done with it, in how many workouts, and the first start with it --
+    heaviest first, at most `limit`. Deloads are left out: their weights were
+    lightened on purpose, and their reps say nothing about how far a weight
+    goes. Every counted set is read, high reps too: this is what was done,
+    not a record."""
+    ladder = {}
+    for row in _chronological(progression_rows(rows)):
+        for weight, reps in row.sets:
+            entry = ladder.setdefault(round(weight, 2), {
+                'weight': round(weight, 2), 'reps': reps, 'workouts': set(),
+                'first_at': row.started_at})
+            entry['reps'] = max(entry['reps'], reps)
+            entry['workouts'].add(row.session_id)
+    heaviest = sorted(ladder.values(), key=lambda entry: -entry['weight'])[:limit]
+    return [dict(entry, workouts=len(entry['workouts'])) for entry in heaviest]
+
+
+#: The Rekordtreppe's smallest kg range: widened around its middle below
+#: this, so 0,7 kg of drift over a year draws flat instead of as a cliff.
+STAIR_MIN_SPAN = 5.0
+
+
+def _stair_ticks(lo, hi):
+    """Round kg gridlines inside [lo, hi]: the widest step that still puts
+    three there."""
+    for step in (50, 25, 20, 10, 5, 2, 1):
+        first = math.ceil(lo / step) * step
+        ticks = [value for value in range(int(first), int(math.floor(hi)) + 1, step)]
+        if len(ticks) >= 3:
+            return ticks
+    return [round(lo), round(hi)]
+
+
+def record_stair(rows, position=None):
+    """The Rekordtreppe (D9, M2 chart 1): {'cols', 'lo', 'hi', 'ticks'}, or
+    None with fewer than two workouts to draw.
+
+    One col per workout, oldest first -- of one slot when `position` is
+    given -- and only workouts with a judged set: a set of 13 reps has no
+    estimate worth drawing (RECORD_MAX_REPS). Each col:
+    - `e1rm`: the workout's best judged e1RM; `session_id`/`position` name the
+      row that holds it, whose sets the tap readout says.
+    - `best`: the best so far, this workout included -- the tread the dot sits
+      on or under. Over every workout drawn, deloads included, which is the
+      record rule's own bar: in "Alle" the stair climbs exactly at a record.
+      Under a slot it is that slot's best, so a step there need not be gold.
+    - `kind`: 'record' when a row of it set one (record_marks over the WHOLE
+      exercise: a record is the lift's, whatever slot is shown); 'deload' for
+      a deload that set none and that the stair does not climb at -- drawn in
+      a lane under the plot, it is no attempt; else 'workout'. A deload the
+      tread rises at (the first workout drawn, or a slot's best under a pill)
+      is drawn on the plot: a step with its dot down in the lane was a step
+      nothing stood on.
+    `lo`/`hi` span the dots on the plot and the treads, at least
+    STAIR_MIN_SPAN and never below 0 kg; `ticks` are the kg gridlines inside
+    them."""
+    marks = record_marks(rows)
+    shown = [row for row in rows if position is None or row.position == position]
+    workouts = _workout_bests(shown)
+    if len(workouts) < 2:
         return None
-    return {
-        'milestone': milestone,
-        'date': now + dt.timedelta(days=remaining),
-        'per_week': round(slope * 7.0, 2),
-        # For the drawing: the fitted anchor at the newest point, and the
-        # slope in kg/day, so the route can turn the trend into coordinates
-        # without re-fitting.
-        'at_newest': at_newest,
-        'slope_per_day': slope,
-    }
+    # The workouts one of the SHOWN rows set a record in: the lift done twice
+    # in one workout, as slot 1 and slot 3, set it in one slot only.
+    records = {session_order(row) for row in marks if position is None or row.position == position}
+    cols, best = [], None
+    for key, value, row in workouts:
+        climbs = best is None or value > best
+        best = value if best is None else max(best, value)
+        if key in records:
+            kind = 'record'
+        else:
+            kind = 'deload' if row.is_deload and not climbs else 'workout'
+        cols.append({'session_id': row.session_id, 'position': row.position,
+                     'started_at': row.started_at, 'e1rm': value, 'best': best, 'kind': kind})
+    drawn = [col['e1rm'] for col in cols if col['kind'] != 'deload'] + [col['best'] for col in cols]
+    lo, hi = min(drawn), max(drawn)
+    if hi - lo < STAIR_MIN_SPAN:
+        middle = (hi + lo) / 2.0
+        # A light lift (a 2 kg raise) widens up from 0 kg, never below it.
+        lo = max(0.0, middle - STAIR_MIN_SPAN / 2.0)
+        hi = lo + STAIR_MIN_SPAN
+    return {'cols': cols, 'lo': lo, 'hi': hi, 'ticks': _stair_ticks(lo, hi)}

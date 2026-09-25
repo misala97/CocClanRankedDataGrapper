@@ -79,8 +79,15 @@ class RestOverview(_Model):
     max_seconds: int
 
 
+class WeightReps(_Model):
+    """One set as done or aimed at: a weight and its reps."""
+    weight: float
+    reps: int
+
+
 class SessionRow(_Model):
-    """One performed session, as rendered in the Workouts log."""
+    """One performed row of the exercise, as the Workouts log lists it and
+    the Rekordtreppe's readout names it."""
     session_id: int
     started_at: datetime
     position: int
@@ -88,28 +95,81 @@ class SessionRow(_Model):
     #: This workout's best e1RM beat every workout before it (D3). History:
     #: a record later overtaken keeps the tag.
     is_record: bool
-    sets_display: str
-    best_weight: float
+    #: The counted sets, as logged.
+    sets: list[WeightReps]
     volume: float
     e1rm: float
 
 
-class LastOverall(_Model):
-    """Newest session of the WHOLE exercise, never scoped to the position
-    filter -- identity metadata is not filtered."""
-    started_at: datetime
-    position: int
+class ExerciseGoal(_Model):
+    """"Nächstes Ziel" (D9 A; plan.exercise_target): the target set by set,
+    what it builds on, and how it moves on."""
+    sets: list[WeightReps]
+    #: "Letztes Mal": the counted sets of the newest non-deload workout.
+    last_sets: list[WeightReps]
+    last_at: datetime
+    rep_min: int
+    rep_max: int
+    #: This target already put a set's weight up (a set with no step goes on
+    #: by a rep instead, and is no step).
+    stepped: bool
+    #: Not stepped: where each set goes once the range's top is reached in
+    #: all -- None for a set with no step. None when stepped.
+    step_ups: list[float | None] | None
 
 
-class WeightPR(_Model):
-    """The heaviest single set ever logged. session_id is required:
-    exercise_detail matches the record row on it, never on the date -- two
-    sessions on one day both matched a date test and both went gold."""
+class WeightRow(_Model):
+    """A line of "Wiederholungen je Gewicht" (stats.weight_ladder)."""
     weight: float
     reps: int
+    workouts: int
+    first_at: datetime
+
+
+class E1rmTrend(_Model):
+    """stats.e1rm_trend: kg per 30 days over the newest `workouts`."""
+    per_month: float
+    workouts: int
+
+
+class StairCol(_Model):
+    """One workout on the Rekordtreppe (stats.record_stair)."""
     session_id: int
-    started_at: datetime
     position: int
+    started_at: datetime
+    e1rm: float
+    #: The best so far, this workout included: its tread.
+    best: float
+    kind: Literal['workout', 'record', 'deload']
+
+
+class Stair(_Model):
+    """The Rekordtreppe for "Alle" (`position` None) or one slot."""
+    position: int | None
+    cols: list[StairCol]
+    lo: float
+    hi: float
+    ticks: list[int]
+    #: "N ohne Rekord" at the last tread: the lift's drought, so "Alle" only.
+    since: int | None
+    #: The drought is a stall (exercise_state 'stagniert'): drawn in the
+    #: stall hue. "Alle" only.
+    stalled: bool
+
+
+class Variant(_Model):
+    """Another list entry of the same movement."""
+    id: int
+    #: What sets it apart: the inside of its brackets (library.Entry.label).
+    label: str
+
+
+class ExerciseAbout(_Model):
+    """The exercise itself: its drawing and the other variants of its
+    movement. All empty for an exercise off the list."""
+    picture: str | None
+    movement: str | None
+    variants: list[Variant]
 
 
 class E1rmPR(_Model):
@@ -121,102 +181,40 @@ class E1rmPR(_Model):
     session_id: int
     started_at: datetime
     position: int
-
-
-class ChartPoint(_Model):
-    """One plotted session. x/y are SVG coordinates; e1rm and started_at are
-    carried alongside for the readout. is_record as on SessionRow."""
-    x: float
-    y: float
-    e1rm: float
-    started_at: datetime
+    # False while the debut holds the best: a first workout beats nothing
+    # (D3), so the page says "Bestwert" and draws no gold.
     is_record: bool
-    is_deload: bool
-
-
-class ChartTick(_Model):
-    y_pct: float
-    text: str
-
-
-class ChartSeries(_Model):
-    """One position slot. Series separate by weight rather than hue: the
-    palette is fixed at three semantic hues and a slot number is not a state,
-    so the slot with the most sessions draws solid and occasional ones
-    recede."""
-    position: int
-    points: list[ChartPoint]
-    opacity: float
-    width: float
-    is_main: bool
-    label_x: float
-    label_y: float
-    # Only ever 'end' (label flipped left of a point near the right edge) or
-    # 'start'. Narrowed so a third value added to _chart_geometry fails here
-    # rather than reaching an SVG attribute that will not accept it.
-    label_anchor: Literal['start', 'end']
-
-
-class ChartProjection(_Model):
-    """The "bei diesem Tempo" overlay: the fitted trend of the main series,
-    extended to the next round e1RM. None whenever any of the silence gates in
-    stats.e1rm_projection holds -- a wrong date on a chart outlives any
-    caveat, so absence is the default."""
-    x1: float
-    y1: float
-    x2: float
-    y2: float
-    milestone: float
-    date: datetime
-    per_week: float
-
-
-class ChartGeometry(_Model):
-    """SVG coordinates from routes._chart_geometry(). None when there is
-    nothing to draw.
-
-    lo/hi are the DATA range, which is what the accessible description quotes.
-    axis_lo/axis_hi are the padded drawing range -- widened to a floor so a
-    lift that drifted 0,7 kg over a year does not render as a cliff.
-    """
-    series: list[ChartSeries]
-    lo: float
-    hi: float
-    axis_lo: float
-    axis_hi: float
-    ticks: list[ChartTick]
-    # One or three entries: deduped, so an exercise whose whole history is one
-    # day renders a single mark instead of the same date three times.
-    dates: list[str]
-    width: float
-    height: float
-    has_deload: bool
-    has_record: bool
-    projection: ChartProjection | None
 
 
 class ExerciseDetailPayload(_Model):
+    """The exercise page (D9, M2): what to lift next, how far each weight
+    went, the estimated max as the Rekordtreppe, every workout, the exercise
+    itself. Everything is the WHOLE exercise except the stair a pill picks."""
     exercise: ExerciseMeta
+    #: Every row, newest first.
     table: list[SessionRow]
-    # The pre-geometry series. Unread by the page, which draws from `chart`,
-    # but carried so the payload stays a faithful dump of exercise_progress().
-    series: list[dict]
-    available_positions: list[int]
-    selected_position: int | None
-    selected_position_is_default: bool
-    selected_position_reason: str | None
-    last_overall: LastOverall | None
-    pr_weight: WeightPR | None
+    goal: ExerciseGoal | None
+    weights: list[WeightRow]
     pr_e1rm: E1rmPR | None
-    last_progression: SessionRow | None
+    trend: E1rmTrend | None
+    #: "Alle" first, then one per pill; empty with fewer than two workouts to
+    #: draw.
+    stairs: list[Stair]
+    #: The slots a pill offers ("Als N. Übung"): at least
+    #: MIN_WORKOUTS_FOR_PILL workouts there, and only when the lift has more
+    #: than one slot.
+    position_pills: list[int]
+    #: The pill the page opens on: ?position=N when N is one, else None
+    #: ("Alle", D9).
+    selected_position: int | None
     # 'neu' | 'rekord' | 'stagniert' | 'steigend', or None for stable --
     # exercise_state() documents None as a real answer, not an absence.
     state: str | None
     # None when there is too little history to say anything.
     sessions_since_pr: int | None
-    chart: ChartGeometry | None
     chip_class: str | None
     chip_label: str | None
+    about: ExerciseAbout
     equipment_labels: dict[str, str]
 
 

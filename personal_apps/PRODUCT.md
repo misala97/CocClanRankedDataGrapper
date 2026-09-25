@@ -327,9 +327,9 @@ them.
   `Stepper`, the `.sheet-row` menu rows, `.sset` set-editor grid, the
   `.field` form vocabulary, `UndoToast`.
 - **Guard rails a design pass must keep green:** vitest asserts on rendered
-  markup (`*.test.tsx` beside each page); the chart has a golden-master
-  against the captured original drawing (`ExerciseChart.golden.test.tsx` —
-  overlays go outside `.chart__ink`); the pairing test in
+  markup (`*.test.tsx` beside each page); the exercise page's Rekordtreppe
+  is asserted as drawn — its tread from the dots, the deload lane, the
+  month labels (`pages/ExerciseDetail.test.tsx`); the pairing test in
   `tests/test_gym_routes_smoke.py` checks every form's action and fields
   against the real routes.
 - **Process:** real HTML mockups against live `gym.css` before component

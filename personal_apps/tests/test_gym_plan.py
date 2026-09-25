@@ -780,3 +780,153 @@ def test_a_followers_copy_of_a_substitute_plans_their_slots_count(lifter):
                          data={'exercise_id': dips_id})
 
     assert _plan(_running(partner_id)) == [(dips_id, [(50, 8)] * 4)]
+
+
+# -- the exercise page's "Nächstes Ziel" (D9 A) --------------------------------
+
+def _goal(lifter, exercise_id):
+    return lifter.client().get(f'/gym/exercises/{exercise_id}/detail.json').get_json()['goal']
+
+
+def test_the_exercise_page_aims_where_the_live_card_will(lifter):
+    """One answer to "what do I lift next" (D9): the page says, before the
+    workout exists, what the card says once it does."""
+    with flask_app.app_context():
+        press = lifter.exercise('press')
+        routine = lifter.routine('push', [press], plan={press.id: (3, 6, 10)})
+        done = _history(lifter, press, 3, [(40, 8), (35, 9), (35, 8)], template=routine)
+        db.session.commit()
+        routine_id, press_id, done_at = routine.id, press.id, done.started_at
+
+    goal = _goal(lifter, press_id)
+    assert goal == {
+        'sets': [{'weight': 40.0, 'reps': 9}, {'weight': 35.0, 'reps': 10},
+                 {'weight': 35.0, 'reps': 9}],
+        'last_sets': [{'weight': 40.0, 'reps': 8}, {'weight': 35.0, 'reps': 9},
+                      {'weight': 35.0, 'reps': 8}],
+        'last_at': done_at.isoformat(), 'rep_min': 6, 'rep_max': 10,
+        'stepped': False, 'step_ups': [42.5, 37.5, 37.5],
+    }
+    workout_id = _start(lifter, routine_id)
+    assert _payload(lifter, workout_id)['next_targets'][str(_row_id(workout_id, press_id))] \
+        == goal['sets']
+
+
+def test_the_page_plans_the_routines_count_not_last_times(lifter):
+    with flask_app.app_context():
+        press = lifter.exercise('press')
+        routine = lifter.routine('push', [press], plan={press.id: (2, 6, 10)})
+        _history(lifter, press, 3, [(40, 8)] * 3, template=routine)
+        db.session.commit()
+        press_id = press.id
+
+    assert _goal(lifter, press_id)['sets'] == [{'weight': 40.0, 'reps': 9}] * 2
+
+
+def test_the_page_says_a_target_that_already_stepped_up(lifter):
+    with flask_app.app_context():
+        press = lifter.exercise('press')
+        routine = lifter.routine('push', [press], plan={press.id: (2, 7, 11)})
+        _history(lifter, press, 3, [(85, 11), (80, 12)], template=routine)
+        db.session.commit()
+        press_id = press.id
+
+    goal = _goal(lifter, press_id)
+    assert goal['sets'] == [{'weight': 87.5, 'reps': 7}, {'weight': 82.5, 'reps': 7}]
+    assert (goal['stepped'], goal['step_ups']) == (True, None)
+
+
+def test_a_bodyweight_set_at_the_top_goes_on_by_a_rep_and_is_no_step(lifter):
+    """0 kg at the top of the range: one rep more, past it -- and the page
+    must not say "eine Stufe höher" of a weight that did not move."""
+    with flask_app.app_context():
+        dips = lifter.exercise('dips')
+        routine = lifter.routine('push', [dips], plan={dips.id: (3, 6, 10)})
+        _history(lifter, dips, 3, [(0, 10)] * 3, template=routine)
+        db.session.commit()
+        dips_id = dips.id
+
+    goal = _goal(lifter, dips_id)
+    assert goal['sets'] == [{'weight': 0.0, 'reps': 11}] * 3
+    assert (goal['stepped'], goal['step_ups']) == (False, [None, None, None])
+
+
+def test_the_page_plans_an_exercise_outside_any_routine_freeform(lifter):
+    # As many sets as last time, in the range its history gives: 10-14 round 12.
+    with flask_app.app_context():
+        curl = lifter.exercise('curl')
+        _history(lifter, curl, 3, [(20, 12)] * 3)
+        db.session.commit()
+        curl_id = curl.id
+
+    goal = _goal(lifter, curl_id)
+    assert goal['sets'] == [{'weight': 20.0, 'reps': 13}] * 3
+    assert (goal['rep_min'], goal['rep_max'], goal['step_ups']) == (10, 14, [22.5] * 3)
+
+
+def test_a_routine_that_dropped_the_exercise_plans_it_freeform(lifter):
+    with flask_app.app_context():
+        press, fly = lifter.exercise('press'), lifter.exercise('fly')
+        routine = lifter.routine('push', [press, fly], plan={press.id: (2, 6, 10)})
+        _history(lifter, press, 3, [(40, 8)] * 3, template=routine)
+        TemplateExercise.query.filter_by(template_id=routine.id, exercise_id=press.id).delete()
+        db.session.commit()
+        press_id = press.id
+
+    assert len(_goal(lifter, press_id)['sets']) == 3
+
+
+def test_the_page_builds_on_the_newest_workout_that_was_no_deload(lifter):
+    with flask_app.app_context():
+        curl = lifter.exercise('curl')
+        real = _history(lifter, curl, 5, [(20, 10)] * 3)
+        _history(lifter, curl, 2, [(15, 4)] * 3, is_deload=True)
+        db.session.commit()
+        curl_id, real_at = curl.id, real.started_at
+
+    goal = _goal(lifter, curl_id)
+    assert goal['last_sets'] == [{'weight': 20.0, 'reps': 10}] * 3
+    assert goal['last_at'] == real_at.isoformat()
+
+
+def test_the_page_has_no_goal_with_only_deloads_to_build_on(lifter):
+    with flask_app.app_context():
+        curl = lifter.exercise('curl')
+        _history(lifter, curl, 2, [(15, 4)] * 3, is_deload=True)
+        db.session.commit()
+        curl_id = curl.id
+
+    assert _goal(lifter, curl_id) is None
+
+
+def test_a_lift_twice_in_its_newest_workout_builds_on_the_later_slot(lifter):
+    # As the live card's base: the later slot of that workout.
+    with flask_app.app_context():
+        curl = lifter.exercise('curl')
+        workout = lifter.workout(3 * DAY, finished=True)
+        lifter.row(workout, curl, 1, done=[(20, 10)] * 3)
+        lifter.row(workout, curl, 3, done=[(12, 12)] * 2)
+        db.session.commit()
+        curl_id = curl.id
+
+    assert _goal(lifter, curl_id)['last_sets'] == [{'weight': 12.0, 'reps': 12}] * 2
+
+
+def test_a_lift_twice_in_its_newest_workout_builds_on_the_row_logged_last(lifter):
+    # The live card builds on seeding's newest row -- by start, then by row
+    # id -- whatever slot it sat in; the page sorted by slot and built on
+    # the other one (I2 review). Here the third slot was logged first.
+    with flask_app.app_context():
+        curl = lifter.exercise('curl')
+        routine = lifter.routine('arms', [curl], plan={curl.id: (3, 8, 12)})
+        workout = lifter.workout(3 * DAY, template=routine, finished=True)
+        lifter.row(workout, curl, 3, done=[(12, 12)] * 2)
+        lifter.row(workout, curl, 1, done=[(20, 10)] * 3)
+        db.session.commit()
+        routine_id, curl_id = routine.id, curl.id
+
+    goal = _goal(lifter, curl_id)
+    assert goal['last_sets'] == [{'weight': 20.0, 'reps': 10}] * 3
+    workout_id = _start(lifter, routine_id)
+    assert _payload(lifter, workout_id)['next_targets'][str(_row_id(workout_id, curl_id))] \
+        == goal['sets']

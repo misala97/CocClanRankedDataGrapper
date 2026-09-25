@@ -1,15 +1,13 @@
 import type { ExerciseMeta } from '../types'
-import { shortDate } from '../format'
 import { Icon } from './Icon'
 
 interface Props {
   exercise: ExerciseMeta
-  lastOverall: { started_at: string; position: number } | null
   chipClass: string | null
   chipLabel: string | null
 }
 
-export function ExerciseHeader({ exercise, lastOverall, chipClass, chipLabel }: Props) {
+export function ExerciseHeader({ exercise, chipClass, chipLabel }: Props) {
   return (
     <header className="session-top">
       <a href="/gym/uebungen" className="session-top__back"
@@ -21,10 +19,8 @@ export function ExerciseHeader({ exercise, lastOverall, chipClass, chipLabel }: 
             was a span, so the document outline was empty and heading
             navigation had nothing to land on. */}
         <h1 className="exdetail__name" style={{ viewTransitionName: 'ex' }}>{exercise.name}</h1>
-        {/* lastOverall, not table[0]: `table` is the FILTERED view, so under
-            ?position=5 this announced "Zuletzt ... Pos. 5" as though that were
-            the last time you did the lift at all. Identity metadata is never
-            scoped to a filter.
+        {/* When it was last done is the lead's "Letztes Mal" now, and the
+            slot it ran in is no longer a word on screen (D9, D16).
 
             Assembled into one string rather than interpolated as JSX children:
             React emits a text node per expression and the browser rounds glyph
@@ -34,9 +30,6 @@ export function ExerciseHeader({ exercise, lastOverall, chipClass, chipLabel }: 
         <span className="exdetail__sub">
           {[
             exercise.muscle_group || 'Ohne Muskelgruppe',
-            lastOverall !== null
-              ? `Zuletzt ${shortDate(lastOverall.started_at)} · Pos. ${lastOverall.position}`
-              : null,
             exercise.is_unilateral ? 'Gewicht je Seite' : null,
           ].filter(Boolean).join(' · ')}
         </span>

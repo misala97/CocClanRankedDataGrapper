@@ -181,8 +181,9 @@ def test_the_exercise_page_tags_every_workout_that_set_a_record():
     progress = stats.exercise_progress(rows)
     assert {r['session_id']: r['is_record'] for r in progress['table']} == {
         1: False, 2: True, 3: False, 4: False}
-    points = progress['series'][0]['points']
-    assert [p['is_record'] for p in points] == [False, True, False, False]
+    # The Rekordtreppe goes gold where the log says "Rekord", and nowhere else.
+    assert [col['kind'] for col in stats.record_stair(rows)['cols']] == [
+        'workout', 'record', 'workout', 'workout']
 
 
 def test_rekord_on_the_exercise_means_its_newest_workout_set_one():
@@ -197,16 +198,27 @@ def test_the_best_e1rm_is_the_earliest_set_that_reached_it_deloads_included():
     rows = [row([(50.0, 10)], 1, 0), row([(55.0, 10)], 2, 7, is_deload=True),
             row([(55.0, 10)], 3, 14), row([(40.0, 25)], 4, 21)]
     best = stats.exercise_progress(rows)['pr_e1rm']
-    assert (best['session_id'], best['e1rm'], best['weight'], best['reps']) == (2, 73.3, 55.0, 10)
+    assert (best['session_id'], best['e1rm'], best['weight'], best['reps'], best['is_record']) \
+        == (2, 73.3, 55.0, 10, True)
 
 
-def test_a_bodyweight_exercise_has_no_best_e1rm_or_heaviest_set():
+def test_the_best_set_is_a_record_only_once_it_beat_an_earlier_workout():
+    # D3: the debut beats nothing. Its best, still standing, is the lift's
+    # Bestwert -- the page said "Rekord" beside no gold anywhere (I2 review).
+    rows = [row([(90.0, 1)], 1, 0), row([(85.0, 1)], 2, 7)]
+    assert stats.exercise_progress(rows)['pr_e1rm']['is_record'] is False
+    rows.append(row([(95.0, 1)], 3, 14))
+    best = stats.exercise_progress(rows)['pr_e1rm']
+    assert (best['session_id'], best['is_record']) == (3, True)
+
+
+def test_a_bodyweight_exercise_has_no_best_e1rm_and_no_stair():
     """G-038: "Bestes e1RM 0,0 kg" and a 0-kg "Rekord"."""
     rows = [row([(0.0, 8)], 1, 0), row([(0.0, 10)], 2, 7)]
     progress = stats.exercise_progress(rows)
     assert progress['pr_e1rm'] is None
-    assert progress['pr_weight'] is None
     assert not any(r['is_record'] for r in progress['table'])
+    assert stats.record_stair(rows) is None
 
 
 # -- stalls judge by the same number ------------------------------------------

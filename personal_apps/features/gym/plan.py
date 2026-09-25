@@ -200,3 +200,60 @@ def target_for(session_exercise, rows, base_sets, history, increment, stack_kg):
     slot = rows.get(slot_exercise_id(session_exercise))
     count = slot.target_sets if slot is not None and slot.target_sets else len(base_sets)
     return stats.next_target(base_sets, rep_min, rep_max, count, increment, stack_kg)
+
+
+def exercise_target(rows, user_id, increment, stack_kg=None):
+    """"Nächstes Ziel" on the exercise page (D9 A): what the live card will
+    aim at the next time the exercise comes up in the routine it was last
+    done in -- target_for's answer before that workout exists. None with no
+    non-deload row to build on.
+
+    `rows` are the exercise's finished rows (history.load_performed). The
+    base is the newest non-deload one, as the live card's -- seeding's pool
+    order: by start, then the row logged later (a lift twice in one workout:
+    the higher row id, whatever slot a reorder left it in). The count and
+    the range are that
+    workout's routine row's as the next start fills it (row_plans: its own
+    plan, else history); a workout without one, or a routine that no longer
+    holds the exercise, plans freeform -- as many sets as the base, the range
+    history gives. `increment` is resolved (stats.resolve_increment).
+
+    Returns {'sets', 'last_sets', 'last_at', 'rep_min', 'rep_max',
+    'stepped', 'step_ups'}: `stepped` when this target already put a set's
+    weight up; else `step_ups`, where each set goes once the range's top is
+    reached in all -- None for a set with no step (bodyweight, the top stop
+    of a known stack)."""
+    attempts = sorted(stats.progression_rows(rows),
+                      key=lambda row: (row.started_at, row.row_id or 0, row.position), reverse=True)
+    if not attempts:
+        return None
+    base = attempts[0]
+    workout = db.session.get(WorkoutSession, base.session_id)
+    own = None
+    if workout is not None and workout.template_id is not None:
+        own = (TemplateExercise.query
+               .filter_by(template_id=workout.template_id, exercise_id=base.exercise_id)
+               .order_by(TemplateExercise.position)
+               .first())
+    if own is not None:
+        count, rep_min, rep_max = row_plans([own], user_id, own.template_id)[0]
+    else:
+        count = len(base.sets)
+        rep_min, rep_max = stats.rep_range_from([row.sets for row in attempts])
+    sets = stats.next_target(base.sets, rep_min, rep_max, count, increment, stack_kg)
+    # A step is a weight that went up: at the top of the range a bodyweight
+    # set or a stack's top stop goes on by one rep, and "eine Stufe höher"
+    # would say a step that is not there.
+    stepped = any(target['weight'] > weight for target, (weight, _reps)
+                  in zip(sets, stats.planned_sets(base.sets, count)))
+    return {
+        'sets': sets,
+        'last_sets': [{'weight': weight, 'reps': reps} for weight, reps in base.sets],
+        'last_at': base.started_at,
+        'rep_min': rep_min,
+        'rep_max': rep_max,
+        'stepped': stepped,
+        'step_ups': None if stepped else [
+            stats.step_up(target['weight'], increment, stack_kg) if target['weight'] > 0 else None
+            for target in sets],
+    }

@@ -5,10 +5,10 @@ module must be imported below even though the names look unused -- hence the
 noqa markers. gym_bp itself lives in _blueprint.py so no domain module has to
 import a sibling to reach it, which is what keeps these imports acyclic.
 
-The re-exports at the bottom are not decoration. Eleven test call sites and
-scripts/make_chart_fixture.py import these private helpers from
-`features.gym.routes`, and keeping that path working is what let the 2912-line
-routes.py split into this package without touching a single caller.
+The re-exports at the bottom are not decoration. Test call sites import these
+private helpers from `features.gym.routes`, and keeping that path working is
+what let the 2912-line routes.py split into this package without touching a
+single caller.
 """
 from urllib.parse import urlsplit, urlunsplit
 
@@ -40,7 +40,7 @@ from .workout import (                                                 # noqa: F
     _live_context, _live_data, _session_payload, _template_exercises_from_session,
 )
 from .exercise_detail import (                                         # noqa: F401
-    _exercise_detail_payload, _chart_geometry, _default_position,
+    _exercise_detail_payload,
 )
 # Re-exported, not defined in this package: seeding.py owns it because
 # sharing.py needs it too and cannot import a module that registers routes.

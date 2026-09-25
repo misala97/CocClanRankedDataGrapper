@@ -3728,11 +3728,6 @@ summary.sheet-row::-webkit-details-marker { display: none; }
 }
 .exdetail__sub { font-size: var(--t-meta); font-weight: var(--w-med); color: var(--unlit); letter-spacing: 0; }
 .exdetail .session-top__name { white-space: normal; overflow: visible; }
-.exdetail__since { margin: var(--sp-4) var(--sp-4) 0; font-size: var(--t-meta); color: var(--unlit); }
-.exdetail__note { margin-top: var(--sp-3); font-size: var(--t-meta); color: var(--unlit); line-height: 1.5; }
-/* Sits under the position pills and says which slot the page picked for you.
-   Reads as a caption, not as a warning -- nothing has gone wrong. */
-.exdetail__scope { margin-top: var(--sp-3); font-size: var(--t-meta); color: var(--unlit); line-height: 1.5; }
 
 /* Desktop: analysis left, log right.
    -----------------------------------
@@ -3741,10 +3736,7 @@ summary.sheet-row::-webkit-details-marker { display: none; }
    with a metre of nothing between them, and the chart -- 320x128 stretched to
    the full column -- was scaled 3.7x, so its dots and slot labels rendered at
    40px while the surrounding text stayed at 13. Two columns fix both: the rows
-   get a readable measure, and the chart draws at roughly half the scale.
-
-   The records band stays two-up because it is a comparison; nothing else here
-   splits. */
+   get a readable measure, and the chart draws at roughly half the scale. */
 @media (min-width: 900px) {
   .exdetail { max-inline-size: 1080px; margin-inline: auto; }
   /* The GRID is gated on the log existing. An exercise with no history has no
@@ -3758,7 +3750,6 @@ summary.sheet-row::-webkit-details-marker { display: none; }
   }
   .exdetail:has(.exdetail__log) > .session-top,
   .exdetail:has(.exdetail__log) > .empty { grid-column: 1 / -1; }
-  .exdetail:has(.exdetail__log) > .next-time { grid-column: 1 / -1; }
   .exdetail__main { grid-column: 1; }
   .exdetail__log  { grid-column: 2; }
   /* Maintenance follows the log rather than the chart. Under the chart it left
@@ -3769,24 +3760,188 @@ summary.sheet-row::-webkit-details-marker { display: none; }
   .exdetail:has(.exdetail__log) > .sec--maint { grid-column: 2; }
 }
 
-/* the two records, one divided band -- not two cards */
-.prs {
-  margin: var(--sp-5) var(--sp-4) 0;
-  display: grid; grid-template-columns: 1fr 1fr;
-  background: var(--chassis); border-radius: var(--r-panel); padding: var(--sp-4) 0;
+/* D9 (M2 "A mit 1"): the lead says what to lift next and what it builds on;
+   the sections under it are named in sentence case -- no eyebrows. */
+.exgoal {
+  margin: var(--sp-4) var(--sp-4) 0;
+  padding: var(--sp-4) var(--sp-5) var(--sp-5);
+  background: var(--chassis); border-radius: var(--r-panel);
 }
-.pr { display: flex; flex-direction: column; align-items: center; gap: 2px; padding-inline: var(--sp-3); }
-.pr + .pr { border-inline-start: 1px solid var(--edge); }
-.pr__val {
+/* A name for the panel, not an eyebrow: sentence case, the body face. */
+.exgoal__h {
+  margin: 0; font-family: var(--font-body); font-size: var(--t-sm);
+  font-weight: var(--w-semi); letter-spacing: 0; line-height: 1.3; color: var(--dim);
+}
+/* The answer to "what do I lift": the largest numerals on the page, ink,
+   not the NOW hue -- nothing is happening yet. One line per weight, the reps
+   in set order. */
+.exgoal__goal { margin: var(--sp-1) 0 0; }
+.exgoal__grid {
+  display: grid; grid-template-columns: auto auto 1fr; align-items: baseline;
+  column-gap: var(--sp-2); row-gap: 2px;
+}
+.exgoal__w, .exgoal__r {
   font-family: var(--font-display); font-size: var(--num-md); font-weight: var(--w-max);
-  letter-spacing: var(--track-num); line-height: 1; color: var(--record-ink);
+  letter-spacing: var(--track-num); line-height: 1.12; color: var(--ink);
+  font-variant-numeric: tabular-nums; white-space: nowrap;
+}
+.exgoal__w { justify-self: end; }
+.exgoal__w small {
+  font-family: var(--font-body); font-size: var(--t-body); font-weight: var(--w-semi);
+  letter-spacing: 0; color: var(--dim); margin-inline-start: 3px;
+}
+.exgoal__x { font-size: 1.375rem; font-weight: var(--w-semi); color: var(--unlit); }
+.exgoal__r i {
+  font-style: normal; font-weight: var(--w-semi); letter-spacing: 0;
+  color: var(--unlit); margin-inline: 0.2em;
+}
+/* Last time is one line under the answer: the evidence for it. */
+.exgoal__last {
+  display: flex; align-items: baseline; flex-wrap: wrap; gap: 2px var(--sp-3);
+  margin: var(--sp-4) 0 0; padding-top: var(--sp-3); border-top: 1px solid var(--edge);
+}
+.exgoal__last-k { font-size: var(--t-meta); color: var(--dim); }
+.exgoal__last-v {
+  margin-inline-start: auto; font-size: var(--t-body); font-weight: var(--w-semi);
+  color: var(--ink); font-variant-numeric: tabular-nums;
+}
+/* How the target moves on. A load is one figure, so it never breaks between
+   its weight and its unit. */
+.exgoal__rule { margin: var(--sp-3) 0 0; font-size: var(--t-meta); line-height: 1.45; color: var(--dim); text-wrap: pretty; }
+.exgoal__rule b { color: var(--ink); font-weight: var(--w-semi); font-variant-numeric: tabular-nums; white-space: nowrap; }
+
+/* A step under the page's own name (22px). */
+.exsec { margin: var(--sp-8) var(--sp-4) 0; }
+.exsec__h {
+  display: flex; align-items: baseline; flex-wrap: wrap; gap: 0 var(--sp-2); margin: 0;
+  font-family: var(--font-display); font-size: 1.125rem; font-weight: var(--w-max);
+  letter-spacing: -0.02em; line-height: 1.2; color: var(--ink); text-wrap: balance;
+}
+.exsec__n {
+  font-size: var(--t-sm); font-weight: var(--w-semi); letter-spacing: 0;
+  color: var(--unlit); font-variant-numeric: tabular-nums;
+}
+.exsec__in { margin: var(--sp-1) 0 0; max-inline-size: 60ch; font-size: var(--t-meta); line-height: 1.45; color: var(--dim); }
+
+/* Reps per weight: a real table, read down its columns -- the ladder of
+   weights and how far each one went. */
+.exweights { inline-size: 100%; margin-top: var(--sp-3); border-collapse: collapse; font-variant-numeric: tabular-nums; }
+.exweights thead th {
+  padding: 0 0 var(--sp-2); text-align: end;
+  font-size: var(--t-meta); font-weight: var(--w-semi); color: var(--dim);
+}
+.exweights thead th:first-child { text-align: start; }
+.exweights tbody th, .exweights td {
+  padding-block: 10px; border-top: 1px solid var(--edge); text-align: end;
+  font-size: var(--t-sm); font-weight: var(--w-body); color: var(--dim);
+}
+.exweights tbody th { text-align: start; font-size: var(--t-body); font-weight: var(--w-semi); color: var(--ink); }
+.exweights td.exweights__best {
+  font-family: var(--font-display); font-size: var(--t-body); font-weight: var(--w-max); color: var(--ink);
+}
+
+/* The estimated max: the facts in words, then the drawing. */
+.exrec {
+  display: flex; align-items: center; gap: var(--sp-2); margin: var(--sp-3) 0 0;
+  font-size: var(--t-sm); color: var(--dim); font-variant-numeric: tabular-nums;
+}
+.exrec b { color: var(--record-ink); font-weight: var(--w-bold); }
+/* The legend's record dot, so the sentence and the gold marks are one thing. */
+.exrec__dot {
+  flex: none; inline-size: 10px; block-size: 10px; border-radius: 50%;
+  background: var(--record); box-shadow: 0 0 0 1.5px var(--done);
+}
+.exdrift { margin: var(--sp-1) 0 0; font-size: var(--t-sm); line-height: 1.45; color: var(--dim); text-wrap: pretty; }
+.exdrift b { color: var(--ink); font-weight: var(--w-semi); font-variant-numeric: tabular-nums; }
+.exdrift .is-stall { color: var(--stall-ink); font-weight: var(--w-semi); }
+.expills { margin-top: var(--sp-4); }
+
+/* The Rekordtreppe: the best so far as a staircase, every workout a dot on
+   or under its tread, on the field at the section's full width. */
+.stair { margin: var(--sp-4) 0 0; outline-offset: 4px; border-radius: var(--r-field); }
+.stair__plot { display: block; overflow: visible; inline-size: 100%; block-size: auto; }
+.stair__plot text {
+  fill: currentColor; font-family: var(--font-body); font-size: var(--t-meta);
   font-variant-numeric: tabular-nums;
 }
-.pr__val small {
-  font-family: var(--font-body); font-size: var(--t-sm); font-weight: var(--w-semi);
-  color: var(--dim); margin-inline-start: 2px; letter-spacing: 0;
+.stair__axis { color: var(--dim); }
+.stair__now { color: var(--dim); font-weight: var(--w-semi); }
+.stair__now.is-stall { color: var(--stall-ink); }
+.stair__grid { stroke: var(--edge); stroke-width: 1; }
+.stair__tick { stroke: var(--edge-hi); stroke-width: 1; }
+.stair__hit { fill: transparent; cursor: pointer; }
+.stair__sel line { stroke: var(--ink); stroke-width: 1; }
+.stair__area { fill: color-mix(in oklab, var(--done) 9%, transparent); }
+.stair__tread {
+  fill: none; stroke: var(--done); stroke-width: 2; stroke-linejoin: round; stroke-linecap: round;
 }
-.pr__sub { font-size: var(--t-micro); color: var(--unlit); text-align: center; margin-top: 3px; }
+.stair__tread--now.is-stall { stroke: var(--stall); stroke-width: 2.5; }
+/* A workout that tied the best sits ON the tread: a bead on the line, no
+   ring cutting it -- a ring there broke the tread into dashes, which read as
+   a projection. */
+.stair__dot { fill: var(--done); }
+.stair__dot--rec { fill: var(--record); stroke: var(--done); stroke-width: 1.5; }
+.stair__dot--deload { fill: var(--ground); stroke: var(--unlit); stroke-width: 1.5; }
+.exlegend { display: flex; flex-wrap: wrap; gap: var(--sp-2) var(--sp-4); margin-bottom: var(--sp-3); }
+.exlegend .key { font-size: var(--t-meta); color: var(--dim); }
+.key__stair { inline-size: 18px; block-size: 10px; fill: none; stroke: var(--done); stroke-width: 2; }
+.key__dot--done { background: var(--done); }
+.key__dot--rec { background: var(--record); box-shadow: 0 0 0 1.5px var(--done); }
+/* The readout under the drawing: two lines reserved, so a tap never moves
+   the page under the finger. */
+.exread {
+  display: grid; align-content: start; row-gap: 2px;
+  min-block-size: calc(2 * 1.45em + 2px); margin: var(--sp-2) 0 0;
+  font-size: var(--t-sm); line-height: 1.45; color: var(--ink); font-variant-numeric: tabular-nums;
+}
+.exread b { font-weight: var(--w-semi); }
+.exread__l1 .vtag { margin-inline-start: var(--sp-2); vertical-align: 1px; }
+.exread__l2 { color: var(--dim); }
+.exread__hint { font-size: var(--t-meta); color: var(--dim); }
+
+/* Every workout. The rows are links, and a link row is rounded for its tap
+   wash -- which bent the shared border-top into a curve at both ends. The
+   divider is a straight hairline of its own instead. */
+.exlog { margin-top: var(--sp-3); }
+.exlog .row__meta { font-variant-numeric: tabular-nums; }
+.exlog .e1rm { font-size: var(--t-meta); }
+.exlog > .row + .row { position: relative; border-top: 0; padding-top: calc(var(--sp-3) + 1px); }
+.exlog > .row + .row::before {
+  content: ""; position: absolute; inset-inline: 0; inset-block-start: 0;
+  block-size: 1px; background: var(--edge);
+}
+.exlog__more { gap: var(--sp-1); margin-top: var(--sp-1); }
+.exlog__more .icon { inline-size: 14px; block-size: 14px; }
+.exnote { margin: var(--sp-2) 0 0; max-inline-size: 60ch; font-size: var(--t-meta); line-height: 1.5; color: var(--unlit); text-wrap: pretty; }
+
+/* The exercise itself: its drawing, what it trains, its variants -- folded,
+   because on a page with history they are a way out, not the point. */
+.exabout { margin-top: var(--sp-8); }
+.exabout__art { margin: 0 var(--sp-4); aspect-ratio: 4 / 3; }
+.exabout__facts {
+  margin: var(--sp-3) var(--sp-4) 0;
+  font-size: var(--t-sm); line-height: 1.5; color: var(--dim);
+}
+.exabout__facts b { color: var(--ink); font-weight: var(--w-semi); }
+.exalt { margin: var(--sp-4) var(--sp-4) 0; border-block: 1px solid var(--edge); }
+.exalt__sum {
+  display: flex; align-items: center; gap: var(--sp-2); min-block-size: var(--tap);
+  list-style: none; cursor: pointer;
+  font-size: var(--t-sm); font-weight: var(--w-semi); color: var(--ink);
+}
+.exalt__sum::-webkit-details-marker { display: none; }
+.exalt__n { font-size: var(--t-meta); font-weight: var(--w-body); color: var(--unlit); font-variant-numeric: tabular-nums; }
+.exalt__sum .icon { margin-inline-start: auto; color: var(--unlit); transition: transform var(--dur-2) var(--ease); }
+.exalt[open] .exalt__sum .icon { transform: rotate(180deg); }
+.exvar {
+  display: flex; align-items: center; gap: var(--sp-2); min-block-size: var(--tap);
+  border-top: 1px solid var(--edge);
+  font-size: var(--t-sm); font-weight: var(--w-med); color: var(--ink); text-decoration: none;
+}
+.exvar .icon { margin-inline-start: auto; flex: none; color: var(--unlit); }
+@media (prefers-reduced-motion: reduce) {
+  .exalt__sum .icon { transition: none; }
+}
 
 /* position filter: real links, one scrollable row -- a lift can have run in
    more slots than fit across a phone */
@@ -3803,43 +3958,6 @@ summary.sheet-row::-webkit-details-marker { display: none; }
 /* Selection is ink, not orange: a chosen filter is not the thing happening
    right now. Inverse ink is unmistakable without spending the NOW hue. */
 .pill.is-on { background: var(--ink); color: var(--chassis); box-shadow: none; }
-
-/* Two columns: a kg gutter and the drawing. The x axis and the legend sit
-   under the drawing only, so the gutter's width never shifts them. */
-.chart {
-  margin-top: var(--sp-4); background: var(--chassis);
-  border-radius: var(--r-panel); padding: var(--sp-5) var(--sp-4) var(--sp-4);
-  display: grid; grid-template-columns: auto minmax(0, 1fr);
-  column-gap: var(--sp-3);
-  /* The position pills swap the payload in place inside a view transition;
-     naming the panel crossfades the drawing between filters instead of
-     cutting. One chart per page, so the name cannot collide. */
-  view-transition-name: exercise-chart;
-}
-/* Horizontal drags scrub the readout along the line; vertical stays the
-   page's scroll. */
-.chart svg { touch-action: pan-y; }
-.chart svg { display: block; inline-size: 100%; block-size: auto; }
-/* All three labels share one grid cell, so the gutter is as wide as the widest
-   of them and no wider -- absolute positioning collapsed it to zero and dropped
-   the numbers on top of the drawing. They stay IN FLOW and are nudged with
-   relative `top`, which resolves against the grid area: the area stretches to
-   the SVG's height, so the same viewBox fractions the gridlines use put each
-   label on its line at any width. */
-.chart__y { display: grid; }
-.chart__y .label {
-  grid-area: 1 / 1; align-self: start; justify-self: end;
-  position: relative; transform: translateY(-50%);
-  white-space: nowrap; line-height: 1;
-}
-/* three marks: first, middle, last -- the middle one is what makes the shape
-   of the line readable rather than just its endpoints */
-.chart__axis { grid-column: 2; display: flex; justify-content: space-between; margin-top: var(--sp-3); }
-.chart__axis .label:nth-child(2) { text-align: center; }
-.chart__axis .label:last-child { text-align: end; }
-/* A history that spans one day has one date, and space-between would park it
-   at the left edge under the middle of the plot. */
-.chart__axis:has(.label:only-child) { justify-content: center; }
 
 .chart__legend { grid-column: 2; display: flex; gap: var(--sp-4); margin-top: var(--sp-3); align-items: center; flex-wrap: wrap; }
 
@@ -4243,7 +4361,6 @@ summary.sheet-row::-webkit-details-marker { display: none; }
 }
 .chart__hint { color: var(--dim); font-size: 0.8rem; }
 .chart__read-tag { margin-inline-start: var(--sp-2); }
-.chart__hits circle { cursor: pointer; }
 .months .mo { cursor: pointer; }
 .months .mo.is-picked { outline: 2px solid var(--ink); outline-offset: 1px; }
 /* A record row inside the brushed range: a wash, not a stripe. */
@@ -4288,6 +4405,3 @@ body.is-focus .undo-toast { bottom: calc(env(safe-area-inset-bottom, 0px) + var(
 @keyframes undo-in { from { opacity: 0; transform: translateY(8px); } }
 @media (prefers-reduced-motion: reduce) { .undo-toast { animation: none; } }
 
-/* The projection's sentence: quiet, under the legend, reads as a finding. */
-.chart__proj-note { grid-column: 2; margin-block-start: var(--sp-2); font-size: 0.8rem; color: var(--dim); }
-.chart__proj-note b { color: var(--ink); }
