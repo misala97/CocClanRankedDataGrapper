@@ -41,7 +41,7 @@ from ..seeding import (
 )
 from ._blueprint import gym_bp
 from .helpers import (
-    NON_MUSCLE_GROUPS, ONBOARDING_WORKOUTS, RECENT_SESSIONS, WEEKDAY_SHORT, InvalidInput,
+    NON_MUSCLE_GROUPS, ONBOARDING_WORKOUTS, WEEKDAY_SHORT, InvalidInput,
     _cancel_pending_push, _debrief_args, _discard_session, _finish_session,
     _get_active_session, _page_active_session, _refuse_live_write_if_finished,
     _refuse_structure_edit_if_finished, _settle_if_abandoned, _to_bodyweight, _to_client_key, _to_int, _to_name, _to_note,
@@ -225,15 +225,6 @@ def _heute_payload():
         .filter(WorkoutSession.finished_at.isnot(None), WorkoutSession.template_id.isnot(None))
         .all()
     )
-    recent = (
-        my_sessions()
-        .filter(WorkoutSession.finished_at.isnot(None))
-        .order_by(WorkoutSession.started_at.desc())
-        # Over-fetched, because the zero-set filter below runs after this and
-        # would otherwise hand back fewer than RECENT_SESSIONS rows.
-        .limit(RECENT_SESSIONS * 4)
-        .all()
-    )
     # The vocabulary is the app's own list, not "whichever groups happen to
     # own an exercise". Seeded from the catalogue, a group you have never built
     # an exercise for simply could not appear -- so the section that exists to
@@ -273,35 +264,27 @@ def _heute_payload():
         last_deload_at=last_deload.started_at if last_deload else None,
     )
 
-    # Volume and record count per recent session, both folded out of `performed`
-    # -- the bulk load this page already ran. Verlauf shows these and Start did
-    # not, which made the landing page the poorer of the two lists.
-    volume_by_session = {}
-    for row in performed:
-        volume_by_session[row.session_id] = volume_by_session.get(row.session_id, 0.0) + stats.row_volume(row)
-    records_by_session = stats.session_record_counts(performed)
-    # Only sessions that actually logged something. `consistency` above is fed
-    # from `performed`, which requires at least one COMPLETED set, while this
-    # list filtered on finished_at alone -- so a session where nothing was
-    # ticked off appeared under "Letzte Workouts" while "Zuletzt vor N Tagen"
-    # ignored it, and the two could disagree by days.
-    recent_sessions = [
-        {'session': session_,
-         'volume': volume_by_session[session_.id],
-         'records': records_by_session.get(session_.id, 0)}
-        for session_ in recent if session_.id in volume_by_session
-    ][:RECENT_SESSIONS]
+    # "Fortschritt" (M3): the lifts going up beside the ones standing still.
+    # "Letzte Workouts" left this page for Verlauf, whose top rows they were.
+    progress = stats.progress_report(
+        rows_by_exercise, {stall['exercise_id'] for stall in stalls}, now)
 
     tonnage = stats.weekly_tonnage(performed, now)
 
     # First run: the steps from an empty account to a routine on this page.
-    # Counted off `performed` like everything above, so "1 Workout" here and
-    # "Zuletzt heute" in the header are the same fact.
+    # Counted off `performed` like everything above -- workouts that logged
+    # something -- so "1 Workout" here and "Zuletzt heute" in the header are
+    # the same fact.
     onboarding = None
-    if not templates and len(volume_by_session) < ONBOARDING_WORKOUTS:
-        last = recent_sessions[0]['session'] if recent_sessions else None
+    if not templates and len(session_started_at) < ONBOARDING_WORKOUTS:
+        last = (
+            my_sessions()
+            .filter(WorkoutSession.id.in_(list(session_started_at)))
+            .order_by(WorkoutSession.started_at.desc(), WorkoutSession.id.desc())
+            .first()
+        ) if session_started_at else None
         onboarding = {
-            'workouts': len(volume_by_session),
+            'workouts': len(session_started_at),
             'last': last and {
                 'session_id': last.id, 'name': last.name,
                 'started_at': last.started_at, 'finished_at': last.finished_at,
@@ -336,14 +319,8 @@ def _heute_payload():
             'consistency': stats.consistency(list(session_started_at.values()), now),
             'routines': [_as_routine(r['template'], r['last_done'], r['days_ago'])
                          for r in stats.routine_memory(templates, routine_sessions, now)],
-            'recent_sessions': [
-                {'session_id': r['session'].id, 'name': r['session'].name,
-                 'started_at': r['session'].started_at,
-                 'finished_at': r['session'].finished_at,
-                 'is_deload': r['session'].is_deload,
-                 'volume': r['volume'], 'records': r['records']}
-                for r in recent_sessions
-            ],
+            'progress': dict(progress, min_workouts=stats.TREND_MIN_WORKOUTS,
+                             min_days=stats.TREND_MIN_DAYS),
             'stalls': stalls,
             'deload_suggestion': deload_suggestion,
             'balance': stats.muscle_group_volume(performed, catalogue_groups, now),

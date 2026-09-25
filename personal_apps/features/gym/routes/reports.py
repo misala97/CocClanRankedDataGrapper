@@ -1,13 +1,13 @@
-"""Read-only history and statistics pages, plus the JSON export."""
+"""The read-only history page, plus the JSON export."""
 
 from features.gym import stats
-from features.gym.schemas import HistoryPayload, StatistikPayload
+from features.gym.schemas import HistoryPayload
 from features.gym import export
 from .. import analytics
 import datetime as dt
 
 from flask import (
-    jsonify, render_template, request,
+    jsonify, redirect, render_template, request, url_for,
 )
 from sqlalchemy.orm import (
     joinedload, selectinload,
@@ -24,10 +24,10 @@ from features.gym.scope import (
     current_user_id, my_sessions,
 )
 from .helpers import (
-    DAYPART_NAMES, MONTH_NAMES, WEEKDAY_NAMES, WEEKDAY_SHORT, InvalidInput,
+    MONTH_NAMES, WEEKDAY_SHORT, InvalidInput,
 )
 from .history import (
-    _session_rest_entries, done_sets, load_performed,
+    done_sets, load_performed,
 )
 from ._blueprint import (
     gym_bp,
@@ -38,7 +38,10 @@ from ._blueprint import (
 @login_required
 def gym_verlauf():
     """Every finished workout, newest first, with its own total volume and
-    record count -- spec 6.6, one of the four real nav destinations."""
+    records -- spec 6.6, one of the four real nav destinations. Since M3
+    (D7-C) it also carries what Statistik said about the whole history: the
+    lede, the months as an index, the biggest workout, each record."""
+    now = dt.datetime.utcnow()
     # Eager-loaded for the exercise-list column: WorkoutSession.exercises and
     # SessionExercise.exercise are lazy relationships (models.py). This page
     # can list every finished session ever logged, and touching either per
@@ -77,9 +80,9 @@ def gym_verlauf():
         volume_by_session[row.session_id] = volume_by_session.get(row.session_id, 0.0) + stats.row_volume(row)
 
     # Against the sessions BEFORE each one (stats.record_marks, D3), so a
-    # session keeps its count when a later one goes higher -- the same records
-    # its own debrief names and Statistik lists.
-    records_by_session = stats.session_record_counts(performed)
+    # session keeps its records when a later one goes higher -- the same
+    # records its own debrief names and Start counts.
+    records_by_session = stats.session_records(performed)
 
     # The same exercises the volume beside each row was computed from. The row
     # listed every SessionExercise including ones swapped out mid-workout, so
@@ -92,7 +95,7 @@ def gym_verlauf():
         {
             'session': s,
             'volume': round(volume_by_session.get(s.id, 0.0), 1),
-            'record_count': records_by_session.get(s.id, 0),
+            'records': records_by_session.get(s.id, []),
             'exercises': [exercise.name for exercise in shown[s.id]],
             # The name and the date words, folded, so "31.07" or "juli"
             # works: item 5 stopped appending the date to new session names,
@@ -153,10 +156,17 @@ def gym_verlauf():
         previous_started = started
         months[-1]['entries'].append(entry)
         months[-1]['volume'] += entry['volume']
-        months[-1]['records'] += entry['record_count']
+        months[-1]['records'] += len(entry['records'])
 
     for month in months:
         month['volume'] = round(month['volume'], 1)
+
+    # What Statistik said about the whole history, now said here (M3).
+    summary = _summary(sessions, volume_by_session,
+                       round(sum(entry['volume'] for entry in history), 1), now)
+    consistency = analytics.consistency(performed, now)
+    weeks = ({key: consistency[key] for key in ('weeks_trained', 'weeks_total', 'longest_streak')}
+             if consistency['statable'] else None)
 
     payload = HistoryPayload.model_validate({
         'months': [
@@ -174,7 +184,8 @@ def gym_verlauf():
                         'is_deload': entry['session'].is_deload,
                         'auto_finished': entry['session'].auto_finished,
                         'volume': entry['volume'],
-                        'record_count': entry['record_count'],
+                        'record_count': len(entry['records']),
+                        'records': entry['records'],
                         'exercises': entry['exercises'],
                         'search': entry['search'],
                         'gap_days': entry['gap_days'],
@@ -185,6 +196,10 @@ def gym_verlauf():
             for month in months
         ],
         'total': len(history),
+        'summary': summary,
+        'weeks': weeks,
+        'index': _month_index(performed, [s.started_at for s in sessions], now),
+        'biggest_session_id': _biggest_session(sessions, volume_by_session),
         'gap_threshold': VERLAUF_GAP_DAYS,
         'weekday_short': list(WEEKDAY_SHORT),
         'exercise_search': exercise_search,
@@ -198,78 +213,6 @@ def gym_verlauf():
 # nothing at all -- rows sit at equal spacing one day or six weeks apart, and a
 # month with no sessions simply had no band.
 VERLAUF_GAP_DAYS = 10
-
-
-SPARK_W = 74.0
-SPARK_H = 24.0
-
-
-# The windows the Fortschritt section offers. Plain day counts rather than
-# calendar months: a month here is a rough span, and no consumer needs it to
-# land on the same day of the month. None is all time.
-#
-# All four are precomputed rather than served per request: the client switches
-# between them with no round trip, and every figure still comes from one Python
-# function instead of a second implementation of "progress" in TypeScript.
-PROGRESSION_WINDOWS = (('all', None), ('6m', 182), ('3m', 91), ('30d', 30))
-
-
-def _progression_view(ranking):
-    """Progression rows with their sparkline drawn and their bar sized.
-
-    Geometry in Python for the same reason the exercise chart's is: Jinja doing
-    coordinate arithmetic is unreadable, and an inline SVG inherits the palette
-    where a canvas cannot.
-
-    The bar is diverging from a centre line, so gains and losses read as
-    directions rather than as two lists. It is scaled against the largest
-    absolute change on the page -- against a fixed 100 % a typical +40 % lift
-    would draw as a stub, and the ranking would look flat when it is not.
-
-    Every ranked exercise is returned. There used to be a top-eight cap with
-    an exception that kept every loser below it -- the exception existed only
-    so truncation could not turn the section into a highlight reel, and with
-    nothing truncated it has nothing left to protect. The cap also made the
-    section grow only when things went wrong: bounded upward, unbounded down.
-
-    `widest` is per call, so each window scales against its own biggest move
-    rather than against the all-time one, which would draw a narrow window as
-    a row of stubs.
-    """
-    if not ranking:
-        return []
-    shown = list(ranking)
-
-    widest = max((abs(entry['change_pct']) for entry in shown), default=1.0) or 1.0
-    out = []
-    for entry in shown:
-        points = entry['points']
-        lo, hi = min(points), max(points)
-        span = (hi - lo) or 1.0
-        step = SPARK_W / max(len(points) - 1, 1)
-        spark = ' '.join(
-            '%.1f,%.1f' % (index * step, SPARK_H - 2 - (value - lo) / span * (SPARK_H - 4))
-            for index, value in enumerate(points)
-        )
-        out.append(dict(
-            entry,
-            spark=spark,
-            bar_pct=round(abs(entry['change_pct']) / widest * 50.0, 2),
-            is_up=entry['change_pct'] >= 0,
-        ))
-    return out
-
-
-def _year_bands(records):
-    """Records, newest first, folded into one band per year -- the lifter's
-    year: 00:30 on New Year's Day in Berlin is still 31 December in UTC."""
-    bands = []
-    for record in records:
-        year = stats.to_local(record['started_at']).year
-        if not bands or bands[-1]['year'] != year:
-            bands.append({'year': year, 'records': []})
-        bands[-1]['records'].append(record)
-    return bands
 
 
 def _longest_break_days(session_dates, now):
@@ -287,117 +230,73 @@ def _longest_break_days(session_dates, now):
     return max(gaps)
 
 
+def _month_index(performed, started, now):
+    """Verlauf's month index (M3): every month since the first listed workout,
+    oldest first, with its tonnage and records.
+
+    A calendar, so a month without a workout still has a band -- but "without
+    a workout" means none listed: a month whose only workout logged nothing
+    has its row right there on the page. The running month is the lifter's,
+    not UTC's: at 00:30 on the 1st it is already the new one.
+    """
+    listed = {(local.year, local.month) for local in map(stats.to_local, started)}
+    today = stats.to_local(now)
+    return [
+        dict(month,
+             label='%s %d' % (MONTH_NAMES[month['month'] - 1], month['year']),
+             short=MONTH_NAMES[month['month'] - 1][:3],
+             slug='%04d-%02d' % (month['year'], month['month']),
+             is_gap=(month['year'], month['month']) not in listed,
+             is_current=(month['year'], month['month']) == (today.year, today.month))
+        for month in analytics.monthly_tonnage(performed, now, first=min(started, default=None))
+    ]
+
+
+def _summary(sessions, volume_by_session, tonnage, now):
+    """Verlauf's lede (M3): how many workouts, since when, how much, and the
+    longest break -- the one still running included, or a lifter three weeks
+    into a break is told about an eight-day one.
+
+    Over the workouts that count: `volume_by_session` holds every one with a
+    set that counts (Q1), at 0 kg too. One opened and left empty stays listed,
+    but its debrief said "dieses Workout zählt nicht mit" -- so it is not
+    counted, does not date the history and does not split a break. Days run
+    between LOCAL times, as the pause lines between the rows measure them:
+    in UTC the two disagreed by one across a clock change."""
+    counted = [s for s in sessions if s.id in volume_by_session]
+    if not counted:
+        return None
+    return {
+        'workouts': len(counted),
+        'first_at': counted[-1].started_at,
+        'tonnage': tonnage,
+        'longest_gap': _longest_break_days([stats.to_local(s.started_at) for s in counted],
+                                           stats.to_local(now)),
+    }
+
+
+def _biggest_session(sessions, volume_by_session):
+    """The workout that moved the most, marked on its row -- none under two
+    workouts that count (`volume_by_session` holds those, as in _summary),
+    where the only one is trivially the biggest. `sessions` runs newest
+    first; the scan runs oldest first, so a tie stays with the workout that
+    lifted it first."""
+    if sum(1 for s in sessions if s.id in volume_by_session) < 2:
+        return None
+    biggest_id, biggest = None, 0.0
+    for s in reversed(sessions):
+        if volume_by_session.get(s.id, 0.0) > biggest:
+            biggest_id, biggest = s.id, volume_by_session[s.id]
+    return biggest_id
+
+
 @gym_bp.route('/gym/statistik')
 @login_required
 def gym_statistik():
-    """All-time analytics (spec 2026-07-29). Desktop-only in the navigation,
-    but the URL stays reachable: opening it on a phone renders the page
-    single-column rather than redirecting, because hiding data the user asked
-    for is worse than showing it in a cramped layout.
-
-    Thin by construction. The one bulk load below feeds every figure on the
-    page -- same discipline as Heute/Uebungen/Verlauf (spec 5.4): never one
-    query per exercise, no matter how long the history gets. All analysis
-    lives in analytics.py.
-
-    A replaced-away original's done sets count here, as they do in Verlauf
-    (Q1): Statistik describes what was lifted, and a set you performed before
-    swapping the exercise out was still performed -- the same reason deload
-    sessions count toward tonnage here.
-    """
-    now = dt.datetime.utcnow()
-    performed = load_performed()
-
-    # The lede: one sentence built from the numbers, so the page answers before
-    # it reports. The longest break is the only figure here not already in
-    # analytics -- it is cheap from the session dates this page has loaded
-    # anyway, and it is the fact that makes the sentence worth reading.
-    longest_gap = _longest_break_days({row.started_at for row in performed}, now)
-
-    # Records: the most recent RECENT_RECORDS shown flat, everything older
-    # folded into year bands.
-    #
-    # Bounding by CALENDAR was the bug. Grouping by year and opening the first
-    # band assumes a history that spans years -- and for every new account, and
-    # for this one today, it does not: one band, forced open, every record in
-    # it. Measured at 57 records that was 3,648px of a 5,249px page, i.e. worse
-    # than the two-thirds the brief set out to fix. It also flipped overnight:
-    # on 2 January the largest section on the page would collapse to one row.
-    #
-    # Bounding by COUNT is stable in both directions. The fold is still lossless
-    # -- nothing is dropped, and the header still counts every record there is.
-    RECENT_RECORDS = 12
-    records = analytics.record_timeline(performed)
-    recent_records = records[:RECENT_RECORDS]
-    record_years = _year_bands(records[RECENT_RECORDS:])
-
-    # Gaps are built PER SESSION and then concatenated, never across the whole
-    # history at once: rest_gaps() measures consecutive pairs, and two different
-    # workouts are not consecutive -- the interval from Monday's last set to
-    # Wednesday's first is not a rest, it is a rest day. The cap would drop it
-    # anyway, but only by accident, and an accident is not a rule.
-    #
-    # Pooled rather than averaged per session, because the question is what a
-    # typical rest of yours looks like: a twenty-set session carries more
-    # evidence about that than a six-set one.
-    # Eager-loaded for the same reason session_detail's finished branch is
-    # (see the comment there): this walks se.sets and se.exercise per row,
-    # lazily, for every finished session in the whole history -- 1 + S query
-    # became 1 + S + 2*S*E, thousands of queries at real-world scale.
-    # One settings lookup for the lot, for the same reason: every session is
-    # the caller's own.
-    habit_gaps = []
-    finished = (
-        my_sessions()
-        .filter(WorkoutSession.finished_at.isnot(None))
-        .options(
-            joinedload(WorkoutSession.exercises).joinedload(SessionExercise.sets),
-            joinedload(WorkoutSession.exercises).joinedload(SessionExercise.exercise),
-        )
-        .all()
-    )
-    setups = exercise_setups(current_user_id(),
-                             {se.exercise for s in finished for se in s.exercises})
-    for session_ in finished:
-        habit_gaps.extend(stats.rest_gaps(_session_rest_entries(session_, setups)))
-    rest_habit = stats.rest_medians(habit_gaps)
-
-    payload = StatistikPayload(
-        months=analytics.monthly_tonnage(performed, now),
-        longest_gap=longest_gap,
-        # Only the count is read -- the rows themselves reach the page as
-        # recent_records plus the year bands, and shipping all three would
-        # send every record twice.
-        records_total=len(records),
-        recent_records=recent_records,
-        record_years=record_years,
-        month_names=list(MONTH_NAMES),
-        daypart_names=dict(DAYPART_NAMES),
-        weekday_names=list(WEEKDAY_NAMES),
-        totals=analytics.totals(performed, now),
-        progression=[
-            {'key': key,
-             'entries': _progression_view(analytics.progression_ranking(
-                 performed,
-                 since=None if days is None else now - dt.timedelta(days=days)))}
-            for key, days in PROGRESSION_WINDOWS
-        ],
-        rep_range=analytics.rep_range_distribution(performed),
-        fatigue=analytics.fatigue_curve(performed),
-        daypart=analytics.daypart_volume(performed),
-        weekday=analytics.weekday_distribution(performed),
-        rest_gap=analytics.rest_gap_effect(performed),
-        session_length=analytics.session_length(performed),
-        consistency=analytics.consistency(performed, now),
-        balance_drift=analytics.balance_drift(performed, now),
-        increment_ladder=analytics.increment_ladder(performed),
-        record_drought=analytics.record_drought(performed),
-        min_sets_for_rep_range=analytics.MIN_SETS_FOR_REP_RANGE,
-        effort=analytics.effort_distribution(performed),
-        rest_habit=rest_habit,
-    )
-    return render_template('gym/statistik.html',
-                           payload_json=payload.model_dump(mode='json'))
+    """Statistik is gone (M3, D7-C): Start says what moves and what stands
+    still, Verlauf what the whole history holds. A bookmark or an installed
+    shortcut lands on Verlauf rather than on a 404."""
+    return redirect(url_for('gym.gym_verlauf'), code=301)
 
 
 # More workouts than anyone exports at once, and fewer than a URL can carry.

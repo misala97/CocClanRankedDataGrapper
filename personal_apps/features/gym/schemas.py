@@ -571,6 +571,18 @@ class CataloguePayload(_Model):
 # ---------------------------------------------------------------------------
 
 
+class HistoryRecord(_Model):
+    """A record the workout set (stats.session_records): the set that made
+    it and the best it beat. One per exercise, in the order the workout
+    ran."""
+    exercise_id: int
+    name: str
+    weight: float
+    reps: int
+    e1rm: float
+    previous: float
+
+
 class HistoryEntry(_Model):
     """One finished session."""
     session_id: int
@@ -583,6 +595,8 @@ class HistoryEntry(_Model):
     auto_finished: bool
     volume: float
     record_count: int
+    # "Nur Rekorde" swaps the exercise line for these, with no fetch.
+    records: list[HistoryRecord]
     # The same exercises the volume beside it was computed from. The row listed
     # every SessionExercise including ones swapped out mid-workout, so a
     # session showed 10 names next to a total built from 7.
@@ -607,9 +621,49 @@ class HistoryMonth(_Model):
     records: int
 
 
+class HistorySummary(_Model):
+    """The lede: the whole history in a sentence."""
+    workouts: int
+    first_at: datetime
+    tonnage: float
+    # Days, the break still running included.
+    longest_gap: int
+
+
+class HistoryWeeks(_Model):
+    """How regular it was, in weeks (analytics.consistency)."""
+    weeks_trained: int
+    weeks_total: int
+    longest_streak: int
+
+
+class HistoryIndexMonth(_Model):
+    """A month of the index: every month since the first workout, one
+    without a workout included (`is_gap`) -- the index is a calendar."""
+    year: int
+    month: int
+    label: str
+    short: str
+    slug: str
+    volume: float
+    deload_volume: float
+    records: int
+    is_gap: bool
+    # Still filling: drawn as an outline.
+    is_current: bool
+
+
 class HistoryPayload(_Model):
     months: list[HistoryMonth]
     total: int
+    # None while there is no workout.
+    summary: HistorySummary | None
+    # None under four weeks: a share of three weeks says nothing.
+    weeks: HistoryWeeks | None
+    index: list[HistoryIndexMonth]
+    # "Größtes Workout": the most tonnage, the first to lift it on a tie.
+    # None under two workouts -- the biggest of one is no finding.
+    biggest_session_id: int | None
     # A break this long or longer gets called out. Below it the date column
     # already tells the story; above it, a layoff was represented by nothing.
     gap_threshold: int
@@ -651,16 +705,6 @@ class RoutineMemory(_Model):
     days_ago: int | None
 
 
-class RecentSession(_Model):
-    session_id: int
-    name: str | None
-    started_at: datetime
-    finished_at: datetime
-    is_deload: bool
-    volume: float
-    records: int
-
-
 class Stall(_Model):
     """A lift that has stopped moving. The roster this feeds is the whole
     catalogue's stalls; the deload signal below is a narrower read of the same
@@ -670,7 +714,47 @@ class Stall(_Model):
     position: int
     stuck_at: float
     since: datetime
+    # "letzter am ..."; None when the lift never set a record -- `since` is
+    # its first workout then, and the row says so.
+    last_record_at: datetime | None
     sessions_since_pr: int
+
+
+class ProgressPoint(_Model):
+    started_at: datetime
+    e1rm: float
+
+
+class ProgressBest(_Model):
+    """The lift's best judged set (stats.best_record): "Rekord", or
+    "Bestwert" while its first workout holds it -- that beat nothing (D3)."""
+    e1rm: float
+    started_at: datetime
+    is_record: bool
+
+
+class ProgressLift(_Model):
+    """A lift going up: its pace (stats.e1rm_trend, kg per 30 days) above
+    zero, and not stalled."""
+    exercise_id: int
+    name: str
+    per_month: float
+    workouts: int
+    # The workouts the pace was fitted through, oldest first: the line drawn
+    # beside it, so the line and the number are one reading.
+    points: list[ProgressPoint]
+    best: ProgressBest
+
+
+class Progress(_Model):
+    """Start's "Fortschritt" (M3): the lifts going up, the best pace first.
+    Its other half is `stalls`."""
+    up: list[ProgressLift]
+    # Lifts with a pace at all, stalled ones aside: 0 means none has the
+    # workouts a pace needs yet, and the section says what it needs.
+    with_trend: int
+    min_workouts: int
+    min_days: int
 
 
 class DeloadSuggestion(_Model):
@@ -739,7 +823,7 @@ class HeutePayload(_Model):
     vapid_public_key: str | None
     consistency: Consistency
     routines: list[RoutineMemory]
-    recent_sessions: list[RecentSession]
+    progress: Progress
     stalls: list[Stall]
     deload_suggestion: DeloadSuggestion | None
     balance: list[MuscleBalance]
@@ -909,277 +993,6 @@ class FinishedPayload(_Model):
     # writes with, so the preview cannot drift. Both None for freeform.
     template_exercises: list[str] | None
     template_next_exercises: list[str] | None
-
-
-# ---------------------------------------------------------------------------
-# Statistik: the whole history, aggregated.
-#
-# Every model here mirrors one analytics.py return value. The `statable` flags
-# are analytics' own: a section with too little evidence says so rather than
-# stating a confident figure over three data points, and the page reads that
-# flag rather than re-deciding the threshold for itself.
-# ---------------------------------------------------------------------------
-
-
-class BestSession(_Model):
-    session_id: int
-    started_at: datetime
-    volume: float
-
-
-class Totals(_Model):
-    tonnage: float
-    sets: int
-    reps: int
-    sessions: int
-    # All three are None before the first logged set -- the page's own empty
-    # state, not a zero.
-    first_session: datetime | None
-    days_training: int | None
-    best_session: BestSession | None
-
-
-class TonnageMonth(_Model):
-    year: int
-    month: int
-    volume: float
-    #: A month with no training at all, drawn as a break rather than as a zero.
-    is_gap: bool
-    #: The part of `volume` lifted in deload workouts.
-    deload_volume: float
-    #: Records set in the month (exercise-workouts, as the timeline counts).
-    records: int
-
-
-class ProgressionRow(_Model):
-    """One exercise's whole arc, with its sparkline already drawn.
-
-    Geometry in Python for the same reason the exercise chart's is: an inline
-    SVG inherits the palette where a canvas cannot, and the coordinate
-    arithmetic has one home.
-    """
-    exercise_id: int
-    name: str
-    sessions: int
-    first_e1rm: float
-    current_e1rm: float
-    change_pct: float
-    best_weight: float
-    points: list[float]
-    #: SVG polyline points, from routes._progression_view.
-    spark: str
-    #: Half-width of the diverging bar, scaled against the largest absolute
-    #: change in its own window rather than against a fixed 100 %.
-    bar_pct: float
-    is_up: bool
-
-
-class ProgressionWindow(_Model):
-    """One window's ranking. `key` is one of 'all', '6m', '3m', '30d' -- an
-    identifier, not a label: the component owns the German, exactly as it does
-    for month and weekday names."""
-    key: str
-    entries: list[ProgressionRow]
-
-
-class RepBucket(_Model):
-    label: str
-    sets: int
-    share: float
-
-
-class RepRange(_Model):
-    buckets: list[RepBucket]
-    sample: int
-    dominant: RepBucket | None
-    statable: bool
-    #: Sets excluded from the distribution, counted so the page can say so.
-    skipped: int
-
-
-class Fatigue(_Model):
-    """How much a lift drops off across a session."""
-    sample: int
-    statable: bool
-    weight_change_pct: float | None
-    first_reps: float | None
-    last_reps: float | None
-
-
-class DaypartBucket(_Model):
-    #: 'morning' | 'evening' | 'other' -- keyed into DAYPART_NAMES for display.
-    label: str
-    sessions: int
-    volume: float
-    avg_volume: float
-
-
-class Daypart(_Model):
-    parts: list[DaypartBucket]
-    statable: bool
-
-
-class WeekdayBucket(_Model):
-    #: Monday-first, matching WEEKDAY_NAMES.
-    weekday: int
-    sessions: int
-    share: float
-    #: Per session, so the most-trained day does not win by arithmetic.
-    avg_volume: float
-
-
-class Weekday(_Model):
-    days: list[WeekdayBucket]
-    sample: int
-    statable: bool
-
-
-class RestGapBucket(_Model):
-    label: str
-    sessions: int
-    avg_volume: float
-    shown: bool
-
-
-class RestGap(_Model):
-    buckets: list[RestGapBucket]
-    thin: list[RestGapBucket]
-    statable: bool
-
-
-class SessionLength(_Model):
-    #: Timed sessions only. `untimed` counts the rest -- missing finish stamps
-    #: and workouts left running -- so the page can say what the median is
-    #: built from instead of implying it covers everything.
-    sample: int
-    untimed: int
-    statable: bool
-    median_minutes: int | None
-    volume_per_minute: float | None
-
-
-class Consistency(_Model):
-    weeks_trained: int
-    weeks_total: int
-    share: float
-    current_streak: int
-    longest_streak: int
-    statable: bool
-
-
-class DriftGroup(_Model):
-    label: str | None
-    recent_share: float
-    earlier_share: float
-    delta: float
-
-
-class BalanceDrift(_Model):
-    window_days: int
-    groups: list[DriftGroup]
-    recent_sessions: int
-    earlier_sessions: int
-    statable: bool
-
-
-class LadderRung(_Model):
-    exercise_id: int
-    name: str
-    notches: int
-    from_weight: float
-    to_weight: float
-    sessions: int
-
-
-class IncrementLadder(_Model):
-    exercises: list[LadderRung]
-    total_notches: int
-    statable: bool
-
-
-class DroughtRow(_Model):
-    exercise_id: int
-    name: str
-    sessions: int
-    sessions_since: int
-    #: None when the lift has never beaten its own debut.
-    last_record_at: datetime | None
-
-
-class RecordDrought(_Model):
-    exercises: list[DroughtRow]
-    statable: bool
-
-
-class EffortSlice(_Model):
-    label: str
-    volume: float
-    sets: int
-    share: float
-
-
-class Effort(_Model):
-    groups: list[EffortSlice]
-    exercises: list[EffortSlice]
-    total_volume: float
-
-
-class RecordMove(_Model):
-    value: float
-    previous: float
-
-
-class TimelineRecord(_Model):
-    started_at: datetime
-    session_id: int
-    exercise_id: int
-    name: str
-    #: A record is e1RM only (D3): the best the workout reached, and the
-    #: best of every workout before it.
-    e1rm: RecordMove
-
-
-class RecordYear(_Model):
-    year: int
-    records: list[TimelineRecord]
-
-
-class StatistikPayload(_Model):
-    totals: Totals
-    #: The only figure here not from analytics: cheap from the session dates
-    #: the page has loaded anyway, and the fact that makes the lede worth
-    #: reading.
-    longest_gap: int
-    months: list[TonnageMonth]
-    #: All four windows, precomputed. The client swaps between them without a
-    #: round trip, so they travel together.
-    progression: list[ProgressionWindow]
-    rep_range: RepRange
-    min_sets_for_rep_range: int
-    fatigue: Fatigue
-    daypart: Daypart
-    weekday: Weekday
-    rest_gap: RestGap
-    session_length: SessionLength
-    consistency: Consistency
-    balance_drift: BalanceDrift
-    increment_ladder: IncrementLadder
-    record_drought: RecordDrought
-    effort: Effort
-    #: (planned, actual) medians in seconds, or None when there is nothing to
-    #: report -- so the page says "noch keine Daten" instead of a confident 0.
-    rest_habit: tuple[int, int] | None
-    #: The newest RECENT_RECORDS shown flat; everything older folded into year
-    #: bands. Bounded by COUNT, not by calendar: grouping by year assumes a
-    #: history that spans years, and on 2 January the largest section on the
-    #: page would have collapsed to one row.
-    records_total: int
-    recent_records: list[TimelineRecord]
-    record_years: list[RecordYear]
-    month_names: list[str]
-    weekday_names: list[str]
-    #: {'morning': 'Vormittags', ...} -- keyed by DaypartBucket.label.
-    daypart_names: dict[str, str]
 
 
 # ---------------------------------------------------------------------------

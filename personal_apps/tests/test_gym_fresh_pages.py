@@ -16,7 +16,7 @@ import pytest
 SPECULATION_RULES = re.compile(r'<script type="speculationrules"[^>]*>(.*?)</script>', re.S)
 
 
-@pytest.mark.parametrize('path', ['/gym', '/gym/verlauf', '/gym/uebungen', '/gym/statistik'])
+@pytest.mark.parametrize('path', ['/gym', '/gym/verlauf', '/gym/uebungen'])
 def test_no_gym_page_is_stored(client, path):
     response = client.get(path)
     assert response.status_code == 200

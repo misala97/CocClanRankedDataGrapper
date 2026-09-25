@@ -101,10 +101,10 @@ def _session_rest_entries(session_, setups=None):
     in the shape stats.rest_gaps() expects. Planned time falls back to the
     exercise's default when the session didn't override it.
 
-    Shared by session_detail's finished branch and gym_statistik's habit
-    figure -- the planned-rest fallback chain is a business rule, and having
-    it written out twice meant either copy could drift from the other with
-    nothing to catch it. The fallback is the session owner's rest for the
+    Read by session_detail's finished branch. It was shared with Statistik's
+    habit figure -- the planned-rest fallback chain is a business rule, and
+    having it written out twice meant either copy could drift from the other
+    with nothing to catch it. The fallback is the session owner's rest for the
     exercise, not the list's: `setups` is theirs, looked up here when a
     caller walking many sessions did not batch it.
     """
@@ -123,7 +123,7 @@ def performed_from_session(session_):
 
     A replaced-away original is kept: the sets logged on it before the swap
     were done, and they count like any other (Q1). It used to be skipped
-    here -- and so left out of the debrief's totals while Heute and Statistik
+    here -- and so left out of the debrief's totals while Start and Verlauf
     counted it.
     """
     setups = exercise_setups(session_.user_id, {se.exercise for se in session_.exercises})

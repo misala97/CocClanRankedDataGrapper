@@ -29,7 +29,7 @@ export function DeloadSheet({
     <Sheet id="sheet-deload" title="Deload">
       <p className="sheet__note">
         Ein bewusst leichtes Workout. Es bekommt keine eigene Farbe und zählt
-        nicht gegen die Stagnation — sein Zweck ist, dass die Statistik eine
+        nicht gegen die Stagnation — sein Zweck ist, dass die App eine
         geplante leichte Woche nicht als Plateau liest. Ein Rekord bleibt ein
         Rekord.
       </p>

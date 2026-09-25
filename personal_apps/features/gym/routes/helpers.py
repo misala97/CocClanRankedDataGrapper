@@ -39,13 +39,6 @@ from ._blueprint import gym_bp
 # The UI is German regardless of the server's locale, so month names are stated
 # rather than taken from strftime('%B') -- which follows LC_TIME and would give
 # English on this machine and German on the VPS, or vice versa.
-# analytics.py speaks in keys and indexes, not in UI language: dayparts come
-# back as 'morning'/'evening' and weekdays as 0-6. Naming them is presentation,
-# so it happens here rather than in the analysis.
-DAYPART_NAMES = {'morning': 'Vormittags', 'evening': 'Abends'}
-WEEKDAY_NAMES = ('Montag', 'Dienstag', 'Mittwoch', 'Donnerstag',
-                 'Freitag', 'Samstag', 'Sonntag')
-
 MONTH_NAMES = (
     'Januar', 'Februar', 'März', 'April', 'Mai', 'Juni',
     'Juli', 'August', 'September', 'Oktober', 'November', 'Dezember',
@@ -681,9 +674,6 @@ WEEKDAY_SHORT = ('Mo', 'Di', 'Mi', 'Do', 'Fr', 'Sa', 'So')
 # Buckets in MUSCLE_GROUPS that are not muscle groups, so a section built
 # from the full vocabulary does not carry them at zero forever.
 NON_MUSCLE_GROUPS = ('Cardio', 'Sonstiges')
-
-# How many finished workouts the Start page lists.
-RECENT_SESSIONS = 5
 
 # Start's first-run checklist stops asking after this many finished workouts
 # without a routine: by then freeform is how this person trains, not a step

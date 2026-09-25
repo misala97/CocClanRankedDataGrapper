@@ -17,23 +17,50 @@ export interface RoutineMemory {
   days_ago: number | null
 }
 
-export interface RecentSession {
-  session_id: number
-  name: string | null
-  started_at: string
-  finished_at: string
-  is_deload: boolean
-  volume: number
-  records: number
-}
-
 export interface Stall {
   exercise_id: number
   name: string
   position: number
   stuck_at: number
   since: string
+  /** "letzter am ..."; null when the lift never set a record -- `since` is
+   *  its first workout then. */
+  last_record_at: string | null
   sessions_since_pr: number
+}
+
+export interface ProgressPoint {
+  started_at: string
+  e1rm: number
+}
+
+/** The lift's best judged set: "Rekord", or "Bestwert" while its first
+ *  workout holds it -- that beat nothing (D3). */
+export interface ProgressBest {
+  e1rm: number
+  started_at: string
+  is_record: boolean
+}
+
+/** A lift going up: its pace (kg per 30 days) above zero, not stalled. */
+export interface ProgressLift {
+  exercise_id: number
+  name: string
+  per_month: number
+  workouts: number
+  /** The workouts the pace was fitted through, oldest first. */
+  points: ProgressPoint[]
+  best: ProgressBest
+}
+
+/** "Fortschritt" (M3): the lifts going up; `stalls` is its other half. */
+export interface Progress {
+  up: ProgressLift[]
+  /** Lifts with a pace at all, stalled ones aside: 0 means none has the
+   *  workouts a pace needs yet. */
+  with_trend: number
+  min_workouts: number
+  min_days: number
 }
 
 export interface DeloadSuggestion {
@@ -91,7 +118,7 @@ export interface HeutePayload {
   vapid_public_key: string | null
   consistency: Consistency
   routines: RoutineMemory[]
-  recent_sessions: RecentSession[]
+  progress: Progress
   stalls: Stall[]
   deload_suggestion: DeloadSuggestion | null
   balance: MuscleBalance[]

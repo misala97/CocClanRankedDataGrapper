@@ -222,6 +222,18 @@ def test_the_stall_report_quotes_the_newest_attempt_and_the_last_record():
     assert entry['sessions_since_pr'] == 4
     assert entry['stuck_at'] == 10.0
     assert entry['since'] == day(7)
+    assert entry['last_record_at'] == day(7)
+
+
+def test_the_stall_report_says_when_a_lift_never_set_a_record():
+    """Start's "Steht still" says "letzter am D" -- and of a lift whose debut
+    is still its best, that there was none: its count runs from the debut."""
+    rows = [perf([(11.0, 10)], started_at=day(0), session_id=1),
+            *[perf([(10.0, 10)], started_at=day(7 * (i + 1)), session_id=2 + i) for i in range(4)]]
+    [entry] = stats.stall_report({1: rows})
+    assert entry['sessions_since_pr'] == 4
+    assert entry['last_record_at'] is None
+    assert entry['since'] == day(0)
 
 
 def test_exercise_state_neu_when_never_performed():
@@ -1207,27 +1219,6 @@ def test_rest_gaps_of_a_single_set_is_empty():
     assert stats.rest_gaps([]) == []
 
 
-def test_rest_medians_reports_planned_against_actual():
-    from features.gym import stats
-    gaps = [(180, 150), (200, 150), (240, 150)]
-    assert stats.rest_medians(gaps) == (150, 200)
-
-
-def test_rest_medians_is_none_without_data():
-    """Nothing is retroactive, so this is the normal state on the day it ships
-    -- the caller must be able to say "noch keine Daten" rather than "0"."""
-    from features.gym import stats
-    assert stats.rest_medians([]) is None
-    assert stats.rest_medians([(180, None), (200, None)]) is None
-
-
-def test_rest_medians_ignores_gaps_with_no_planned_time():
-    """An exercise with no rest configured contributes an actual but cannot
-    contribute a plan, and must not drag the planned median toward zero."""
-    from features.gym import stats
-    assert stats.rest_medians([(180, 150), (200, None), (220, 150)]) == (150, 200)
-
-
 class TestE1rmTrend:
     """How fast the e1RM moves (D9 A), in kg per 30 days. It replaced the
     chart's date promise, and says a falling pace too."""
@@ -1306,6 +1297,169 @@ class TestE1rmTrend:
         rows = self._rows(80.0, 81.0, 82.0, 83.0)
         rows.append(perf([(70.0, 1)], position=3, session_id=4, started_at=rows[-1].started_at))
         assert stats.e1rm_trend(rows, self.NOW) == {'per_month': 4.3, 'workouts': 4}
+
+    def test_hands_over_the_points_it_fits(self):
+        # Start draws them beside the pace (M3): the line and the number
+        # are one reading, so they are the same workouts.
+        rows = self._rows(*[60.0] * 2, 80.0, 81.0, 82.0, 83.0, 84.0, 85.0)
+        assert stats.trend_points(rows, self.NOW) == [
+            (row.started_at, value) for row, value in zip(rows[2:], (80.0, 81.0, 82.0, 83.0, 84.0, 85.0))]
+        assert stats.trend_points(self._rows(80.0, 82.0, 84.0), self.NOW) is None
+
+
+class TestProgressReport:
+    """Start's "Fortschritt" (M3, D7-C): the lifts going up, ranked by the
+    exercise page's pace, each with the workouts that pace was fitted through
+    and its best."""
+
+    NOW = dt.datetime(2026, 8, 11, 12, 0)
+
+    def _rows(self, *values, exercise_id=1, name='Bankdruecken', end_days_ago=3):
+        """One weekly single per value, the newest `end_days_ago` before NOW."""
+        newest = self.NOW - dt.timedelta(days=end_days_ago)
+        return [perf([(value, 1)], exercise_id=exercise_id, name=name,
+                     session_id=exercise_id * 100 + i,
+                     started_at=newest - dt.timedelta(days=7 * (len(values) - 1 - i)))
+                for i, value in enumerate(values)]
+
+    def test_lists_a_rising_lift_with_its_points_and_its_best(self):
+        rows = self._rows(80.0, 81.0, 82.0, 83.0)
+        assert stats.progress_report({1: rows}, set(), self.NOW) == {'with_trend': 1, 'up': [{
+            'exercise_id': 1, 'name': 'Bankdruecken', 'per_month': 4.3, 'workouts': 4,
+            'points': [{'started_at': row.started_at, 'e1rm': row.sets[0][0]} for row in rows],
+            'best': {'e1rm': 83.0, 'started_at': rows[-1].started_at, 'is_record': True},
+        }]}
+
+    def test_ranks_the_fastest_first_and_breaks_a_tie_by_name(self):
+        report = stats.progress_report({
+            1: self._rows(80.0, 81.0, 82.0, 83.0, exercise_id=1, name='Zug'),
+            2: self._rows(80.0, 82.0, 84.0, 86.0, exercise_id=2, name='Presse'),
+            3: self._rows(80.0, 81.0, 82.0, 83.0, exercise_id=3, name='Dips'),
+        }, set(), self.NOW)
+        assert [(lift['name'], lift['per_month']) for lift in report['up']] == [
+            ('Presse', 8.6), ('Dips', 4.3), ('Zug', 4.3)]
+
+    def test_leaves_a_stalled_lift_to_steht_still_though_its_line_rises(self):
+        # A lift sits in one half at most: the exercise page hides the pace
+        # of a stalled lift too (D9). It still has a pace, though: counted,
+        # the lede says nothing goes up rather than that no lift has data yet.
+        rows = self._rows(80.0, 81.0, 82.0, 83.0)
+        assert stats.progress_report({1: rows}, {1}, self.NOW) == {'up': [], 'with_trend': 1}
+
+    def test_counts_a_flat_or_falling_pace_but_does_not_list_it(self):
+        report = stats.progress_report({
+            1: self._rows(84.0, 83.0, 82.0, 81.0, exercise_id=1),
+            2: self._rows(80.0, 80.0, 80.0, 80.0, exercise_id=2),
+        }, set(), self.NOW)
+        assert report == {'up': [], 'with_trend': 2}
+
+    def test_does_not_count_a_lift_without_a_pace(self):
+        report = stats.progress_report({1: self._rows(80.0, 82.0, 84.0)}, set(), self.NOW)
+        assert report == {'up': [], 'with_trend': 0}
+
+    def test_calls_a_best_the_first_workout_still_holds_a_bestwert(self):
+        # A comeback: the line rises, but the best is still the debut's,
+        # and a debut beats nothing (D3).
+        rows = self._rows(90.0, 70.0, 80.0, 89.0)
+        [lift] = stats.progress_report({1: rows}, set(), self.NOW)['up']
+        assert lift['per_month'] == 3.0
+        assert lift['best'] == {'e1rm': 90.0, 'started_at': rows[0].started_at, 'is_record': False}
+
+
+class TestBestRecord:
+    """The best judged set, and whether it is a record (D3) -- "Rekord" or
+    "Bestwert" on the exercise page and in Start's "Legen zu"."""
+
+    def test_a_best_that_beat_an_earlier_workout_is_a_record(self):
+        rows = [perf([(80.0, 5)], started_at=day(0), session_id=1),
+                perf([(85.0, 5), (80.0, 5)], started_at=day(7), session_id=2)]
+        best = stats.best_record(rows)
+        assert (best['weight'], best['reps'], best['e1rm'], best['session_id'], best['is_record']) \
+            == (85.0, 5, 99.2, 2, True)
+
+    def test_the_debuts_best_is_no_record(self):
+        rows = [perf([(85.0, 5)], started_at=day(0), session_id=1),
+                perf([(80.0, 5)], started_at=day(7), session_id=2)]
+        best = stats.best_record(rows)
+        assert (best['session_id'], best['is_record']) == (1, False)
+
+    def test_judges_by_the_marks_it_is_handed(self):
+        # exercise_progress holds record_marks already and hands them over.
+        rows = [perf([(80.0, 5)], started_at=day(0), session_id=1),
+                perf([(82.5, 5)], started_at=day(7), session_id=2, position=1),
+                perf([(90.0, 5)], started_at=day(7), session_id=2, position=3)]
+        assert stats.best_record(rows, stats.record_marks(rows)) == stats.best_record(rows)
+        assert stats.best_record(rows)['is_record'] is True
+        assert stats.best_record(rows, {})['is_record'] is False
+
+    def test_is_none_without_a_judged_set(self):
+        assert stats.best_record([perf([(0.0, 10)])]) is None
+        assert stats.best_record([]) is None
+
+
+def test_record_set_is_the_set_that_made_the_value():
+    # 80 × 5 and 70 × 10 both estimate 93,3: the heavier one is named.
+    row = perf([(70.0, 10), (85.0, 3), (80.0, 5)])
+    assert stats.record_set(row, 93.3) == (80.0, 5)
+    assert stats.record_set(row, 93.5) == (85.0, 3)
+    assert stats.record_set(row, 100.0) is None
+
+
+class TestSessionRecords:
+    """Verlauf's "Nur Rekorde" (M3): each workout's records, named."""
+
+    def test_names_each_record_by_the_set_that_made_it_and_the_best_it_beat(self):
+        rows = [perf([(80.0, 5)], started_at=day(0), session_id=1),
+                perf([(85.0, 5), (80.0, 8)], started_at=day(7), session_id=2)]
+        assert stats.session_records(rows) == {2: [{
+            'exercise_id': 1, 'name': 'Bankdruecken', 'weight': 80.0, 'reps': 8,
+            'e1rm': 101.3, 'previous': 93.3,
+        }]}
+
+    def test_names_an_exercise_once_a_workout_at_its_stronger_slot(self):
+        rows = [perf([(80.0, 5)], started_at=day(0), session_id=1),
+                perf([(85.0, 5)], started_at=day(7), session_id=2, position=1),
+                perf([(90.0, 5)], started_at=day(7), session_id=2, position=3)]
+        [record] = stats.session_records(rows)[2]
+        assert (record['weight'], record['reps']) == (90.0, 5)
+
+    def test_lists_the_records_in_the_order_the_workout_ran(self):
+        rows = [
+            perf([(80.0, 5)], started_at=day(0), session_id=1, exercise_id=1, name='Bank'),
+            perf([(100.0, 5)], started_at=day(0), session_id=1, exercise_id=2, name='Kniebeuge',
+                 position=2),
+            perf([(110.0, 5)], started_at=day(7), session_id=2, exercise_id=2, name='Kniebeuge'),
+            perf([(85.0, 5)], started_at=day(7), session_id=2, exercise_id=1, name='Bank',
+                 position=2),
+        ]
+        assert [record['name'] for record in stats.session_records(rows)[2]] == ['Kniebeuge', 'Bank']
+
+    def test_keeps_the_earlier_slot_of_an_exercise_on_a_tie(self):
+        # Slot 3 arrives first: the rule, not the order rows come in, decides.
+        rows = [
+            perf([(80.0, 5)], started_at=day(0), session_id=1, exercise_id=1, name='Bank'),
+            perf([(100.0, 5)], started_at=day(0), session_id=1, exercise_id=2, name='Kniebeuge',
+                 position=2),
+            perf([(85.0, 5)], started_at=day(7), session_id=2, exercise_id=1, name='Bank',
+                 position=3),
+            perf([(110.0, 5)], started_at=day(7), session_id=2, exercise_id=2, name='Kniebeuge',
+                 position=2),
+            perf([(85.0, 5)], started_at=day(7), session_id=2, exercise_id=1, name='Bank'),
+        ]
+        assert [record['name'] for record in stats.session_records(rows)[2]] == ['Bank', 'Kniebeuge']
+
+    def test_counts_what_every_other_surface_counts(self):
+        rows = [
+            perf([(80.0, 5)], started_at=day(0), session_id=1, exercise_id=1),
+            perf([(100.0, 5)], started_at=day(0), session_id=1, exercise_id=2, position=2),
+            perf([(85.0, 5)], started_at=day(7), session_id=2, exercise_id=1),
+            perf([(90.0, 5)], started_at=day(7), session_id=2, exercise_id=2, position=2),
+            perf([(90.0, 5)], started_at=day(14), session_id=3, exercise_id=1, is_deload=True),
+            perf([(105.0, 5)], started_at=day(14), session_id=3, exercise_id=2, position=2),
+        ]
+        records = stats.session_records(rows)
+        assert {session_id: len(named) for session_id, named in records.items()} \
+            == stats.session_record_counts(rows) == {2: 1, 3: 2}
 
 
 class TestWeightLadder:

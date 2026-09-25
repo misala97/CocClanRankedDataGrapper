@@ -42,7 +42,7 @@ const entries = import.meta.glob('./entries/*.tsx')
 
 describe('every gym page', () => {
   it('has entries to check', () => {
-    expect(Object.keys(entries).length).toBeGreaterThanOrEqual(8)
+    expect(Object.keys(entries).length).toBeGreaterThanOrEqual(7)
   })
 
   it.each(Object.keys(entries))('%s reloads when restored from the cache', async (path) => {

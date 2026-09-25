@@ -4,14 +4,14 @@ import { postForm, MutationFailed } from '../api'
 import { CsrfField } from '../csrf'
 import { enablePush, heartbeatSubscription } from '../push'
 import { UndoToast, useUndo } from '../undo'
-import { recency, sincePr } from '../catalogue/format'
+import { recency } from '../catalogue/format'
 import { MAX_NAME_CHARS } from '../setInput'
 import { useSheets, usePush } from '../session/stores'
 import { leaveBySubmit, useSheetHistory } from '../session/useSheetHistory'
 import { Sheet } from '../session/components/Sheet'
 import { Icon } from '../components/Icon'
 import { dayMonth, instant, kg, kg1, shortDate, volume as de } from '../format'
-import { morphFrom } from '../vt'
+import { Fortschritt } from './Progress'
 
 const pad = (n: number) => String(n).padStart(2, '0')
 
@@ -73,24 +73,6 @@ function useRestCountdown(restEndsAt: string | null): string | null {
   if (left <= 0 || left > MAX_REST_MS) return null
   const total = Math.ceil(left / 1000)
   return `${Math.floor(total / 60)}:${pad(total % 60)}`
-}
-
-function StallRow({ item }: { item: Stall }) {
-  return (
-    <a className="row row--top" href={`/gym/exercises/${item.exercise_id}`}
-      onClick={morphFrom('ex')}>
-      <span className="row__main stack">
-        <span className="row__name row__name--wrap">{item.name}</span>
-        {/* The count runs from the last record in any slot, so the weight
-            is the newest attempt's, wherever it stood -- "meist" says the
-            slot is the usual one, not the one the weight comes from. */}
-        <span className="row__meta">
-          {`Meist als ${item.position}. Übung · zuletzt ${kg(item.stuck_at)} kg`}
-        </span>
-      </span>
-      <span className="vtag vtag--stall">{sincePr(item.sessions_since_pr, true)}</span>
-    </a>
-  )
 }
 
 interface RoutineEditProps {
@@ -193,9 +175,9 @@ function FirstRun({
   return (
     <section className="sec onb-sec" aria-labelledby="sec-onb">
       <div className="sec__head">
-        <h2 className="label" id="sec-onb">So fängst du an</h2>
+        <h2 className="sec__kick" id="sec-onb">So fängst du an</h2>
         <span className="sec__sp" />
-        <span className="label onb__count">{`${done} von 3`}</span>
+        <span className="sec__kick-n onb__count">{`${done} von 3`}</span>
       </div>
       <ol className="onb">
         <li className={`onb__step ${trained ? 'is-done' : 'is-now'}`}
@@ -397,6 +379,7 @@ export function StartPage({ payload: initial }: { payload: HeutePayload }) {
   const pushState: PushState = !pushSupported ? 'unsupported'
     : subscribed === null ? 'unknown' : subscribed ? 'on' : 'off'
   const lastWeek = payload.tonnage[payload.tonnage.length - 1]
+  const peakWeek = payload.tonnage.find((w) => w.volume === payload.tonnage_peak)
   const deloadWeeks = payload.tonnage.filter((w) => w.has_deload)
 
   return (
@@ -430,7 +413,7 @@ export function StartPage({ payload: initial }: { payload: HeutePayload }) {
         // A workout is already running: nothing else on this page competes
         // with getting back into it.
         <section className="sec" aria-labelledby="sec-laeuft">
-          <div className="sec__head"><h2 className="label" id="sec-laeuft">Läuft gerade</h2></div>
+          <div className="sec__head"><h2 className="sec__kick" id="sec-laeuft">Läuft gerade</h2></div>
           <div className="lead">
             <span className="lead__main stack">
               <span className="lead__name">{payload.active_session_name ?? 'Workout'}</span>
@@ -504,7 +487,7 @@ export function StartPage({ payload: initial }: { payload: HeutePayload }) {
           {payload.routines.length > 0 ? (
             <>
               <div className="sec__head">
-                <h2 className="label" id="sec-routinen">
+                <h2 className="sec__kick" id="sec-routinen">
                   {canStart ? 'Am längsten her' : 'Routinen'}
                 </h2>
               </div>
@@ -566,7 +549,7 @@ export function StartPage({ payload: initial }: { payload: HeutePayload }) {
             </>
           ) : (
             <>
-              <div className="sec__head"><h2 className="label" id="sec-routinen">Routinen</h2></div>
+              <div className="sec__head"><h2 className="sec__kick" id="sec-routinen">Routinen</h2></div>
               <p className="empty">
                 Noch keine Routinen. Speichere ein Workout als Routine, um es hier zu sehen.
               </p>
@@ -584,63 +567,23 @@ export function StartPage({ payload: initial }: { payload: HeutePayload }) {
         </section>
       )}
 
-      {/* The four reading sections, paired into two columns on desktop by
-          KIND: what wants attention on the left, what is reference on the
-          right. Not four sections auto-placed into a grid -- auto-placement
-          locked section 3 to the tallest section in row 1 and left a 250px
-          hole under "Steht still". */}
+      {/* The reading block, paired into two columns on desktop by KIND: the
+          question -- komme ich voran? -- on the left, load and balance on
+          the right (M3). Not sections auto-placed into a grid: auto-placement
+          locked a section to the tallest one in its row and left a hole. */}
       {!nothingToRead && (
         <div className="start__read">
           <div className="start__col">
-            {payload.stalls.length > 0 && (
-              <section className="sec" aria-labelledby="sec-still">
-                <div className="sec__head">
-                  <h2 className="label" id="sec-still">Steht still</h2>
-                  <span className="sec__sp" />
-                  <span className="label">
-                    {`${payload.stalls.length} ${payload.stalls.length === 1 ? 'Übung' : 'Übungen'}`}
-                  </span>
-                </div>
-                {/* "davon aktiv trainiert": the deload signal counts only lifts
-                    trained inside the rolling window, while the roster below is
-                    unfiltered. Unscoped, the note said "4 Übungen stehen still"
-                    directly above six rows. */}
-                {payload.deload_suggestion !== null && (
-                  <p className="stall-note">
-                    <b>{`${payload.deload_suggestion.count} davon aktiv trainiert`}</b>
-                    {' — ein Deload könnte fällig sein.'}
-                  </p>
-                )}
-                {/* Bounded by count: stall_report is unbounded, and after a
-                    layoff essentially the whole catalogue qualifies. */}
-                {payload.stalls.slice(0, 5).map((item) => (
-                  <StallRow item={item} key={item.exercise_id} />
-                ))}
-                {payload.stalls.length > 5 && (
-                  <details className="year">
-                    <summary className="year__head">
-                      <svg className="group__chev" viewBox="0 0 24 24" fill="none"
-                        stroke="currentColor" strokeWidth="3" strokeLinecap="round"
-                        strokeLinejoin="round" aria-hidden="true">
-                        <path d="M9 5l7 7-7 7" />
-                      </svg>
-                      <span className="label">{`${payload.stalls.length - 5} weitere`}</span>
-                    </summary>
-                    {payload.stalls.slice(5).map((item) => (
-                      <StallRow item={item} key={item.exercise_id} />
-                    ))}
-                  </details>
-                )}
-              </section>
-            )}
+            <Fortschritt progress={payload.progress} stalls={payload.stalls}
+              deload={payload.deload_suggestion} />
+          </div>
 
-            <section className="sec" aria-labelledby="sec-tonnage">
-              <div className="sec__head">
-                <h2 className="label" id="sec-tonnage">Tonnage pro Woche</h2>
-                <span className="sec__sp" />
-                <span className="label">8 Wochen</span>
-              </div>
-              {payload.tonnage_peak > 0 ? (
+          <div className="start__col">
+            <section className="sec sec--read" aria-labelledby="sec-tonnage">
+              <h2 className="sec__title" id="sec-tonnage">
+                Tonnage pro Woche <span className="sec__scope">8 Wochen</span>
+              </h2>
+              {payload.tonnage_peak > 0 && peakWeek !== undefined ? (
                 <>
                   {/* Every bar states its value. The chart carried no numbers at
                       all -- no scale, no per-bar figure, no accessible text --
@@ -648,17 +591,24 @@ export function StartPage({ payload: initial }: { payload: HeutePayload }) {
                       height. The peak is named so the heights have something to
                       be read against. */}
                   <p className="vbars__peak">
-                    <span className="label">Höchste Woche</span>{' '}
-                    <b>{de(payload.tonnage_peak)}</b> kg
+                    Höchste Woche <b>{`${de(payload.tonnage_peak)} kg`}</b>
+                    {`, ab ${dayMonth(peakWeek.week_start)}`}
                   </p>
                   <div className="vbars" role="list">
-                    {payload.tonnage.map((week) => (
-                      <span key={week.week_start}
-                        className={`vbar${week.is_current ? ' is-live' : ''}${week.has_deload ? ' vbar--deload' : ''}`}
-                        role="listitem"
-                        aria-label={`${week.is_current ? 'Diese Woche' : `Woche ab ${dayMonth(week.week_start)}`}: ${de(week.volume)} kg${week.has_deload ? ', mit Deload-Workout' : ''}`}
-                        style={{ blockSize: `${Math.round((week.volume / payload.tonnage_peak) * 1000) / 10}%` }} />
-                    ))}
+                    {payload.tonnage.map((week) => {
+                      const when = week.is_current ? 'Diese Woche' : `Woche ab ${dayMonth(week.week_start)}`
+                      // A week without a workout is a baseline, not a stub
+                      // that reads as "a little": the height is the datum.
+                      const what = week.volume > 0 ? `${de(week.volume)} kg`
+                        : week.is_current ? 'noch kein Workout' : 'kein Workout'
+                      return (
+                        <span key={week.week_start}
+                          className={`vbar${week.is_current ? ' is-live' : ''}${week.has_deload ? ' vbar--deload' : ''}${week.volume > 0 ? '' : ' is-zero'}`}
+                          role="listitem"
+                          aria-label={`${when}: ${what}${week.has_deload ? ', mit Deload-Workout' : ''}`}
+                          style={{ blockSize: `${Math.round((week.volume / payload.tonnage_peak) * 1000) / 10}%` }} />
+                      )
+                    })}
                   </div>
                   <div className="vbars__axis" aria-hidden="true">
                     {payload.tonnage.map((week) => (
@@ -676,15 +626,11 @@ export function StartPage({ payload: initial }: { payload: HeutePayload }) {
                 <p className="empty">Noch keine Sätze in den letzten 8 Wochen.</p>
               )}
             </section>
-          </div>
 
-          <div className="start__col">
-            <section className="sec" aria-labelledby="sec-balance">
-              <div className="sec__head">
-                <h2 className="label" id="sec-balance">Sätze pro Muskelgruppe</h2>
-                <span className="sec__sp" />
-                <span className="label">Letzte 4 Wochen</span>
-              </div>
+            <section className="sec sec--read" aria-labelledby="sec-balance">
+              <h2 className="sec__title" id="sec-balance">
+                Sätze pro Muskelgruppe <span className="sec__scope">letzte 4 Wochen</span>
+              </h2>
               {payload.balance.length > 0 ? (() => {
                 // Six identical "0 · zu wenig" rows drowned the one
                 // under-trained group that mattered -- and "Ohne Muskelgruppe ·
@@ -699,17 +645,20 @@ export function StartPage({ payload: initial }: { payload: HeutePayload }) {
                   (bucket) => bucket.sets === 0 && bucket.group !== NO_GROUP)
                 return (
                   <>
+                    {/* "zu wenig" under the group's name, not under its count:
+                        the count column is one fixed width, so every track is
+                        the same length and the bars compare. */}
                     {trained.map((bucket) => (
                       <div className="hbar" key={bucket.group}>
-                        <span className="hbar__name">{bucket.group}</span>
+                        <span className="hbar__name">
+                          {bucket.group}
+                          {bucket.under_trained && <small>zu wenig</small>}
+                        </span>
                         <span className="hbar__track">
                           <span className={bucket.under_trained ? 'hbar__fill is-stall' : 'hbar__fill'}
                             style={{ inlineSize: `${Math.round(bucket.share * 1000) / 10}%` }} />
                         </span>
-                        <span className="hbar__val">
-                          {bucket.sets}
-                          {bucket.under_trained && <small>zu wenig</small>}
-                        </span>
+                        <span className="hbar__val">{bucket.sets}</span>
                       </div>
                     ))}
                     {zero.length > 0 && (
@@ -721,41 +670,6 @@ export function StartPage({ payload: initial }: { payload: HeutePayload }) {
                 )
               })() : (
                 <p className="empty">Noch keine Übungen im Katalog.</p>
-              )}
-            </section>
-
-            <section className="sec" aria-labelledby="sec-letzte">
-              <div className="sec__head">
-                <h2 className="label" id="sec-letzte">Letzte Workouts</h2>
-                <span className="sec__sp" />
-                <a className="sec__more" href="/gym/verlauf">Verlauf ›</a>
-              </div>
-              {payload.recent_sessions.length > 0 ? payload.recent_sessions.map((s) => {
-                const minutes = Math.floor(
-                  (instant(s.finished_at).getTime() - instant(s.started_at).getTime()) / 60000)
-                return (
-                  <a className="row" href={`/gym/session/${s.session_id}`} key={s.session_id}
-                    onClick={morphFrom('session')}>
-                    <span className="row__main stack">
-                      <span className="row__name row__name--strong">{s.name ?? 'Workout'}</span>
-                      <span className="row__meta">
-                        {/* Sub-minute sessions printed "0 min" -- same guard as
-                            Verlauf's rows. */}
-                        {`${shortDate(s.started_at)} · ${minutes < 1 ? '< 1' : minutes} min${s.is_deload ? ' · Deload' : ''}`}
-                      </span>
-                    </span>
-                    <span className="row__trail row__trail--stack">
-                      <span className="vol">{de(s.volume)}<small>kg</small></span>
-                      {s.records > 0 && (
-                        <span className="vtag vtag--record">
-                          {`${s.records} ${s.records === 1 ? 'Rekord' : 'Rekorde'}`}
-                        </span>
-                      )}
-                    </span>
-                  </a>
-                )
-              }) : (
-                <p className="empty">Noch keine abgeschlossenen Workouts.</p>
               )}
             </section>
           </div>

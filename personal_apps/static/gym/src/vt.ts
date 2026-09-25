@@ -14,7 +14,7 @@
 import type { MouseEvent } from 'react'
 
 /** selector picks the text element inside the tapped row; null means the
- *  tapped element IS the text (e.g. Statistik's progression links). */
+ *  tapped element IS the text. */
 export function morphFrom(name: string, selector: string | null = '.row__name') {
   return (event: MouseEvent<HTMLElement>) => {
     for (const el of document.querySelectorAll<HTMLElement>('[data-vt]')) {

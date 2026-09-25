@@ -29,7 +29,7 @@ describe('DeloadSheet', () => {
     // "sein Zweck": the workout's, not the Stagnation's (das Workout).
     expect(screen.getByText(/^Ein bewusst leichtes Workout\. /)).toHaveTextContent(
       'Ein bewusst leichtes Workout. Es bekommt keine eigene Farbe und zählt nicht gegen die '
-      + 'Stagnation — sein Zweck ist, dass die Statistik eine geplante leichte Woche nicht als '
+      + 'Stagnation — sein Zweck ist, dass die App eine geplante leichte Woche nicht als '
       + 'Plateau liest. Ein Rekord bleibt ein Rekord.')
 
     await user.click(screen.getByText('Als Deload markieren'))

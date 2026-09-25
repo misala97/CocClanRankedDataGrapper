@@ -52,7 +52,7 @@ function verdictLine(p: FinishedPayload): string {
   if (p.record_count > 0) {
     return `${p.record_count} ${p.record_count === 1 ? 'neuer Rekord' : 'neue Rekorde'}.`
   }
-  if (sets === 0) return 'Kein Satz erfasst — dieses Workout zählt nicht in die Statistik.'
+  if (sets === 0) return 'Kein Satz erfasst — dieses Workout zählt nicht mit.'
   if (session.is_deload && p.deload_applied) {
     return `Deload — ${session.deload_pct ?? p.deload_default_pct} %. Bewusst leichter.`
   }

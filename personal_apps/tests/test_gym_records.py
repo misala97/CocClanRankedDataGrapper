@@ -230,7 +230,7 @@ def test_a_set_above_twelve_reps_neither_resets_nor_extends_a_stall():
     assert stats.sessions_since_pr(rows + [row([(56.0, 8)], 4, 21)]) == 0
 
 
-# -- Statistik ----------------------------------------------------------------
+# -- Verlauf ------------------------------------------------------------------
 
 def test_the_timeline_lists_the_same_records_as_everywhere_else():
     rows = [row([(50.0, 10)], 1, 0), row([(52.5, 10)], 2, 7, is_deload=True),

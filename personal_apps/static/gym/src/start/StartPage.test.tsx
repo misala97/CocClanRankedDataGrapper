@@ -19,7 +19,8 @@ const routine = (over: Partial<RoutineMemory> = {}): RoutineMemory => ({
 
 const stall = (over: Partial<Stall> = {}): Stall => ({
   exercise_id: 10, name: 'Bankdrücken', position: 1, stuck_at: 60.0,
-  since: '2026-07-01T10:00:00', sessions_since_pr: 4, ...over,
+  since: '2026-07-01T10:00:00', sessions_since_pr: 4, last_record_at: '2026-07-01T10:00:00',
+  ...over,
 })
 
 const base: HeutePayload = {
@@ -32,7 +33,7 @@ const base: HeutePayload = {
   vapid_public_key: null,
   consistency: { sessions: 8, per_week: 2.5, days_since_last: 2, window_days: 28 },
   routines: [routine()],
-  recent_sessions: [],
+  progress: { up: [], with_trend: 0, min_workouts: 4, min_days: 14 },
   stalls: [],
   deload_suggestion: null,
   balance: [],
@@ -205,34 +206,30 @@ describe('StartPage', () => {
     })
   })
 
-  describe('the stall roster', () => {
-    const many = Array.from({ length: 7 }, (_, i) =>
-      stall({ exercise_id: 100 + i, name: `Lift ${i}` }))
-
-    it('shows five and folds the rest away', () => {
-      mount({ stalls: many })
-      const section = screen.getByRole('region', { name: 'Steht still' })
-      expect(within(section).getByText('7 Übungen')).toBeInTheDocument()
-      expect(within(section).getByText('2 weitere')).toBeInTheDocument()
-      // Folded, not dropped: all seven are in the DOM.
-      expect(within(section).getAllByRole('link')).toHaveLength(7)
+  describe('Fortschritt (M3)', () => {
+    it('leads the reading with what goes up and what stands still', () => {
+      mount({
+        progress: {
+          up: [{
+            exercise_id: 12, name: 'Kniebeuge', per_month: 2.5, workouts: 6,
+            points: [{ started_at: '2026-07-01T10:00:00', e1rm: 100 },
+              { started_at: '2026-07-29T10:00:00', e1rm: 104 }],
+            best: { e1rm: 104, started_at: '2026-07-29T10:00:00', is_record: true },
+          }],
+          with_trend: 2, min_workouts: 4, min_days: 14,
+        },
+        stalls: [stall({ exercise_id: 11, name: 'Dips' })],
+      })
+      const section = screen.getByRole('region', { name: 'Fortschritt' })
+      expect(within(section).getByRole('link', { name: /^Kniebeuge: Trend der letzten 6 Workouts/ }))
+        .toHaveAttribute('href', '/gym/exercises/12')
+      expect(within(section).getByRole('link', { name: /^Dips: seit 4 Workouts ohne Rekord/ }))
+        .toHaveAttribute('href', '/gym/exercises/11')
     })
 
-    it('tags each lift with its count, a tag of its own and so capitalised (D16)', () => {
-      mount({ stalls: [stall(), stall({ exercise_id: 11, name: 'Dips', sessions_since_pr: 1 })] })
-      const section = screen.getByRole('region', { name: 'Steht still' })
-      expect([...section.querySelectorAll('.vtag--stall')].map((t) => t.textContent))
-        .toEqual(['Seit 4 Workouts ohne Rekord', 'Seit 1 Workout ohne Rekord'])
-    })
-
-    it('scopes the deload note to what is actively trained', () => {
-      mount({ stalls: many, deload_suggestion: { count: 3, stalls: many.slice(0, 3) } })
-      expect(screen.getByText('3 davon aktiv trainiert')).toBeInTheDocument()
-    })
-
-    it('is absent when nothing stalls', () => {
-      mount()
-      expect(screen.queryByRole('region', { name: 'Steht still' })).not.toBeInTheDocument()
+    it('took the place of the recent workouts, which Verlauf lists (D7-C)', () => {
+      mount({ stalls: [stall()] })
+      expect(screen.queryByRole('heading', { name: 'Letzte Workouts' })).not.toBeInTheDocument()
     })
   })
 
@@ -244,8 +241,8 @@ describe('StartPage', () => {
 
     it('draws each week against the named peak', () => {
       mount({ tonnage: weeks, tonnage_peak: 4000 })
-      expect(screen.getByText('Höchste Woche').parentElement)
-        .toHaveTextContent('4.000 kg')
+      expect(document.querySelector('.vbars__peak'))
+        .toHaveTextContent('Höchste Woche 4.000 kg, ab 03.08.')
       const bars = screen.getAllByRole('listitem')
       expect(bars[0]).toHaveStyle({ blockSize: '100%' })
       expect(bars[1]).toHaveStyle({ blockSize: '50%' })
@@ -254,6 +251,19 @@ describe('StartPage', () => {
       expect(bars[1]).toHaveAccessibleName(/Diese Woche: 2\.000 kg/)
       expect(screen.getByText(/kg diese Woche bisher/))
         .toHaveTextContent('2.000 kg diese Woche bisher — läuft noch. Schraffiert: Woche mit Deload-Workout.')
+    })
+
+    it('draws a week without a workout as a baseline, and names it', () => {
+      mount({
+        tonnage: [{ week_start: '2026-07-27', volume: 0, is_current: false, has_deload: false },
+          ...weeks.slice(0, 1),
+          { ...weeks[1]!, volume: 0 }],
+        tonnage_peak: 4000,
+      })
+      const bars = screen.getAllByRole('listitem')
+      expect(bars.map((bar) => bar.classList.contains('is-zero'))).toEqual([true, false, true])
+      expect(bars[0]).toHaveAccessibleName('Woche ab 27.07.: kein Workout')
+      expect(bars[2]).toHaveAccessibleName('Diese Woche: noch kein Workout')
     })
 
     it('says so rather than drawing eight stubs when there is nothing', () => {
@@ -457,8 +467,8 @@ describe('the first-run checklist', () => {
 
   it('hides the sections that have nothing to say yet', () => {
     mount(empty)
-    for (const name of ['Tonnage pro Woche', 'Sätze pro Muskelgruppe', 'Letzte Workouts',
-      'Routinen']) {
+    for (const name of [/^Tonnage pro Woche/, /^Sätze pro Muskelgruppe/, /^Fortschritt/,
+      /^Routinen/]) {
       expect(screen.queryByRole('heading', { name })).not.toBeInTheDocument()
     }
     expect(screen.queryByText(/Pausen-Benachrichtigung aktivieren/)).not.toBeInTheDocument()
@@ -478,7 +488,8 @@ describe('the first-run checklist', () => {
     expect(within(save).getByLabelText('Name der Routine')).toHaveValue('Oberkörper')
     // The next workout still has a way in, and the page now has data to show.
     expect(screen.getByRole('button', { name: /Freies Workout starten/ })).toBeInTheDocument()
-    expect(screen.getByRole('heading', { name: 'Tonnage pro Woche' })).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: 'Tonnage pro Woche 8 Wochen' })).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: 'Fortschritt' })).toBeInTheDocument()
   })
 
   it('counts workouts once there is more than one', () => {

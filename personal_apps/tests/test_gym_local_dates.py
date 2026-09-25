@@ -11,16 +11,14 @@ by their order, not their date -- D9.)
 """
 import datetime as dt
 
-from features.gym.routes.reports import _year_bands
+from features.gym.routes.reports import _month_index
 
 
-def test_record_year_bands_follow_the_local_calendar():
-    """00:30 on New Year's Day in Berlin is 23:30 on 31 December in UTC: that
-    record was set in the new year."""
-    records = [
-        {'name': 'Neujahr', 'started_at': dt.datetime(2025, 12, 31, 23, 30)},
-        {'name': 'Silvester', 'started_at': dt.datetime(2025, 12, 31, 12, 0)},
-    ]
-    bands = _year_bands(records)
-    assert [(band['year'], [r['name'] for r in band['records']]) for band in bands] == [
-        (2026, ['Neujahr']), (2025, ['Silvester'])]
+def test_the_running_month_of_the_verlauf_index_is_the_local_one():
+    """00:30 on New Year's Day in Berlin is 23:30 on 31 December in UTC: the
+    month still running is January, and the workout lifted then is in it."""
+    now = dt.datetime(2025, 12, 31, 23, 30)
+    index = _month_index([], [dt.datetime(2025, 11, 20, 18, 0), now], now)
+    assert [(m['slug'], m['is_current']) for m in index] == [
+        ('2025-11', False), ('2025-12', False), ('2026-01', True)]
+    assert [m['is_gap'] for m in index] == [False, True, False]

@@ -384,7 +384,7 @@ def drought(rows):
     was no attempt at the number either. `workouts` counts every attempt.
 
     The one count behind "seit N Workouts ohne Rekord", "Stagniert", the
-    live stall line, Start's stall list and Statistik's drought: it used to
+    live stall line and Start's "Steht still": it used to
     be judged per slot and blind to deloads, so a lift could read "Rekord"
     beside "2 Einheiten ohne PR" (B3 review; D16 has renamed both since)."""
     judged = [row for row in rows if judged_best(row) is not None]
@@ -468,6 +468,8 @@ def stall_report(rows_by_exercise, threshold=STAGNATION_THRESHOLD):
             'position': position,
             'stuck_at': best_weight(attempts[-1]),
             'since': counted['anchor_at'],
+            # None when the lift never set a record: `since` is its debut.
+            'last_record_at': counted['last_record_at'],
             'sessions_since_pr': counted['since'],
         })
     report.sort(key=lambda entry: (-entry['sessions_since_pr'], entry['name']))
@@ -549,6 +551,28 @@ def _pr_e1rm(rows):
     return best
 
 
+def best_record(rows, marks=None):
+    """The lift's best judged set (_pr_e1rm) with `is_record`: the best set
+    is a record unless the debut set it and nothing has reached it since --
+    a first workout beats nothing (D3), so a page says "Bestwert" then, not
+    "Rekord". None when no set is judged. `marks` is record_marks(rows),
+    for a caller that holds it already."""
+    pr = _pr_e1rm(rows)
+    if pr is not None:
+        marks = record_marks(rows) if marks is None else marks
+        pr['is_record'] = any(row.session_id == pr['session_id'] and row.position == pr['position']
+                              for row in marks)
+    return pr
+
+
+def record_set(row, value):
+    """The set of `row` whose judged e1RM is `value` -- what the lifter did
+    for a record ("40 kg × 11" in Verlauf): the heaviest such set, the most
+    reps on a tie. None when no set of the row reaches it."""
+    hits = [(weight, reps) for weight, reps in row.sets if judged_e1rm(weight, reps) == value]
+    return max(hits) if hits else None
+
+
 def exercise_progress(rows):
     """The exercise page's history (D9): every row, newest first, and what
     is said about the whole exercise -- its best judged set, its state and
@@ -560,18 +584,14 @@ def exercise_progress(rows):
     history, so a later best does not take the tag back (D3). `sets` are the
     counted sets as logged, for the page to say ("85,0 × 11 · 10 · 10").
 
-    `pr_e1rm` says `is_record`: the best set is a record unless the debut
-    set it and nothing has reached it since -- a first workout beats
-    nothing (D3), so the page says "Bestwert" then, not "Rekord". The chip
-    (`state`) is the Übungen list's: "Steigend" within the slot the lift is
-    mostly done in (routes.catalogue), or the list and the page disagree
-    about one lift -- and two slots of one workout compared each other."""
+    `pr_e1rm` is best_record's: "Rekord" or, while the debut holds the
+    best, "Bestwert". The chip (`state`) is the Übungen list's: "Steigend"
+    within the slot the lift is mostly done in (routes.catalogue), or the
+    list and the page disagree about one lift -- and two slots of one
+    workout compared each other."""
     chronological = _chronological(rows)
     marks = record_marks(chronological)
-    pr = _pr_e1rm(chronological)
-    if pr is not None:
-        pr['is_record'] = any(row.session_id == pr['session_id'] and row.position == pr['position']
-                              for row in marks)
+    pr = best_record(chronological, marks)
     progression = progression_rows(rows)
     position = dominant_position(progression) if progression else None
     table = [
@@ -992,6 +1012,30 @@ def session_record_counts(rows):
     return counts
 
 
+def session_records(rows):
+    """{session_id: the records its workout set} for every workout in `rows`
+    that set one -- Verlauf names them under "Nur Rekorde" (M3). Counted as
+    session_record_counts counts them: one per exercise, its stronger
+    showing when it ran in two slots (the earlier slot on a tie). Each says
+    what was lifted -- the set that made it (record_set) -- and the best it
+    beat, in the order the workout ran:
+    {'exercise_id', 'name', 'weight', 'reps', 'e1rm', 'previous'}."""
+    strongest = {}
+    for row, mark in record_marks(rows).items():
+        key = (row.session_id, row.exercise_id)
+        held = strongest.get(key)
+        if held is None or (mark['value'], -row.position) > (held[1]['value'], -held[0].position):
+            strongest[key] = (row, mark)
+    out = {}
+    for row, mark in sorted(strongest.values(), key=lambda pair: (pair[0].session_id, pair[0].position)):
+        weight, reps = record_set(row, mark['value'])
+        out.setdefault(row.session_id, []).append({
+            'exercise_id': row.exercise_id, 'name': row.name, 'weight': weight, 'reps': reps,
+            'e1rm': mark['value'], 'previous': mark['previous'],
+        })
+    return out
+
+
 def muscle_group_volume(rows, catalogue_groups, now, days=ROLLING_WINDOW_DAYS):
     """Working sets and volume per muscle group over a rolling window.
 
@@ -1157,27 +1201,6 @@ def rest_gaps(entries):
     return gaps
 
 
-def rest_medians(gaps):
-    """(median_planned, median_actual) over pooled gaps, or None.
-
-    Pooled over every gap rather than averaged per session: the question is
-    what a typical rest of yours looks like, and a twenty-set session carries
-    more evidence about that than a six-set one.
-
-    Median rather than mean so one slow day cannot move it -- which also makes
-    the cap above less load-bearing, since an outlier that slips past it shifts
-    a median far less than a mean.
-
-    None when there is nothing to report, so the caller says "noch keine Daten"
-    instead of a confident zero.
-    """
-    actuals = [actual for actual, _ in gaps]
-    planned = [plan for _, plan in gaps if plan is not None]
-    if not actuals or not planned:
-        return None
-    return int(_median(planned)), int(_median(actuals))
-
-
 def _median(values):
     ordered = sorted(values)
     middle = len(ordered) // 2
@@ -1218,21 +1241,19 @@ TREND_MIN_WORKOUTS = 4
 TREND_MIN_DAYS = 14
 
 
-def e1rm_trend(rows, now):
-    """How fast the e1RM moves, in kg per 30 days -- {'per_month',
-    'workouts'} -- or None. D9 A: it replaced the chart's date promise ("125 kg
-    am 28.09."), which read +8,8 kg in 6 days off four good sessions.
+def trend_points(rows, now):
+    """The workouts e1rm_trend fits its line through -- [(started_at, best
+    judged e1RM)], oldest first -- or None while it says nothing (see there).
+    Start draws them beside the pace (M3), so the line and the number are
+    one reading.
 
-    The least-squares slope of the best judged e1RM over the newest
-    TREND_WORKOUTS attempts -- further back, up to TREND_MAX_WORKOUTS, while
-    they span less than TREND_MIN_DAYS, so a lift done three times a week has
-    a pace too: deloads out (a light week is no attempt), workouts without a
-    judged set out. Silent below TREND_MIN_WORKOUTS or TREND_MIN_DAYS -- a
-    month's pace out of one week is the same guess the date promise was --
-    and when the newest is older than ROLLING_WINDOW_DAYS: the pace of a
-    lifter who stopped is history, not a pace. A falling trend is said too:
-    the page hides the trend while the lift is stalled, and says the count
-    instead."""
+    The newest TREND_WORKOUTS attempts -- further back, up to
+    TREND_MAX_WORKOUTS, while they span less than TREND_MIN_DAYS, so a lift
+    done three times a week has a pace too: deloads out (a light week is no
+    attempt), workouts without a judged set out. None below
+    TREND_MIN_WORKOUTS or TREND_MIN_DAYS -- a month's pace out of one week is
+    the same guess the date promise was -- and when the newest is older than
+    ROLLING_WINDOW_DAYS: the pace of a lifter who stopped is history."""
     bests = _workout_bests(progression_rows(rows))
     count = min(TREND_WORKOUTS, len(bests))
     while count < min(TREND_MAX_WORKOUTS, len(bests)) \
@@ -1244,14 +1265,70 @@ def e1rm_trend(rows, now):
     first, newest = points[0][0][0], points[-1][0][0]
     if (newest - first).days < TREND_MIN_DAYS or (now - newest).days > ROLLING_WINDOW_DAYS:
         return None
-    days = [(key[0] - first).total_seconds() / 86400.0 for key, _, _ in points]
-    values = [value for _, value, _ in points]
+    return [(key[0], value) for key, value, _ in points]
+
+
+def e1rm_trend(rows, now):
+    """How fast the e1RM moves, in kg per 30 days -- {'per_month',
+    'workouts'} -- or None. D9 A: it replaced the chart's date promise ("125 kg
+    am 28.09."), which read +8,8 kg in 6 days off four good sessions.
+
+    The least-squares slope of the best judged e1RM over trend_points, and
+    silent where they are. A falling trend is said too: the exercise page
+    hides the trend while the lift is stalled, and says the count instead."""
+    points = trend_points(rows, now)
+    return None if points is None else _trend_fit(points)
+
+
+def _trend_fit(points):
+    """The least-squares slope through trend_points, in kg per 30 days:
+    {'per_month', 'workouts'}, or None when every point shares one moment."""
+    first = points[0][0]
+    days = [(at - first).total_seconds() / 86400.0 for at, _ in points]
+    values = [value for _, value in points]
     mean_x, mean_y = sum(days) / len(days), sum(values) / len(values)
     spread = sum((x - mean_x) ** 2 for x in days)
     if spread == 0:
         return None
     slope = sum((x - mean_x) * (y - mean_y) for x, y in zip(days, values)) / spread
     return {'per_month': round(slope * 30.0, 1), 'workouts': len(points)}
+
+
+def progress_report(rows_by_exercise, stalled, now):
+    """Start's "Fortschritt" (M3, D7-C): the lifts going up, the best pace
+    first, and how many lifts have a pace at all -- {'up', 'with_trend'}.
+
+    A lift goes up when e1rm_trend's pace is above zero and it is not in
+    `stalled` (the exercise ids stall_report listed): the exercise page
+    hides the trend while a lift is stalled (D9), so a lift sits in "Legen
+    zu" or in "Steht still", never in both. Each carries the points its pace
+    was fitted through, for the line drawn beside it -- the line and the
+    number are one reading -- and best_record's set, "Rekord" or
+    "Bestwert". `with_trend` counts every lift with a pace, falling, flat or
+    stalled too: 0 means nothing has the TREND_MIN_WORKOUTS over
+    TREND_MIN_DAYS a pace needs yet -- a plateau with months of data behind
+    it is not that."""
+    up, with_trend = [], 0
+    for exercise_id, rows in rows_by_exercise.items():
+        points = trend_points(rows, now)
+        trend = None if points is None else _trend_fit(points)
+        if trend is None:
+            continue
+        with_trend += 1
+        if exercise_id in stalled or trend['per_month'] <= 0:
+            continue
+        best = best_record(rows)
+        up.append({
+            'exercise_id': exercise_id,
+            'name': rows[0].name,
+            'per_month': trend['per_month'],
+            'workouts': trend['workouts'],
+            'points': [{'started_at': at, 'e1rm': value} for at, value in points],
+            'best': {'e1rm': best['e1rm'], 'started_at': best['started_at'],
+                     'is_record': best['is_record']},
+        })
+    up.sort(key=lambda lift: (-lift['per_month'], lift['name']))
+    return {'up': up, 'with_trend': with_trend}
 
 
 #: "Wiederholungen je Gewicht" shows the heaviest this many weights.

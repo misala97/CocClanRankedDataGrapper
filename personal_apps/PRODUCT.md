@@ -41,23 +41,27 @@ planning features are deliberately absent — no routine builder, no scheduler, 
 per-exercise targets; routines are derived from finished sessions, and the
 desktop surface must make history legible enough to plan from in your head.
 
-### Heute vs Statistik
+### Start vs Verlauf
 
-Two surfaces answer the same kinds of question at different **time horizons**,
-and that is the whole rule for deciding where a new figure belongs:
+There is no Statistik page any more (M3, D7-C, 2026-09-25): its questions are
+answered where the lifter already reads, and a figure's **time horizon** is
+still the whole rule for where it belongs:
 
-- **Heute is windowed.** 28-day muscle balance, eight weeks of tonnage, the
-  last five workouts, what is stalling now. It answers *what should I do
-  today*.
-- **Statistik has no window.** Cumulative totals, all-time progression per
-  exercise, behavioural patterns, every record ever. It answers *what does my
-  training say about me*.
+- **Start is about now.** "Fortschritt" — the lifts going up, each with the
+  exercise page's pace and the workouts it was fitted through, and the lifts
+  standing still —, eight weeks of tonnage, four weeks of sets per muscle
+  group. It answers *komme ich voran — and what do I do today*.
+- **Verlauf is about everything.** Every workout; the whole history in a
+  sentence (how many, since when, how much, the longest break); the months as
+  an index with their tonnage and records; the biggest workout; every record,
+  named, under "Nur Rekorde". It answers *what has my training been*.
 
 Ask of any new statistic: is this about now, or about everything? The answer
 picks the page — and the module, since `stats.py` serves the first and
-`features/gym/analytics.py` the second. Statistik is desktop-only: it is
-composed for the width and is not in the mobile tab bar, though its URL stays
-reachable.
+`features/gym/analytics.py` Verlauf's aggregates. A figure no decision hangs
+on is not added to either: Statistik's behavioural patterns (dayparts,
+weekdays, rep ranges, fatigue, rest habits) went with it. `/gym/statistik`
+answers 301 to Verlauf.
 
 ## Positioning
 
@@ -267,24 +271,19 @@ designed in rather than argued about:
 - **Finished-session debrief** — the one place a full-intensity moment is
   earned, because it is the end of the thing that was accumulating.
 
-**Statistik stays desktop-only** and is not in the mobile tab bar; its URL stays
-reachable, and opening it on a phone renders single-column rather than
-redirecting — cramped is better than hidden, but it must not be *broken*, so
-the multi-column layout needs a real fallback rather than horizontal scroll.
+What Statistik's own redesign had decided lives on in the pages that took
+over its questions (M3):
 
-Three changes it carries beyond a restyle:
-
-- **It leads with a sentence, not a table.** The page answers what the numbers
-  say before it shows them.
-- **The record timeline is bounded by year bands**, current year open and older
-  years folded with their counts. It ran unbounded at 47 rows and growing,
-  roughly two thirds of the page height, and no row was ever removed to fix it.
-- **A career strip**: one bar per month since the first workout, height =
-  tonnage, with record months, deload months and gaps marked. This is the one
-  figure an all-time page should obviously have and did not — Heute holds eight
-  weeks, and nothing held the whole history. It needs a new
-  `analytics.monthly_tonnage(rows)`; it belongs in `analytics.py` rather than
-  `stats.py` by the time-horizon rule above.
+- **They lead with a sentence, not a table.** Start's Fortschritt says how
+  many lifts go up and how many stand still, Verlauf how many workouts since
+  when, how much and the longest break — before any row.
+- **Records are named where they were set.** Under "Nur Rekorde" each workout
+  lists its records — the set, the estimated max, the gain on the best it beat
+  — in place of an ever-growing timeline.
+- **The career strip is Verlauf's month index**: one bar per month since the
+  first workout, height = tonnage, the deload share hatched, a month without a
+  workout a stub, the record count on each bar — and each month jumps to its
+  band. `analytics.monthly_tonnage` serves it, by the time-horizon rule above.
 
 ### 4.7 Anti-references
 

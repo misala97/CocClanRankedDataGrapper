@@ -129,8 +129,10 @@ runnable source of truth; gym.css's header carries the arithmetic).
 - **Gold — RECORD** (`--record` #F0B429 / #FFC861): a previous best beaten.
   One flare, then it settles. Rare by construction; `--record-ink` (#6B4400)
   for gold as text on light surfaces, where raw gold measures 1.9:1.
-- **Cold Cyan — ATTENTION** (`--stall` #0C7382 / #5FDDEC): stagnation, always
-  accompanied by the word ("Stagniert", "N ohne PR").
+- **Cold Cyan — ATTENTION** (`--stall` #0C7382 / #7CC7CF): stagnation, always
+  accompanied by the word ("Stagniert", "N ohne PR"). The dark value is muted
+  from the ramp's #5FDDEC, whose electric cyan on plum read as a generic AI
+  palette and outshone the card (G-112, M3).
 
 ### Tertiary
 - **Pale Rose — LOGGED** (`--done` #8B3A62 / #F1C8DD): a completed set, a

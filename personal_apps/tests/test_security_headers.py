@@ -35,7 +35,7 @@ def _assert_every_inline_script_carries_the_nonce(response):
         assert f'nonce="{nonce}"' in attrs, f'an inline script without the nonce: <script{attrs}>'
 
 
-@pytest.mark.parametrize('path', ['/gym', '/gym/verlauf', '/gym/uebungen', '/gym/statistik'])
+@pytest.mark.parametrize('path', ['/gym', '/gym/verlauf', '/gym/uebungen'])
 def test_every_inline_script_on_a_gym_page_carries_the_nonce(client, path):
     response = client.get(path)
     assert response.status_code == 200

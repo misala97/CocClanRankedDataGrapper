@@ -99,40 +99,20 @@ def test_verlauf_renders(client):
     assert client.get('/gym/verlauf').status_code == 200
 
 
-def test_statistik_ships_every_progression_window(client):
-    """Four windows, precomputed. The client swaps between them without a
-    round trip, so they have to arrive together."""
-    from conftest import embedded_payload
+def test_statistik_is_gone_and_its_address_lands_on_verlauf(client):
+    """M3 (D7-C): Start says what moves and what stands still, Verlauf what
+    the whole history holds. A bookmark or an installed shortcut still lands
+    somewhere -- permanently, not on a 404."""
     response = client.get('/gym/statistik')
-    assert response.status_code == 200
-    payload = embedded_payload(response.get_data(as_text=True))
-    assert [block['key'] for block in payload['progression']] == ['all', '6m', '3m', '30d']
+    assert response.status_code == 301
+    assert response.headers['Location'].endswith('/gym/verlauf')
 
 
-def test_statistik_no_longer_caps_the_progression_list(client):
-    """The cap was hiding lifts: eight up, unbounded down. Every exercise the
-    ranking qualifies belongs in the all-time block."""
-    from conftest import embedded_payload
-    response = client.get('/gym/statistik')
-    payload = embedded_payload(response.get_data(as_text=True))
-    all_block = next(b for b in payload['progression'] if b['key'] == 'all')
-    assert len(all_block['entries']) > 8, (
-        'this database should hold more than eight ranked lifts')
-
-
-def test_every_progression_window_scales_its_own_bars(client):
-    """bar_pct is a share of that window's biggest move. Scaling every window
-    against the all-time widest would draw a narrow window as a row of stubs."""
-    from conftest import embedded_payload
-    response = client.get('/gym/statistik')
-    payload = embedded_payload(response.get_data(as_text=True))
-    for block in payload['progression']:
-        if block['entries']:
-            assert max(entry['bar_pct'] for entry in block['entries']) == 50.0, block['key']
-
-
-def test_statistik_renders(client):
-    assert client.get('/gym/statistik').status_code == 200
+@pytest.mark.parametrize('path', ['/gym', '/gym/verlauf', '/gym/uebungen'])
+def test_no_page_offers_statistik_any_more(client, path):
+    html = client.get(path).get_data(as_text=True)
+    assert '/gym/statistik' not in html
+    assert '>Statistik<' not in html
 
 
 # Every row is everyone's since the one list (2026-09-23), so every page is

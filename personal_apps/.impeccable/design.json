@@ -16,7 +16,7 @@
                   "tonalRamp": ["#2A0F1E", "#4A1C36", "#6B2A4C", "#8B3A62", "#A75B80", "#C384A2", "#DBAEC4", "#F1C8DD"]},
       "record":  {"role": "secondary", "displayName": "Gold — RECORD", "canonical": "#F0B429", "dark": "#FFC861",
                   "tonalRamp": ["#3A2600", "#6B4400", "#9C6710", "#C68C1C", "#F0B429", "#F6C554", "#FBD98A", "#FFEDC2"]},
-      "stall":   {"role": "secondary", "displayName": "Cold Cyan — ATTENTION", "canonical": "#0C7382", "dark": "#5FDDEC",
+      "stall":   {"role": "secondary", "displayName": "Cold Cyan — ATTENTION", "canonical": "#0C7382", "dark": "#7CC7CF",
                   "tonalRamp": ["#04262C", "#0A4650", "#0C7382", "#1B96A6", "#3BB6C6", "#5FDDEC", "#93E9F3", "#CCF6FA"]}
     },
     "typographyMeta": {
@@ -38,7 +38,7 @@
     ],
     "breakpoints": [
       {"name": "mobile-first", "value": "390px", "purpose": "Primary design viewport (390×844)."},
-      {"name": "desktop", "value": "900px", "purpose": "Multi-column compositions (Statistik, Start read columns)."}
+      {"name": "desktop", "value": "900px", "purpose": "Multi-column compositions (Start read columns, Übungen groups, the exercise page)."}
     ]
   },
   "components": [

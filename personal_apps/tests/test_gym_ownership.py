@@ -83,7 +83,7 @@ def two_users():
         db.session.commit()
 
         # A second, FINISHED session for the owner. The pages that list or
-        # aggregate history (verlauf/statistik/uebungen) all filter to
+        # aggregate history (verlauf/uebungen) all filter to
         # finished_at IS NOT NULL, so the unfinished `workout` above -- kept
         # active on purpose for the active-session tests below -- is invisible
         # to every one of them. Without a finished sibling, their leak
@@ -503,7 +503,6 @@ FOREIGN_WEIGHTS = ('123.5', '123,5')
 LEAKY_PAGES = [
     '/gym',
     '/gym/verlauf',
-    '/gym/statistik',
     # Weak coverage: with no ids param the export payload is empty before any
     # owner filter runs, so this case passes vacuously. The case with teeth is
     # /gym/export?ids=<foreign_session_id>, which is not exercised here.

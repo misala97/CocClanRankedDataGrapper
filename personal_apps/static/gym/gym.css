@@ -123,8 +123,8 @@
     --record-ink:#FFC861;
     --on-record: #2A1D00;
 
-    --stall:     #5FDDEC;
-    --stall-ink: #5FDDEC;
+    --stall:     #7CC7CF;
+    --stall-ink: #7CC7CF;
     --on-stall:  #04262C;
 
     /* No glow in dark (G-112): the confirm and "Starten" sit on their plane
@@ -136,7 +136,7 @@
     --lift:        0 2px 4px rgba(0, 0, 0, .40), 0 14px 34px -18px rgba(0, 0, 0, .85);
     --wash-live:   rgba(255, 122, 77, .14);
     --wash-record: rgba(255, 200, 97, .14);
-    --wash-stall:  rgba(95, 221, 236, .14);
+    --wash-stall:  rgba(124, 199, 207, .14);
     --art-plate:   #D6CEDB;
     --art-dim:     brightness(.9);
   }
@@ -164,11 +164,11 @@ html[data-theme="dark"] {
   --live:#FF7A4D; --live-ink:#FF7A4D; --live-deep:#D2411A; --live-hi:#FF9670; --on-live:#2A0A00;
   --done:#F1C8DD; --done-ink:#F1C8DD; --on-done:#2A1233;
   --record:#FFC861; --record-ink:#FFC861; --on-record:#2A1D00;
-  --stall:#5FDDEC; --stall-ink:#5FDDEC; --on-stall:#04262C;
+  --stall:#7CC7CF; --stall-ink:#7CC7CF; --on-stall:#04262C;
   --glow-live:0 0 0 0 transparent;
   --glow-record:0 10px 26px -14px rgba(255,200,97,.55);
   --lift:0 2px 4px rgba(0,0,0,.40), 0 14px 34px -18px rgba(0,0,0,.85);
-  --wash-live:rgba(255,122,77,.14); --wash-record:rgba(255,200,97,.14); --wash-stall:rgba(95,221,236,.14);
+  --wash-live:rgba(255,122,77,.14); --wash-record:rgba(255,200,97,.14); --wash-stall:rgba(124,199,207,.14);
   --art-plate:#D6CEDB; --art-dim:brightness(.9);
 }
 
@@ -671,7 +671,7 @@ label.label {
    _nav.html applies this rather than omitting the markup, so the bar is still
    in the DOM for the keyboard order it already had. */
 /* Focus mode means focus mode at every width. .topbar was left out, so the
-   full Start/Übungen/Verlauf/Statistik nav rendered above a live workout on
+   full Start/Übungen/Verlauf nav rendered above a live workout on
    desktop -- on the one screen PRODUCT.md 4.6 defines as "no tab bar, one way
    back". The back chevron in .session-top is that one way back. */
 body.is-focus .tabbar, body.is-focus .nav-footer, body.is-focus .topbar { display: none; }
@@ -704,7 +704,7 @@ body.is-focus .tabbar, body.is-focus .nav-footer, body.is-focus .topbar { displa
 .topbar { display: none; }
 @media (min-width: 900px) {
   .tabbar { display: none; }
-  /* Sticky, because it was not: Verlauf and Statistik scroll for thousands of
+  /* Sticky, because it was not: Verlauf scrolls for thousands of
      pixels and the desktop shell had NO persistent navigation once you left
      the top of the document -- neither the bar nor the resume strip, which the
      rule below calls "always reachable". */
@@ -893,9 +893,13 @@ body.is-focus .tabbar, body.is-focus .nav-footer, body.is-focus .topbar { displa
 .stat__delta.is-stall { color:  var(--stall-ink); }
 
 /* horizontal bar (muscle-group balance): fixed label + track + tabular count */
-.hbar { display: grid; grid-template-columns: minmax(0, 5rem) minmax(0, 1fr) auto; gap: var(--sp-2); align-items: center; }
+/* A fixed count column: with `auto` each bar's grid sized its own, so an
+   "18" row's track ended short of a "9" row's and the lengths did not
+   compare. */
+.hbar { display: grid; grid-template-columns: minmax(0, 5rem) minmax(0, 1fr) 3ch; gap: var(--sp-2); align-items: center; }
+.sec__title + .hbar { margin-top: var(--sp-3); }
 .hbar + .hbar { margin-top: var(--sp-2); }
-.hbar__name { font-family: var(--font-mono); font-size: var(--t-meta); color: var(--dim); letter-spacing: 0.03em; }
+.hbar__name { font-size: var(--t-meta); color: var(--dim); overflow-wrap: anywhere; }
 /* Magnitude is --done, the LOGGED colour: these bars count work already put in.
    They filled with --edge-hi before, a neutral that says "inert" -- which is
    what made the charts read as grey furniture next to the rest of the page.
@@ -911,7 +915,7 @@ body.is-focus .tabbar, body.is-focus .nav-footer, body.is-focus .topbar { displa
   background: var(--done); transition: inline-size var(--dur-3) linear;
 }
 .hbar__fill.is-stall { background: var(--stall); }   /* under-trained group */
-.hbar__val { font-family: var(--font-display); font-weight: var(--w-bold); font-variant-numeric: tabular-nums; font-size: var(--t-name); text-align: right; color: var(--dim); }
+.hbar__val { font-family: var(--font-display); font-weight: var(--w-max); font-variant-numeric: tabular-nums; font-size: var(--t-body); text-align: right; color: var(--ink); }
 
 /* vertical bars (weekly tonnage): the current, partial week is lit blue */
 .vbars { display: flex; align-items: flex-end; gap: 6px; block-size: 108px; }
@@ -941,8 +945,11 @@ body.is-focus .tabbar, body.is-focus .nav-footer, body.is-focus .topbar { displa
    names by up to 61px on a 1280 viewport: the first label sat under nothing
    and "Jetzt" sat to the right of the "Jetzt" bar. */
 .vbars__axis > * { flex: 1; min-inline-size: 0; text-align: center; }
+/* The dates are data, so the 13px floor (D11, as the M3 mock sets them): the
+   body face with tabular figures, not the 11px mono of a tick mark. */
 .vbars__axis { display: flex; gap: 6px; margin-top: var(--sp-1);
-  font-family: var(--font-mono); font-size: var(--t-micro); color: var(--unlit); letter-spacing: 0.04em; }
+  font-family: var(--font-body); font-size: var(--t-meta); color: var(--unlit); letter-spacing: 0;
+  font-variant-numeric: tabular-nums; }
 /* Each label must be able to shrink below its own min-content, or eight dates
    set a floor the viewport cannot honour once the text is scaled.
 
@@ -1460,19 +1467,13 @@ a.row:active, a.row__main:active { transform: scale(0.99); }
    own height; the routine edit POPOVER is absolutely positioned and must not
    animate height at all -- it rises and fades like the overlay it is.
 
-   Statistik's year bands (.year) take the inline treatment. It is the ONLY
-   motion that page gets, deliberately: it is read, not operated, and the one
-   thing on it that changes state is a band opening. The bars are not swept in
-   on load -- the product register bans page-load choreography outright, and a
-   career strip that draws itself is the clearest possible case of it.
    ============================================================================ */
 
 @supports (interpolate-size: allow-keywords) {
   :root { interpolate-size: allow-keywords; }
   .meta-edit::details-content,
   .replace::details-content,
-  .set-correct::details-content,
-  .year::details-content {
+  .set-correct::details-content {
     block-size: 0;
     overflow: hidden;
     transition: block-size var(--dur-3) var(--ease-out),
@@ -1480,23 +1481,12 @@ a.row:active, a.row__main:active { transform: scale(0.99); }
   }
   .meta-edit[open]::details-content,
   .replace[open]::details-content,
-  .set-correct[open]::details-content,
-  .year[open]::details-content { block-size: auto; }
+  .set-correct[open]::details-content { block-size: auto; }
 }
 
 @keyframes disclosure-pop {
   from { opacity: 0; transform: translateY(-6px) scale(0.98); }
 }
-
-/* ============================================================================
-   STATISTIK (Athletik-era) -- REMOVED
-   ----------------------------------------------------------------------------
-   .statistik__head, .statistik__finding(--quiet), .werk, .werk__item,
-   .statistik__cols, .statistik__zone, .prog-table, .spark-cell, .spark lived
-   here. The Puls rebuild replaced every one of them (.lede, .totals, .career,
-   .prog, .read, .rec -- see STATISTIK further down) and no template referenced
-   any of them afterwards; the dead-Athletik sweep missed this block.
-   ============================================================================ */
 
 /* ============================================================================
    REDUCED MOTION  ·  disables the flare, the fills, and every transition
@@ -1740,9 +1730,8 @@ button.pic { cursor: zoom-in; }
    particle inside a 22px-rounded panel. Animating opacity on the root is
    fine: that makes a stacking context, not a containing block.
 
-   Named in full, NOT `.rec`: that class is Verlauf's record row, and
-   `.rec__name` is Statistik's. A three-letter prefix here would have given
-   every one of them `position: absolute; inset: 0`. */
+   Named in full, NOT `.rec`: a three-letter prefix here would give any
+   later row of that name `position: absolute; inset: 0`. */
 .record-takeover {
   position: absolute; inset: 0; z-index: 3; display: grid; place-items: center;
   border-radius: var(--r-panel); padding: var(--sp-4);
@@ -3141,15 +3130,96 @@ summary.sheet-row::-webkit-details-marker { display: none; }
   margin-top: var(--sp-3); font-size: var(--t-sm); color: var(--unlit); line-height: 1.5;
 }
 
-/* The scale the tonnage bars are drawn against. Named, because the bars carry
-   no other number. */
-.vbars__peak {
-  display: flex; align-items: baseline; gap: var(--sp-2);
-  margin-bottom: var(--sp-3); font-size: var(--t-meta); color: var(--unlit);
-}
+/* The scale the tonnage bars are drawn against, as a sentence: named,
+   because the bars carry no other number. Block, not flex -- the flex gap put
+   a space before its comma. */
+.vbars__peak { margin: var(--sp-2) 0 var(--sp-3); font-size: var(--t-sm); color: var(--dim); }
 .vbars__peak b {
-  font-family: var(--font-display); font-weight: var(--w-bold); color: var(--ink);
+  font-family: var(--font-display); font-weight: var(--w-max); color: var(--ink);
   font-variant-numeric: tabular-nums;
+}
+/* A week without a workout is a baseline, not a 3px bar that reads as "a
+   little": the height is the datum. */
+.vbar.is-zero { background: none; box-shadow: inset 0 -2px 0 var(--edge-hi); }
+
+/* ---- the reading block (M3, D11): heads a step under the page name, the
+   answer first as a sentence, no eyebrows ---- */
+.sec--read { margin-top: var(--sp-8); }
+.sec__title {
+  display: flex; align-items: baseline; flex-wrap: wrap; gap: 0 var(--sp-2); margin: 0;
+  font-family: var(--font-display); font-size: 1.125rem; font-weight: var(--w-max);
+  letter-spacing: -0.02em; line-height: 1.2; color: var(--ink); text-wrap: balance;
+}
+/* the scope of the figures below (8 Wochen, letzte 4 Wochen): quiet, beside */
+.sec__scope {
+  font-family: var(--font-body); font-size: var(--t-sm); font-weight: var(--w-semi);
+  letter-spacing: 0; color: var(--unlit); font-variant-numeric: tabular-nums;
+}
+.sec__lede {
+  margin: var(--sp-2) 0 0; max-inline-size: 60ch;
+  font-size: var(--t-sm); line-height: 1.5; color: var(--dim); text-wrap: pretty;
+}
+.sec__lede b { color: var(--ink); font-weight: var(--w-bold); font-variant-numeric: tabular-nums; }
+/* The two halves of one question: a quiet name over each list, the count
+   beside it -- two levels, section heads, then list names. */
+.sec__sub {
+  display: flex; align-items: baseline; gap: var(--sp-2); margin: var(--sp-6) 0 0;
+  font-family: var(--font-body); font-size: var(--t-sm); font-weight: var(--w-semi);
+  letter-spacing: 0; line-height: 1.3; color: var(--dim);
+}
+.sec__lede + .sec__sub { margin-top: var(--sp-5); }
+.sec__subn { color: var(--unlit); font-variant-numeric: tabular-nums; }
+.sec__sub + .stall-note { margin-top: var(--sp-2); }
+/* A heading, not an eyebrow: sentence case in the body face. Beats
+   `.sec__head h2`, which only resets the UA margin. */
+.sec__head > .sec__kick {
+  margin: 0; font-family: var(--font-body); font-size: var(--t-sm);
+  font-weight: var(--w-semi); letter-spacing: 0; text-transform: none; color: var(--dim);
+}
+.sec__kick-n { font-size: var(--t-sm); font-weight: var(--w-semi); color: var(--unlit); }
+
+/* A list of link rows. A link row is rounded for its tap wash, which bent a
+   shared border-top into a curve at both ends: a straight hairline instead. */
+.rlist { margin-top: var(--sp-2); }
+.rlist > .row + .row { position: relative; border-top: 0; padding-top: calc(var(--sp-3) + 1px); }
+.rlist > .row + .row::before {
+  content: ""; position: absolute; inset-inline: 0; inset-block-start: 0;
+  block-size: 1px; background: var(--edge);
+}
+.rlist .row__meta { color: var(--dim); }
+.rlist__more { gap: var(--sp-1); margin-top: var(--sp-1); }
+.rlist__more .icon { inline-size: 14px; block-size: 14px; }
+/* the word under a trailing figure: "zuletzt", "im Monat" */
+.row__k { font-size: var(--t-meta); color: var(--unlit); white-space: nowrap; }
+/* Steht still: the state hue carries the count, and the word is there. */
+.stall-ink { color: var(--stall-ink); font-weight: var(--w-semi); }
+
+/* A lift going up: the pace the exercise page names, its workouts drawn, the
+   figure last. A grid, so the drawings line up down the list. */
+.row.prog {
+  display: grid; grid-template-columns: minmax(0, 1fr) 56px 4.75rem;
+  align-items: center; column-gap: var(--sp-3);
+}
+.prog__spark { display: block; inline-size: 56px; block-size: 26px; overflow: visible; }
+.prog__spark polyline {
+  fill: none; stroke: var(--done); stroke-width: 2; stroke-linecap: round; stroke-linejoin: round;
+}
+.prog__spark circle { fill: var(--done); }
+.prog__trend { display: flex; flex-direction: column; align-items: flex-end; }
+.prog__v {
+  font-family: var(--font-display); font-size: var(--t-body); font-weight: var(--w-max);
+  letter-spacing: -0.02em; color: var(--done-ink); font-variant-numeric: tabular-nums; white-space: nowrap;
+}
+.prog__v small, .gain small {
+  font-family: var(--font-body); font-size: var(--t-meta); font-weight: var(--w-semi);
+  letter-spacing: 0; margin-inline-start: 2px;
+}
+.prog__v small { color: var(--dim); }
+/* What a record gained: the record hue as text, not a column of gold chips
+   (the all-records rule on the debrief) -- every line it stands on is one. */
+.gain {
+  font-family: var(--font-display); font-size: var(--t-body); font-weight: var(--w-max);
+  letter-spacing: -0.02em; color: var(--record-ink); font-variant-numeric: tabular-nums; white-space: nowrap;
 }
 
 /* Destructive, and quieter than the thing that starts a workout. .btn--stall
@@ -3335,29 +3405,15 @@ summary.sheet-row::-webkit-details-marker { display: none; }
 .stall-note b { color: var(--stall-ink); font-weight: var(--w-bold); }
 .stall-note__lifts { display: block; margin-top: 3px; font-size: var(--t-meta); color: var(--unlit); }
 
-/* "zu wenig" under the count: the word, not just the colour (4.2) */
-.hbar__val small {
-  display: block; font-size: var(--t-micro); font-weight: var(--w-semi);
+/* "zu wenig" under the group's name: the word, not just the colour (4.2) --
+   and not under the count, whose column is one fixed width. */
+.hbar__name small {
+  display: block; font-size: var(--t-meta); font-weight: var(--w-semi);
   color: var(--stall-ink); letter-spacing: 0;
 }
 
 .sec__sp { flex: 1; }
 
-/* The Fortschritt window picker. Sits in the section head where a static
-   caption used to, so it inherits that row's alignment; the pressed state is
-   a fill, because a control with four options has to say which one is live
-   without relying on colour alone. */
-.winsel { display: flex; gap: 2px; }
-.winsel__b {
-  border: 0; background: transparent; cursor: pointer;
-  font: inherit; font-size: var(--t-micro); font-weight: var(--w-semi);
-  letter-spacing: 0.06em; text-transform: uppercase;
-  color: var(--unlit); padding: var(--sp-1) var(--sp-2);
-  border-radius: 999px; min-block-size: var(--tap);
-}
-.winsel__b:hover { color: var(--ink); }
-.winsel__b[aria-pressed="true"] { background: var(--raised); color: var(--ink); }
-.winsel__b:focus-visible { outline: 2px solid var(--live); outline-offset: 2px; }
 .sec__more {
   font-size: var(--t-meta); font-weight: var(--w-semi); color: var(--dim);
   display: inline-flex; align-items: center; min-block-size: var(--tap);
@@ -3381,18 +3437,145 @@ summary.sheet-row::-webkit-details-marker { display: none; }
 /* flex-wrap, because at 200% browser text zoom the h1 plus "Exportieren"
    overflowed the line box and pushed the whole document into horizontal
    scroll -- measured scrollWidth 501 on a 390 viewport, with the button
-   clipped to "Expo".
-
-   margin-bottom moved here from the Athletik-era block that was swept with
-   this page: it was the head's only bottom margin and would have gone with
-   its dead neighbours. */
+   clipped to "Expo". No bottom margin: the lede sits close under the page
+   name, and whatever follows keeps its own. */
 .verlauf__head {
   display: flex; align-items: baseline; flex-wrap: wrap;
   gap: var(--sp-1) var(--sp-3);
-  margin-bottom: var(--sp-4);
   padding: var(--sp-5) var(--sp-4) 0;
 }
+/* The hit count beside Übungen's h1, which borrows this head. Verlauf's own
+   count became the hits line (M3). */
 .verlauf__count { font-size: var(--t-sm); color: var(--unlit); font-variant-numeric: tabular-nums; }
+/* The whole history in a sentence under the page name: Statistik's lede,
+   demoted from a 30px headline -- where no decision hangs on a number, the
+   number is prose (D11). */
+.verlauf__lede {
+  margin: var(--sp-2) var(--sp-4) 0; max-inline-size: 60ch;
+  font-size: var(--t-sm); line-height: 1.5; color: var(--dim); text-wrap: pretty;
+}
+.verlauf__lede b, .mindex__cap b, .verlauf__hits b {
+  color: var(--ink); font-weight: var(--w-bold); font-variant-numeric: tabular-nums;
+}
+
+/* ---- the month index: Statistik's career strip, one link per month ---- */
+.mindex {
+  margin: var(--sp-5) var(--sp-4) 0; padding: var(--sp-4);
+  border-radius: var(--r-panel); background: var(--chassis);
+}
+.mindex__cap { margin: 0; font-size: var(--t-sm); line-height: 1.5; color: var(--dim); text-wrap: pretty; }
+/* Fit to the width while each month keeps a 44px column; past about seven
+   months the floor wins and the strip scrolls sideways instead of clipping
+   (G-025, G-046) -- the page opens it at the newest month. */
+.mindex__bars {
+  display: flex; margin: var(--sp-3) 0 0; padding: 0; list-style: none;
+  overflow-x: auto; overscroll-behavior-x: contain; scrollbar-width: none;
+}
+.mindex__bars::-webkit-scrollbar { display: none; }
+/* With no scrollbar, the strip has to SAY it scrolls (G-046): the edge with
+   months out of view fades. It opens at the newest, so that is the start. */
+.mindex__bars[data-more="start"] {
+  -webkit-mask-image: linear-gradient(to right, transparent, #000 24px);
+          mask-image: linear-gradient(to right, transparent, #000 24px);
+}
+.mindex__bars[data-more="end"] {
+  -webkit-mask-image: linear-gradient(to left, transparent, #000 24px);
+          mask-image: linear-gradient(to left, transparent, #000 24px);
+}
+.mindex__bars[data-more="both"] {
+  -webkit-mask-image: linear-gradient(to right, transparent, #000 24px, #000 calc(100% - 24px), transparent);
+          mask-image: linear-gradient(to right, transparent, #000 24px, #000 calc(100% - 24px), transparent);
+}
+.mindex__bars > li { flex: 1 0 var(--tap); display: flex; }
+.mindex__mo {
+  flex: 1; display: flex; flex-direction: column;
+  border-radius: var(--r-inset); color: var(--dim); text-decoration: none;
+  -webkit-tap-highlight-color: transparent;
+}
+a.mindex__mo:active { background: var(--raised); }
+.mindex__mo:focus-visible { outline: 2px solid var(--ink); outline-offset: 2px; }
+/* A fixed plot, so every bar stands on the same baseline and the count can
+   ride on the tallest one. */
+.mindex__plot {
+  display: flex; flex-direction: column; align-items: center; justify-content: flex-end; gap: 4px;
+  block-size: calc(60px + 22px); border-bottom: 1px solid var(--edge);
+}
+.mindex__rec {
+  display: inline-flex; align-items: center; gap: 4px; line-height: 18px;
+  font-size: var(--t-meta); font-weight: var(--w-bold); color: var(--record-ink);
+  font-variant-numeric: tabular-nums;
+}
+.mindex__bar {
+  inline-size: min(100% - 16px, 36px); min-block-size: 2px;
+  border-radius: 4px 4px 1px 1px; background: var(--done);
+}
+/* Only the deload SHARE is hatched, from the foot (G-026); a month without a
+   workout is a stub, not a hole; the running month is an outline, because it
+   is still filling. */
+.mindex__bar.is-deload {
+  background-image: repeating-linear-gradient(135deg, transparent 0 3px, var(--chassis) 3px 6px);
+  background-size: 100% var(--deload-share, 100%); background-position: bottom; background-repeat: no-repeat;
+}
+.mindex__bar.is-gap { background: var(--edge-hi); }
+.mindex__bar.is-current { background: transparent; box-shadow: inset 0 0 0 1.5px var(--done); }
+/* Underlined: the one cue that the months are links that jump down the page.
+   A month with nothing to show under the search or the filter is no link,
+   and loses the underline with it. */
+.mindex__m {
+  padding-block: var(--sp-2) var(--sp-1); text-align: center;
+  font-size: var(--t-meta); font-weight: var(--w-semi); color: var(--dim);
+  text-decoration: underline; text-decoration-color: var(--edge-hi);
+  text-decoration-thickness: 1px; text-underline-offset: 3px;
+  /* one line: a January's "Jan ’27" wrapping would lift its bar off the
+     shared baseline */
+  white-space: nowrap;
+}
+.mindex__y { font-weight: var(--w-body); }
+.mindex__mo.is-off .mindex__m { text-decoration: none; color: var(--unlit); }
+/* two columns: four keys in a row wrapped one orphan onto a second line */
+.mindex__key {
+  display: grid; grid-template-columns: repeat(2, max-content); gap: var(--sp-1) var(--sp-6);
+  margin: var(--sp-2) 0 0; padding: 0;
+  list-style: none; font-size: var(--t-meta); line-height: 1.5; color: var(--dim);
+}
+.mindex__key li { display: inline-flex; align-items: center; gap: 6px; }
+/* each swatch drawn like the mark it stands for */
+.mindex__sw { display: inline-block; flex: none; inline-size: 10px; block-size: 10px; border-radius: 2px; background: var(--done); }
+.mindex__sw--deload { background: repeating-linear-gradient(135deg, var(--done) 0 2px, var(--chassis) 2px 4px); }
+.mindex__sw--gap { background: var(--edge-hi); }
+.mindex__sw--current { background: transparent; box-shadow: inset 0 0 0 1.5px var(--done); }
+/* The record mark: the index's counts, a row's count, the filter's toggle. */
+.recdot { display: inline-block; flex: none; inline-size: 8px; block-size: 8px; border-radius: 50%; background: var(--record); }
+
+/* ---- search and the one filter ---- */
+.verlauf__find { display: flex; gap: var(--sp-2); margin: var(--sp-4) var(--sp-4) 0; }
+.verlauf__find .searchbar { flex: 1; min-inline-size: 0; margin: 0; padding-inline: var(--sp-3); gap: var(--sp-2); }
+/* Chromium keeps the clear button's room even while the field is empty, and
+   next to the toggle that room cut "Übung…" to "Übung..": it only needs to
+   exist once there is something to clear. */
+.verlauf__find .searchbar__input:placeholder-shown::-webkit-search-cancel-button { display: none; }
+/* A toggle, as tall as the field beside it. Pressed it fills with the record
+   hue and the dot becomes a tick: the state reads by shape as well as colour. */
+.verlauf__only {
+  flex: none; display: inline-flex; align-items: center; gap: var(--sp-2);
+  min-block-size: 52px; padding-inline: var(--sp-3); border: 0; border-radius: var(--r-control);
+  background: var(--chassis); color: var(--ink); cursor: pointer;
+  font: inherit; font-size: var(--t-sm); font-weight: var(--w-semi); white-space: nowrap;
+}
+.verlauf__only[aria-pressed="true"] { background: var(--record); color: var(--on-record); }
+.verlauf__only .icon { inline-size: 16px; block-size: 16px; stroke-width: 2.5; }
+.verlauf__only:focus-visible { outline: 2px solid var(--ink); outline-offset: 2px; }
+/* The h1's count, moved: it only says something while search or the filter
+   narrows the list, so it only shows then (aria-live, as before). */
+.verlauf__hits {
+  margin: var(--sp-3) var(--sp-4) 0; max-inline-size: 60ch;
+  font-size: var(--t-sm); line-height: 1.5; color: var(--dim); text-wrap: pretty;
+}
+/* Collapsed, not hidden: display:none takes an aria-live region out of the
+   accessibility tree, and a screen reader then misses the first count
+   written into it. */
+.verlauf__hits:empty { margin: 0; }
+.export__picked { font-size: var(--t-sm); font-weight: var(--w-semi); color: var(--ink); font-variant-numeric: tabular-nums; }
 .verlauf__act {
   min-block-size: var(--tap); display: inline-flex; align-items: center;
   padding-inline: var(--sp-2); margin-inline-end: calc(var(--sp-2) * -1);
@@ -3474,7 +3657,15 @@ summary.sheet-row::-webkit-details-marker { display: none; }
   border-bottom: 1px solid var(--edge);
   background: var(--ground);
 }
-.month h2.label { margin: 0; }
+/* sentence case, the display face (D11) */
+.month__h {
+  margin: 0; font-family: var(--font-display); font-size: 1.125rem; font-weight: var(--w-max);
+  letter-spacing: -0.02em; line-height: 1.2; color: var(--ink);
+}
+.month__n { font-size: var(--t-sm); font-weight: var(--w-semi); color: var(--unlit); font-variant-numeric: tabular-nums; }
+/* A jump from the index lands the band under the desktop's sticky top bar,
+   not beneath it. */
+@media (min-width: 900px) { .month-group { scroll-margin-top: var(--topbar-h); } }
 /* The month's own totals, quiet: the count beside it is the answer, these are
    the supporting figures. */
 .month__sum {
@@ -3489,8 +3680,7 @@ summary.sheet-row::-webkit-details-marker { display: none; }
 .gap {
   margin: var(--sp-4) var(--sp-4) var(--sp-2);
   display: flex; align-items: center; gap: var(--sp-3);
-  font-size: var(--t-micro); color: var(--unlit);
-  text-transform: uppercase; letter-spacing: var(--track-label);
+  font-size: var(--t-meta); color: var(--unlit);
 }
 .gap::before, .gap::after {
   content: ""; flex: 1; block-size: 1px; background: var(--edge);
@@ -3565,17 +3755,49 @@ summary.sheet-row::-webkit-details-marker { display: none; }
 
    Also clipped to one line: a seven-exercise roster per row turns a list into
    paragraphs. */
-.verlauf__row .row__meta { color: var(--dim); }
+.verlauf__row .row__main { flex-basis: 10rem; }
+.verlauf__row .row__meta { color: var(--dim); font-size: var(--t-sm); font-variant-numeric: tabular-nums; }
 .verlauf__row .row__sub {
   /* Size as well as colour. --dim and --unlit sit 9 RGB points apart in the
      light theme (both have to clear AA against a pale field), so a colour-only
      ramp is invisible there -- measured rgb(99,70,116) against rgb(108,83,126).
-     Dropping a step in size carries the hierarchy in both themes. */
-  color: var(--unlit); font-size: var(--t-micro); margin-top: 3px;
+     A step in size carries the hierarchy in both themes: the meta line comes
+     up to 14px, so the roster keeps the 13px floor for data (D11, M3). */
+  color: var(--unlit); font-size: var(--t-meta); margin-top: 3px;
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
 }
+/* Verlauf's tags are data too: the 13px floor (D11, M3). */
+.verlauf .vtag { font-size: var(--t-meta); letter-spacing: 0.01em; padding: 3px 10px; }
 .verlauf__row { padding-block: var(--sp-1); }
 .verlauf__row .row__trail--stack { gap: var(--sp-2); }
+/* The biggest workout: a fact about its load, so filled, the logged hue --
+   not gold, it is no record (D3). */
+.vtag--max { background: var(--done); color: var(--on-done); }
+/* A workout's record count: the record hue as text beside the dot, not a
+   gold chip on most rows. */
+.verlauf__rc {
+  display: inline-flex; align-items: center; gap: 6px; white-space: nowrap;
+  font-size: var(--t-meta); font-weight: var(--w-bold); color: var(--record-ink);
+  font-variant-numeric: tabular-nums;
+}
+
+/* ---- "Nur Rekorde": each record under the workout it happened in ---- */
+/* Indented under its workout, the gain as the one gold thing per line:
+   every line here is a record, so a chip or a dot on each would say nothing
+   (the all-records rule). */
+.recs { margin: 0 var(--sp-4) var(--sp-3) calc(var(--sp-4) * 2); padding: 0; list-style: none; }
+.recs__item {
+  position: relative; display: flex; align-items: center; gap: var(--sp-3);
+  min-block-size: var(--tap); padding-block: var(--sp-2); color: inherit; text-decoration: none;
+  -webkit-tap-highlight-color: transparent;
+}
+.recs__item:focus-visible { outline: 2px solid var(--ink); outline-offset: 2px; border-radius: var(--r-inset); }
+.recs > li + li > .recs__item::before {
+  content: ""; position: absolute; inset-inline: 0; inset-block-start: 0; block-size: 1px; background: var(--edge);
+}
+.recs__main { flex: 1; min-inline-size: 0; display: flex; flex-direction: column; gap: 1px; }
+.recs__name { font-size: var(--t-sm); font-weight: var(--w-semi); line-height: 1.35; color: var(--ink); overflow-wrap: anywhere; }
+.recs__meta { font-size: var(--t-meta); line-height: 1.4; color: var(--dim); font-variant-numeric: tabular-nums; }
 .vol {
   font-family: var(--font-display); font-size: var(--t-body); font-weight: var(--w-max);
   letter-spacing: -0.025em; color: var(--ink); font-variant-numeric: tabular-nums;
@@ -3959,8 +4181,6 @@ summary.sheet-row::-webkit-details-marker { display: none; }
    right now. Inverse ink is unmistakable without spending the NOW hue. */
 .pill.is-on { background: var(--ink); color: var(--chassis); box-shadow: none; }
 
-.chart__legend { grid-column: 2; display: flex; gap: var(--sp-4); margin-top: var(--sp-3); align-items: center; flex-wrap: wrap; }
-
 /* MOTION  ·  the chart reports itself once, in time order
    ----------------------------------------------------------------------------
    Two beats, one event, same rule as the session screen (see the MOTION note
@@ -4008,317 +4228,6 @@ summary.sheet-row::-webkit-details-marker { display: none; }
    that had nothing to do with why the row was a record. */
 .row.is-record .e1rm { color: var(--record-ink); font-weight: var(--w-bold); }
 
-/* ============================================================================
-   STATISTIK  ·  the whole training history (Puls)
-   ----------------------------------------------------------------------------
-   Desktop-composed: this is the one page in the app written for a width a
-   phone does not have. It is not in the mobile tab bar, but the URL stays
-   reachable, so the fallback at the bottom of this block turns it into one
-   readable column rather than 360px of horizontal scroll.
-
-   .stat-cols, not .stat-grid: that name is already the debrief's card grid.
-   ============================================================================ */
-
-.stat-page { max-inline-size: var(--wrap-max); margin-inline: auto; padding: var(--sp-6) var(--sp-8) var(--sp-16); }
-
-/* ---- the answer, then the numbers that make it ---- */
-.lede { display: flex; align-items: flex-end; gap: var(--sp-8); }
-.lede__main { flex: 1; min-inline-size: 0; }
-/* --dim, not --live-ink: this is a date range, and the NOW hue is reserved
-   for the single thing happening right now (4.2). Statistik spent it seven
-   times over -- at which point it stops meaning NOW and becomes the brand
-   colour, the exact failure 4.0 records Athletik being rejected for. */
-.lede__kick { display: block; font-size: var(--t-sm); font-weight: var(--w-bold); color: var(--dim); }
-.lede__h {
-  font-family: var(--font-display); font-size: 2.75rem; font-weight: var(--w-max);
-  letter-spacing: -0.04em; line-height: 1.06; margin-top: 6px;
-  text-wrap: balance; max-inline-size: 22ch;
-}
-/* Emphasis on a reading page is a settled fact, not a NOW: --done-ink (the
-   LOGGED family as text) carries it. Same rule as .read__a em below. */
-.lede__h em { font-style: normal; color: var(--done-ink); }
-.lede__aside {
-  flex: none; text-align: end; font-size: var(--t-sm); color: var(--unlit);
-  line-height: 1.6; padding-bottom: 6px;
-}
-/* The one link in the aside measured 65x24 -- under the app's own floor. */
-.lede__aside a { display: inline-flex; align-items: center; min-block-size: var(--tap); }
-.lede__aside b { color: var(--dim); font-weight: var(--w-bold); }
-/* "Größtes Workout" is a link to that session and measured 62x17. Padding it
-   out to the 24px minimum without disturbing the line it sits in. */
-.lede__aside a {
-  display: inline-flex; align-items: center; min-block-size: 24px;
-  padding-inline: 2px; margin-inline: -2px; border-radius: var(--r-inset);
-}
-
-/* Auto-flow rather than a hardcoded column count: the streak tile only exists
-   once there are enough weeks to claim one, so the strip legitimately holds
-   five figures or six. Pinned at repeat(5, 1fr) the sixth silently wrapped
-   under the first and read as a broken tile. */
-.totals {
-  display: grid; grid-auto-flow: column; grid-auto-columns: 1fr; margin-top: var(--sp-6);
-  background: var(--chassis); border-radius: var(--r-panel); padding: var(--sp-5) 0;
-}
-.total { display: flex; flex-direction: column; align-items: center; gap: 3px; min-inline-size: 0; }
-.total + .total { border-inline-start: 1px solid var(--edge); }
-.total__v {
-  font-family: var(--font-display); font-size: var(--num-md); font-weight: var(--w-max);
-  letter-spacing: -0.04em; line-height: 1; font-variant-numeric: tabular-nums;
-}
-.total__v small {
-  font-family: var(--font-body); font-size: var(--t-sm); font-weight: var(--w-semi);
-  color: var(--dim); letter-spacing: 0;
-}
-
-/* ---- the career strip: one bar per month since the first workout ---- */
-.career { margin-top: var(--sp-8); }
-.career__body { background: var(--chassis); border-radius: var(--r-panel); padding: var(--sp-5) var(--sp-5) var(--sp-4); }
-/* pan-y: a horizontal drag brushes a month range, vertical stays the page's
-   scroll. */
-.months { display: flex; align-items: flex-end; gap: 3px; block-size: 132px; touch-action: pan-y; }
-/* The bars are real <button>s now (keyboard + focus for free), so the UA
-   button chrome has to go. */
-.mo {
-  position: relative; flex: 1; border-radius: 3px 3px 1px 1px; background: var(--done); min-block-size: 2px;
-  appearance: none; border: 0; padding: 0; margin: 0; font: inherit;
-}
-/* No record mark on the bars: a month qualifies if any lift beat its past,
-   so the gold tick sat on every bar and said nothing (G-026). The count is in
-   the readout and the label instead.
-
-   Hatched, not dimmed: the bar's height is the datum, so fading it would read
-   as "no training that month", which is the opposite of what it means. Only
-   the deload SHARE is hatched, from the foot of the bar (G-026): one light
-   workout among twelve used to hatch the whole month. */
-.mo.is-deload {
-  background-image: repeating-linear-gradient(135deg, transparent 0 3px, var(--ground) 3px 6px);
-  background-size: 100% var(--deload-share, 100%);
-  background-position: bottom;
-  background-repeat: no-repeat;
-}
-/* A gap is drawn as a stub rather than nothing, so a break is visible as a
-   break instead of as a hole someone might read as missing data. --edge
-   measured 1.55:1 against the panel in light and 1.24:1 in dark, which is a
-   hole: the stub the comment promises was never actually visible. */
-.mo.is-gap { background: var(--edge-hi); }
-/* The running month is an outline, not a fill: its bar is still filling, and
-   a solid stub at the strip's right edge read as a collapse to zero. */
-.mo.is-current { background: transparent; box-shadow: inset 0 0 0 1.5px var(--done); }
-.key__dot--current { background: transparent; box-shadow: inset 0 0 0 1.5px var(--done); }
-.months__axis {
-  display: flex; margin-top: var(--sp-3); border-top: 1px solid var(--edge); padding-top: var(--sp-2);
-}
-.months__axis .label { flex: 1; }
-.months__axis .label:nth-child(2) { text-align: center; }
-.months__axis .label:last-child { text-align: end; }
-/* Each swatch is drawn like the mark it stands for, so the key can be matched
-   to the chart by looking rather than by remembering. */
-.key__dot--sq { border-radius: 2px; }
-.key__dot--deload {
-  background: var(--done);
-  background-image: repeating-linear-gradient(135deg, transparent 0 2px, var(--ground) 2px 4px);
-  background-size: 100% 50%;   /* a share, like the bars */
-  background-position: bottom;
-  background-repeat: no-repeat;
-}
-.key__dot--gap { background: var(--edge-hi); }
-
-/* ---- two columns: the long readings left, the short answers right ---- */
-.stat-cols { display: grid; grid-template-columns: 2fr 1fr; gap: var(--sp-8); margin-top: var(--sp-8); }
-/* A container, so the row grammar below can answer the COLUMN's width instead
-   of the viewport's. The narrow column is 361px at this page's 1180px cap
-   while the viewport is 1200 -- a viewport query cannot tell those apart, and
-   a .prog row squeezed into 361px has a 15rem name plus a 5rem value, leaving
-   its bar exactly nothing. */
-.stat-col { min-inline-size: 0; container-type: inline-size; }
-/* Rhythm rather than a uniform stack: rows inside a section stay tight (see
-   .prog's --sp-3), sections separate generously. Was four inline
-   marginTop:var(--sp-8) styles in the component, one per section added. */
-.stat-col > section + section { margin-block-start: var(--sp-10); }
-/* A quiet note under a section, the same voice .read__silent has inside a
-   reading card -- named for the section so a ranking does not have to borrow
-   the reading column's class to get it. */
-.sec__note { font-size: var(--t-meta); color: var(--unlit); margin-top: var(--sp-2); line-height: 1.5; }
-
-/* progression: sparkline, diverging bar, the numbers */
-.prog { display: flex; align-items: center; gap: var(--sp-3); padding: var(--sp-3) 0; }
-.prog + .prog { border-top: 1px solid var(--edge); }
-/* The row is 48px but the link inside it was 21 -- the text box only. Eight
-   links on the page, every one under the 44px floor. Stretching the link to
-   the row's full height costs nothing visually (it is still one line of text,
-   vertically centred) and makes the target the row you were aiming at. */
-.prog__name {
-  flex: none; inline-size: 13rem; font-size: var(--t-sm); font-weight: var(--w-semi);
-  color: var(--ink); white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
-  display: flex; align-items: center; min-block-size: var(--tap);
-}
-.prog__spark { flex: none; inline-size: 74px; block-size: 24px; }
-.prog__spark svg { display: block; inline-size: 100%; block-size: 100%; }
-.prog__axis { flex: 1; position: relative; block-size: 22px; min-inline-size: 0; }
-/* 2px on --dim, not 1px on --edge-hi: the centre line of a diverging axis
-   is what makes it readable as diverging, and at 1.79:1 (light) / 2.11:1
-   (dark) it was below the 3:1 floor for a meaningful non-text mark --
-   the axis had to be inferred from the bars. */
-.prog__zero { position: absolute; inset-block: 0; inset-inline-start: 50%; inline-size: 2px; background: var(--dim); }
-.prog__bar { position: absolute; inset-block-start: 4px; block-size: 14px; border-radius: 3px; }
-.prog__bar--up { inset-inline-start: 50%; background: var(--done); }
-.prog__bar--down { inset-inline-end: 50%; background: var(--stall); }
-.prog__bar--flat { inset-inline-start: 0; background: var(--done); }
-.prog__pct {
-  flex: none; inline-size: 5rem; text-align: end; font-family: var(--font-display);
-  font-size: var(--t-sm); font-weight: var(--w-max); letter-spacing: -0.02em;
-  font-variant-numeric: tabular-nums; color: var(--dim);
-}
-/* Two shares and an arrow ("15,6 % → 6,7 %"), where one signed delta fit. */
-.prog__pct--shares { inline-size: 8.5rem; }
-.prog__pct.is-up { color: var(--done-ink); }
-.prog__pct.is-down { color: var(--stall-ink); }
-.prog__meta { flex: none; inline-size: 8rem; text-align: end; font-size: var(--t-micro); color: var(--unlit); }
-.prog--plain .prog__name { inline-size: 15rem; font-weight: var(--w-med); color: var(--dim); }
-
-/* The row, once its column is too narrow to hold name + bar + value on one
-   line: the name takes the full width and the bar drops beneath it, keeping
-   its whole length instead of being crushed to a stub between two fixed
-   columns. Keyed on the container, so it fires for the narrow column of the
-   desktop layout AND for the single column a phone collapses to -- one rule
-   for the same problem, which used to be a viewport media query that could
-   only see the second case. */
-@container (max-width: 560px) {
-  .prog { flex-wrap: wrap; gap: var(--sp-2) var(--sp-3); }
-  .prog__name { inline-size: 100%; }
-  .prog__spark { display: none; }
-  .prog__axis { order: 3; flex-basis: 100%; }
-  .prog__meta { inline-size: auto; flex: 1; text-align: start; }
-  /* A wrapped bar spans the whole column, and nine of them stacked read as a
-     louder chart than the wide ones they sit beside. Dropped here only where
-     the value is a single digit -- "3x" and "5" ARE the magnitude, stated
-     exactly, so the bar was restating them. Tonnage rows keep theirs: 27 t
-     against 24 t is a comparison the numbers alone make you do arithmetic
-     for. */
-  .prog--count .prog__axis { display: none; }
-  .prog--count { padding-block: var(--sp-2); }
-  .prog--count .prog__name { inline-size: auto; flex: 1; }
-}
-
-/* effort: one stacked bar, then the exercises that fill it */
-.stack-bar { display: flex; block-size: 44px; border-radius: 10px; overflow: hidden; gap: 2px; margin-top: var(--sp-1); }
-.stack-bar span { display: block; }
-/* The second carrier beside the opacity ramp -- same hatch the deload bars
-   use, so it reads as texture, not as a new colour. */
-.stack-bar .is-hatched, .key__dot--sq.is-hatched {
-  background-image: repeating-linear-gradient(135deg, transparent 0 3px, var(--ground) 3px 6px);
-}
-.stack-key { display: flex; flex-wrap: wrap; gap: var(--sp-3) var(--sp-5); margin-top: var(--sp-3); margin-bottom: var(--sp-4); }
-
-/* behaviour readouts: a question, an answer, and the evidence under it */
-.read + .read { margin-top: var(--sp-5); padding-top: var(--sp-5); border-top: 1px solid var(--edge); }
-/* --dim, not --unlit. 4.3 defines --unlit as "inert text, content not yet
-   reached", and this is the question the whole block exists to answer --
-   the most important line in it, rendered in the app's inert ink. */
-.read__q { font-size: var(--t-sm); color: var(--dim); }
-.read__a {
-  font-family: var(--font-display); font-size: 1.25rem; font-weight: var(--w-max);
-  letter-spacing: -0.025em; margin-top: 4px; line-height: 1.2;
-}
-.read__a em { font-style: normal; color: var(--done-ink); }
-.read__bars { display: flex; gap: 5px; margin-top: var(--sp-3); justify-content: start; }
-/* Capped, not purely fluid. The gap chart draws only the buckets with enough
-   workouts behind them, so it can come back with two -- and two `flex: 1` bars
-   are 178px slabs that read as a different, louder chart than the four-bar one
-   directly above them. The cap is the width a full row already gives a bar
-   (87px measured at the reading column's 361px), so fewer bars now look like
-   the same chart with bars missing, which is what they are. */
-.rb { flex: 1; min-inline-size: 0; max-inline-size: 88px; }
-/* --edge, not --raised: the track is the 100% reference the fills are read
-   against, and --raised sat at 1.05:1 on the panel -- invisible, so a
-   short bar had nothing to be short against. */
-.rb__track { block-size: 36px; border-radius: 6px; background: var(--edge); display: flex; align-items: flex-end; overflow: hidden; }
-.rb__fill { inline-size: 100%; background: var(--done); border-radius: 6px 6px 0 0; }
-/* No hue for the dominant bucket: dominant means tallest, so the height
-   already says it, and the answer sentence above names it in words. The
-   orange fill here was another decorative NOW. */
-.rb__fill.is-top { background: var(--done); }
-.rb__lbl { display: block; text-align: center; margin-top: 5px; font-size: var(--t-micro); color: var(--unlit); }
-/* Data, so the 13 px floor (D11), in figures that line up bar to bar. */
-.rb__val {
-  display: block; text-align: center; margin-bottom: 4px;
-  font-size: var(--t-meta); font-variant-numeric: tabular-nums; color: var(--dim);
-}
-.read__silent { font-size: var(--t-meta); color: var(--unlit); margin-top: var(--sp-2); line-height: 1.5; }
-
-/* ---- records: year bands, current year open, the rest folded ---- */
-.year { margin-top: var(--sp-4); }
-.year__head {
-  display: flex; align-items: center; gap: var(--sp-2); min-block-size: var(--tap);
-  padding-bottom: var(--sp-2); border-bottom: 1px solid var(--edge);
-  cursor: pointer; list-style: none;
-}
-.year__head::-webkit-details-marker { display: none; }
-.year[open] .group__chev { transform: rotate(90deg); }
-.rec { display: flex; align-items: center; gap: var(--sp-3); padding: var(--sp-3) 0; }
-.rec + .rec { border-top: 1px solid var(--edge); }
-.rec__date { flex: none; inline-size: 5.5rem; font-size: var(--t-meta); color: var(--unlit); font-variant-numeric: tabular-nums; }
-/* The name takes the slack. It used to be `flex: 0 1 auto` with the kind chip
-   carrying `margin-inline-end: auto`, which pushed the value to the far edge
-   and left a ~660px void through the middle of every row on desktop -- the eye
-   had to cross it 57 times to connect a lift to its number. Growing the name
-   instead spends that width on the one thing that can use it. */
-.rec__name {
-  flex: 1 1 auto; min-inline-size: 0; font-size: var(--t-sm); font-weight: var(--w-semi);
-  color: var(--ink); white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
-}
-.rec__val {
-  flex: none; inline-size: 8.5rem; text-align: end; font-family: var(--font-display);
-  font-size: var(--t-sm); font-weight: var(--w-max); color: var(--record-ink);
-  letter-spacing: -0.02em; font-variant-numeric: tabular-nums;
-}
-.rec__val small {
-  display: block; font-family: var(--font-body); font-weight: var(--w-semi);
-  color: var(--unlit); font-size: var(--t-micro); letter-spacing: 0;
-}
-
-/* ============================================================================
-   Statistik is composed for the width and is not in the mobile tab bar, but
-   its URL stays reachable: the route's own contract is that a phone gets this
-   page single-column rather than a redirect, because hiding data someone asked
-   for is worse than showing it cramped. Cramped, though, not broken -- without
-   this the fixed columns push a page-wide horizontal scroll.
-   ============================================================================ */
-@media (max-width: 899px) {
-  .stat-page { padding: var(--sp-5) var(--sp-4) var(--sp-12); }
-  .lede { flex-direction: column; align-items: flex-start; gap: var(--sp-4); }
-  .lede__h { font-size: 1.75rem; max-inline-size: none; }
-  .lede__aside { text-align: start; padding-bottom: 0; }
-  .totals { grid-auto-flow: row; grid-template-columns: 1fr 1fr; row-gap: var(--sp-4); }
-  .total + .total { border-inline-start: 0; }
-  .total:nth-child(2n) { border-inline-start: 1px solid var(--edge); }
-  /* Only an ODD tile count leaves a lonely last one to span the full width.
-     With the streak tile present there are six, they pair off evenly, and
-     spanning the last would strand the fifth beside an empty half. */
-  .total:last-child:nth-child(odd) { grid-column: 1 / -1; }
-  /* The strip keeps a minimum width and scrolls inside its own panel rather
-     than compressing 120 months into 358px. It has to SAY it scrolls, though:
-     46% of it sits off-screen at 390 with no edge, so a reader who never drags
-     simply believes the career is two bars long. The mask fades the trailing
-     edge, which is the affordance. */
-  .career__body { overflow-x: auto; scrollbar-width: thin; }
-  .career__body::-webkit-scrollbar { block-size: 6px; }
-  .career__body::-webkit-scrollbar-thumb { background: var(--edge-hi); border-radius: 3px; }
-  .months, .months__axis {
-    -webkit-mask-image: linear-gradient(to right, #000 calc(100% - 24px), transparent);
-            mask-image: linear-gradient(to right, #000 calc(100% - 24px), transparent);
-  }
-  .months, .months__axis { min-inline-size: 620px; }
-  .stat-cols { grid-template-columns: 1fr; gap: var(--sp-8); }
-  /* .prog's own narrow treatment is a container query now (see above): the
-     single column here is ~358px, so it fires on its own. */
-  .rec { flex-wrap: wrap; }
-  .rec__name { flex: 1; }
-  .rec__kind { margin-inline-end: 0; }
-  .rec__val { inline-size: auto; margin-inline-start: auto; }
-  .stack-bar { block-size: 34px; }
-}
-
 /* =============================== Seitenwechsel ===============================
    Cross-document view transitions: every gym navigation crossfades instead of
    flashing white. Opt-in per document pair, so this only animates between gym
@@ -4346,25 +4255,6 @@ summary.sheet-row::-webkit-details-marker { display: none; }
 @media (prefers-reduced-motion: reduce) {
   @view-transition { navigation: none; }
 }
-
-/* Tap-to-inspect: the fixed readout line under the exercise chart and the
-   career strip. Reserved height, so tapping never shifts the page; the hint
-   is the affordance for marks whose tappability is otherwise invisible. */
-.chart__read {
-  grid-column: 2;
-  margin-block-start: var(--sp-2);
-  min-block-size: 1.4rem;
-  font-size: 0.85rem;
-  color: var(--ink);
-  display: flex; align-items: center; gap: var(--sp-1);
-  flex-wrap: wrap;
-}
-.chart__hint { color: var(--dim); font-size: 0.8rem; }
-.chart__read-tag { margin-inline-start: var(--sp-2); }
-.months .mo { cursor: pointer; }
-.months .mo.is-picked { outline: 2px solid var(--ink); outline-offset: 1px; }
-/* A record row inside the brushed range: a wash, not a stripe. */
-.rec.is-hit { background: var(--raised); border-radius: var(--r-field); padding-inline: var(--sp-2); }
 
 /* A search hit in Verlauf's clipped roster: weight carries it, not a hue --
    and never the UA's yellow. */
