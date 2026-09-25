@@ -139,31 +139,56 @@ def _pick_session_exercise(exercise_id, position=None, user_id=None, exclude_ses
     the reduction forward into every session after it. History is always the
     lifter's own (`user_id`), never a partner's.
     """
+    return _pick_session_exercises([(exercise_id, position)], user_id=user_id,
+                                   exclude_session_id=exclude_session_id)[(exercise_id, position)]
+
+
+def _pick_session_exercises(wanted, user_id=None, exclude_session_id=None):
+    """_pick_session_exercise for several (exercise_id, position) pairs, as
+    {pair: Pick} -- one pool query for all of them. Asked one exercise at a
+    time, the live payload spent two queries per exercise on it, every time
+    it was built (walkthrough G-140). The rules are _pick_session_exercise's
+    and live in _pick_from."""
     if user_id is None:
         user_id = current_user_id()
-    query = (
-        SessionExercise.query
-        .join(WorkoutSession, SessionExercise.session_id == WorkoutSession.id)
-        .filter(
-            SessionExercise.exercise_id == exercise_id,
-            # A set that counts (stats.set_counts): done, with reps.
-            SessionExercise.sets.any((SessionSet.completed == True) & (SessionSet.reps >= 1)),
-            # Never seed from a deload -- see the docstring.
-            WorkoutSession.is_deload == False,
-            WorkoutSession.user_id == user_id,
-        ))
-    if exclude_session_id is not None:
-        query = query.filter(WorkoutSession.id != exclude_session_id)
-    pool = (
-        query
-        .order_by(WorkoutSession.started_at.desc())
-        # Both are read for every row below (started_at for the window, the
-        # sets for the e1RM). Lazily that is two queries per past workout of
-        # this exercise, and a reorder asks this for every row it moves.
-        .options(contains_eager(SessionExercise.session),
-                 selectinload(SessionExercise.sets))
-        .all()
-    )
+    exercise_ids = sorted({exercise_id for exercise_id, _ in wanted})
+    pools = {exercise_id: [] for exercise_id in exercise_ids}
+    if exercise_ids:
+        query = (
+            SessionExercise.query
+            .join(WorkoutSession, SessionExercise.session_id == WorkoutSession.id)
+            .filter(
+                SessionExercise.exercise_id.in_(exercise_ids),
+                # A set that counts (stats.set_counts): done, with reps.
+                SessionExercise.sets.any((SessionSet.completed == True) & (SessionSet.reps >= 1)),
+                # Never seed from a deload -- see _pick_session_exercise.
+                WorkoutSession.is_deload == False,
+                WorkoutSession.user_id == user_id,
+            ))
+        if exclude_session_id is not None:
+            query = query.filter(WorkoutSession.id != exclude_session_id)
+        rows = (
+            query
+            # Newest first; a lift twice in one workout, the later row first,
+            # so the order does not depend on how the rows came back.
+            .order_by(WorkoutSession.started_at.desc(), SessionExercise.id.desc())
+            # Both are read for every row below (started_at for the window,
+            # the sets for the e1RM). Lazily that is two queries per past
+            # workout of the exercise, and a reorder asks this for every row
+            # it moves.
+            .options(contains_eager(SessionExercise.session),
+                     selectinload(SessionExercise.sets))
+            .all()
+        )
+        for row in rows:
+            pools[row.exercise_id].append(row)
+    return {(exercise_id, position): _pick_from(pools[exercise_id], position)
+            for exercise_id, position in wanted}
+
+
+def _pick_from(pool, position):
+    """The pick among one exercise's `pool`, newest first -- the rules in
+    _pick_session_exercise's docstring."""
     if not pool:
         return Pick(None, None, None)
 
@@ -403,7 +428,7 @@ def reseed_for_slot(session_, session_exercise, old_position, new_position, user
     return True
 
 
-def _seeded_suggestion(session_, exercise, position, user_id=None, picked=None):
+def _seeded_suggestion(session_, exercise, position, user_id=None, picked=None, setup=None):
     """The single weight/reps pair the steppers pre-fill with, deload-aware.
 
     The scalar sibling of _seeded_sets, and it honours the deload for exactly
@@ -416,6 +441,9 @@ def _seeded_suggestion(session_, exercise, position, user_id=None, picked=None):
     suggestion is the only number the lifter ever sees. (Mid-session adds used
     to be a second such gap; gym_add_session_exercise seeds a full plan now,
     like every other path that puts an exercise into a session.)
+
+    `setup`: the session owner's Setup for the exercise, when the caller has
+    them all already -- looked up here otherwise.
     """
     if picked is None:
         picked = _pick_session_exercise(exercise.id, position=position, user_id=user_id,
@@ -426,7 +454,8 @@ def _seeded_suggestion(session_, exercise, position, user_id=None, picked=None):
     pct = session_.deload_pct if _deload_applies(session_) else None
     if not pct:
         return last
-    setup = exercise_setup(_owner(session_, user_id), exercise)
+    if setup is None:
+        setup = exercise_setup(_owner(session_, user_id), exercise)
     increment = stats.resolve_increment(setup.weight_increment, exercise.is_unilateral)
     return {'weight': stats.deload_weight(last['weight'], pct, increment, stack_kg=setup.stack_kg),
             'reps': stats.DELOAD_REPS}

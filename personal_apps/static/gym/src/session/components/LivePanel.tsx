@@ -6,7 +6,7 @@ import { setName } from '../setName'
 import { useRestTick } from '../useRestTick'
 import { useRecordTakeover } from '../useRecordTakeover'
 import { Icon } from '../../components/Icon'
-import { kg1, setsLine, shortDate, whenSaid } from '../../format'
+import { kg, setsLine, shortDate, whenSaid } from '../../format'
 import { MAX_REPS, MAX_WEIGHT_KG, REPS_HINT, WEIGHT_HINT, unlikely } from '../../setInput'
 import { REST_MAX, REST_NUDGE, clock } from '../../settings/values'
 import { Drawing, PictureTile } from './Picture'
@@ -50,7 +50,7 @@ function VariantRefs({ refs }: { refs: VariantRef[] }) {
         <Fragment key={ref.label}>
           {i > 0 && ' · '}
           <b>{ref.label}</b>
-          {` ${kg1(ref.weight)} kg${ref.per_side ? ' je Seite' : ''} × ${ref.reps}`}
+          {` ${kg(ref.weight)} kg${ref.per_side ? ' je Seite' : ''} × ${ref.reps}`}
         </Fragment>
       ))}
     </span>
@@ -387,7 +387,7 @@ export function LivePanel({
         <p className="targetline targetline--deload">
           <span className="targetline__lbl">{`Deload${deloadPct !== null ? ` ${deloadPct} %` : ''}`}</span>
           {' '}
-          <span className="targetline__val">{`≈ ${kg1(deloadHint)} kg${perSide}`}</span>
+          <span className="targetline__val">{`≈ ${kg(deloadHint)} kg${perSide}`}</span>
         </p>
       )}
 
@@ -473,7 +473,7 @@ export function LivePanel({
 
       {live.sets.length === 0 && (
         <p className="live__empty">
-          {`Noch keine Sätze. Der erste wird angelegt, sobald du ihn bestätigst${suggestion ? ` — zuletzt ${kg1(suggestion.weight)} kg × ${suggestion.reps}` : ''}.`}
+          {`Noch keine Sätze. Der erste wird angelegt, sobald du ihn bestätigst${suggestion ? ` — zuletzt ${kg(suggestion.weight)} kg × ${suggestion.reps}` : ''}.`}
         </p>
       )}
       {live.sets.length > 0 && nextSet === null && (
@@ -487,7 +487,7 @@ export function LivePanel({
             reps while those are still blank -- the whole first set without
             reaching for the screen between the two numbers. */}
         <Stepper ref={kgField} label={`kg${perSide}`} value={weight}
-          step={payload.live_increment} decimals={1}
+          step={payload.live_increment} decimals={2}
           floor={payload.live_floor ?? payload.live_increment}
           max={MAX_WEIGHT_KG} refusedHint={WEIGHT_HINT}
           ariaLabel="Gewicht eingeben"

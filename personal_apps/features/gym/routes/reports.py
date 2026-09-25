@@ -10,7 +10,7 @@ from flask import (
     jsonify, render_template, request,
 )
 from sqlalchemy.orm import (
-    joinedload,
+    joinedload, selectinload,
 )
 from models import (
     SessionExercise, WorkoutSession,
@@ -18,7 +18,8 @@ from models import (
 from auth import (
     login_required,
 )
-from features.gym.exercises import setups as exercise_setups
+from features.gym.exercises import search_text, setups as exercise_setups
+from features.gym.library import fold_apart
 from features.gym.scope import (
     current_user_id, my_sessions,
 )
@@ -80,29 +81,41 @@ def gym_verlauf():
     # its own debrief names and Statistik lists.
     records_by_session = stats.session_record_counts(performed)
 
+    # The same exercises the volume beside each row was computed from. The row
+    # listed every SessionExercise including ones swapped out mid-workout, so
+    # a session showed 10 names next to a total built from 7 -- and opening it
+    # revealed the 7.
+    shown = {s.id: [se.exercise for se in s.exercises
+                    if se.id not in replaced_away_ids or done_sets(se)]
+             for s in sessions}
     history = [
         {
             'session': s,
             'volume': round(volume_by_session.get(s.id, 0.0), 1),
             'record_count': records_by_session.get(s.id, 0),
-            # The same exercises the volume beside it was computed from. The
-            # row listed every SessionExercise including ones swapped out
-            # mid-workout, so a session showed 10 names next to a total built
-            # from 7 -- and opening it revealed the 7.
-            'exercises': [se.exercise.name for se in s.exercises
-                          if se.id not in replaced_away_ids or done_sets(se)],
-            # Searchable date text, so a query like "31.07" or "juli" works.
-            # data-search carried only the name and the exercises, and item 5
-            # stopped appending the date to new session names -- so date search
-            # was degrading to nothing as history accumulated.
-            'search_date': '%s %s %d' % (
-                stats.to_local(s.started_at).strftime('%d.%m.%Y'),
-                MONTH_NAMES[stats.to_local(s.started_at).month - 1],
-                stats.to_local(s.started_at).year,
-            ),
+            'exercises': [exercise.name for exercise in shown[s.id]],
+            # The name and the date words, folded, so "31.07" or "juli"
+            # works: item 5 stopped appending the date to new session names,
+            # and date search was degrading to nothing as history grew. The
+            # exercises' own texts come once, in exercise_search. Apart, so
+            # "Push 2" is a workout's whole name and not Push on the 23rd.
+            'search': fold_apart((
+                s.name or 'Workout',
+                '%s %s %d' % (
+                    stats.to_local(s.started_at).strftime('%d.%m.%Y'),
+                    MONTH_NAMES[stats.to_local(s.started_at).month - 1],
+                    stats.to_local(s.started_at).year,
+                ),
+            )),
         }
         for s in sessions
     ]
+    # What the search looks in for each exercise: the add sheet's text, so a
+    # word finds a workout here that finds its exercise there (G-145) --
+    # Verlauf matched the bare names, and "bench" or "Bankdrucken" found
+    # nothing. Once per exercise, not once per row it is in.
+    exercise_search = {exercise.name: search_text(exercise)
+                       for exercises in shown.values() for exercise in exercises}
 
     # Month bands, grouped here rather than in the template: Jinja can detect a
     # change of month while looping, but it cannot count the rows in a group it
@@ -163,7 +176,7 @@ def gym_verlauf():
                         'volume': entry['volume'],
                         'record_count': entry['record_count'],
                         'exercises': entry['exercises'],
-                        'search_date': entry['search_date'],
+                        'search': entry['search'],
                         'gap_days': entry['gap_days'],
                     }
                     for entry in month['entries']
@@ -174,6 +187,7 @@ def gym_verlauf():
         'total': len(history),
         'gap_threshold': VERLAUF_GAP_DAYS,
         'weekday_short': list(WEEKDAY_SHORT),
+        'exercise_search': exercise_search,
     })
     return render_template('gym/verlauf.html',
                            payload_json=payload.model_dump(mode='json'))
@@ -428,12 +442,21 @@ def gym_export():
     features/gym/export.py."""
     session_ids = _export_ids(request.args.get('ids', ''))
 
+    # Everything export.py reads, loaded up front: lazily it was a query per
+    # row for its exercise, its sets, its substitute and what it replaced --
+    # about 15 per workout, 677 for 44 of them (walkthrough G-095).
+    rows = selectinload(WorkoutSession.exercises)
     sessions = (
         my_sessions()
         .filter(
             WorkoutSession.finished_at.isnot(None),
             WorkoutSession.id.in_(session_ids),
         )
+        .options(joinedload(WorkoutSession.template),
+                 rows.joinedload(SessionExercise.exercise),
+                 rows.selectinload(SessionExercise.sets),
+                 rows.selectinload(SessionExercise.replaces),
+                 rows.selectinload(SessionExercise.replaced_by))
         .order_by(WorkoutSession.started_at.asc())
         .all()
     ) if session_ids else []

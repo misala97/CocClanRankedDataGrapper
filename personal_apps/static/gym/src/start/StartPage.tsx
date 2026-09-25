@@ -10,10 +10,9 @@ import { useSheets, usePush } from '../session/stores'
 import { leaveBySubmit, useSheetHistory } from '../session/useSheetHistory'
 import { Sheet } from '../session/components/Sheet'
 import { Icon } from '../components/Icon'
-import { dayMonth, instant, kg1, shortDate } from '../format'
+import { dayMonth, instant, kg, kg1, shortDate, volume as de } from '../format'
 import { morphFrom } from '../vt'
 
-const de = (value: number) => Math.round(value).toLocaleString('de-DE')
 const pad = (n: number) => String(n).padStart(2, '0')
 
 /** One routine back where it stood, into the list as it is now. */
@@ -86,7 +85,7 @@ function StallRow({ item }: { item: Stall }) {
             is the newest attempt's, wherever it stood -- "meist" says the
             slot is the usual one, not the one the weight comes from. */}
         <span className="row__meta">
-          {`Meist als ${item.position}. Übung · zuletzt ${kg1(item.stuck_at)} kg`}
+          {`Meist als ${item.position}. Übung · zuletzt ${kg(item.stuck_at)} kg`}
         </span>
       </span>
       <span className="vtag vtag--stall">{sincePr(item.sessions_since_pr, true)}</span>
@@ -795,7 +794,7 @@ function LeadWatch({ lead, stalls }: { lead: RoutineMemory; stalls: Stall[] }) {
   const first = watch[0]!
   return (
     <p className="lead__watch">
-      {`${first.name} steht seit ${first.sessions_since_pr} ${first.sessions_since_pr === 1 ? 'Workout' : 'Workouts'} bei ${kg1(first.stuck_at)} kg.`}
+      {`${first.name} steht seit ${first.sessions_since_pr} ${first.sessions_since_pr === 1 ? 'Workout' : 'Workouts'} bei ${kg(first.stuck_at)} kg.`}
       {watch.length > 1 && ` · ${watch.length - 1} weitere`}
     </p>
   )

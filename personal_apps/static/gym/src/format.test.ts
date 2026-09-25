@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import {
-  dayMonth, kg1, localParts, roundTo, setsLine, shortDate, signedWhole, volume, whenSaid, whole,
+  dayMonth, kg, kg1, kgSetting, localParts, roundTo, setsLine, shortDate, signedWhole, volume,
+  whenSaid, whole,
 } from './format'
 
 describe('kg1', () => {
@@ -151,5 +152,38 @@ describe('setsLine', () => {
   it('says it again where it changes', () => {
     expect(setsLine([{ weight: 60, reps: 8 }, { weight: 62.5, reps: 6 }, { weight: 62.5, reps: 6 }]))
       .toBe('60,0 × 8 · 62,5 × 6 · 6')
+  })
+
+  it('says a quarter-kilo weight as it was logged (G-146)', () => {
+    expect(setsLine([{ weight: 11.25, reps: 8 }, { weight: 11.25, reps: 7 }]))
+      .toBe('11,25 × 8 · 7')
+  })
+})
+
+describe('kg (G-146)', () => {
+  // One screen said 11,2, the stepper 11,3 and the settings 11,25 for the
+  // same logged weight.
+  it('keeps a weight to the hundredth, and one decimal at least', () => {
+    expect([kg(11.25), kg(11.5), kg(80), kg(62.5), kg(0)])
+      .toEqual(['11,25', '11,5', '80,0', '62,5', '0,0'])
+  })
+
+  it('rounds past the hundredth the way Python does', () => {
+    // 11.125 is exact in binary, a true tie: even, as '{:.2f}' prints it.
+    expect([kg(11.125), kg(0.1 + 0.2), kg(72.35)]).toEqual(['11,12', '0,3', '72,35'])
+    expect(kg(11.375)).toBe('11,38')
+  })
+
+  it('reads no tie into a double that only scales to one (B9 review)', () => {
+    // 47.505 is a hair above, 0.015 a hair below: '{:.2f}' prints 47.51 and
+    // 0.01, and times 100 both land on ,5 exactly.
+    expect([kg(47.505), kg(0.015), kgSetting(0.015)]).toEqual(['47,51', '0,01', '0,01'])
+    // '%.1f' % 0.35 is 0.3: the double is 0.34999...
+    expect(kg1(0.35)).toBe('0,3')
+  })
+
+  it('reads a setting the way it is typed', () => {
+    expect([kgSetting(20), kgSetting(2.5), kgSetting(1.25), kgSetting(0.1 + 0.2)])
+      .toEqual(['20', '2,5', '1,25', '0,3'])
   })
 })

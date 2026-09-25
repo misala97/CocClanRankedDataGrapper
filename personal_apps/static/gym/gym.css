@@ -237,8 +237,6 @@ html[data-theme="dark"] {
   /* ---- z-scale: semantic, never 9999 ---- */
   --z-resume: 80;
   --z-bar:    90;
-  --z-modal-backdrop: 200;
-  --z-modal:  210;
 
   /* ---- shell metrics ---- */
   --wrap-max: 1180px;
@@ -1036,6 +1034,15 @@ body.is-focus .tabbar, body.is-focus .nav-footer, body.is-focus .topbar { displa
   max-inline-size: 52ch; margin-inline: auto; text-wrap: pretty;
 }
 .empty .label { display: block; margin-bottom: var(--sp-2); color: var(--unlit); }
+/* Over rows a search found only a typo away (NearMisses.tsx): Übungen,
+   Verlauf and the add sheet. A plain line, not an empty state -- the rows
+   are right under it. */
+.search-near {
+  margin: var(--sp-3) var(--sp-4) 0;
+  font-size: var(--t-meta); color: var(--dim); text-wrap: pretty;
+}
+/* The sheet's body brings its own gutter. */
+.exadd .search-near { margin: var(--sp-2) 0 var(--sp-1); }
 
 /* ============================================================================
    ROW  ·  the shared divided-list row
@@ -1285,11 +1292,9 @@ a.row:active, a.row__main:active { transform: scale(0.99); }
 }
 
 /* ============================================================================
-   PROGRESS MODAL  ·  _progress_modal.html (shared: session detail + exercise
-   detail). PR cards read as records (gold); the chart canvas gets a fixed box.
+   UTILITIES
    ============================================================================ */
 
-.hidden { display: none !important; }
 /* Visually hidden, still announced. Used by the shell (the resume strip's
    purpose prefix) and by the session screen's live region, so it lives with
    the other utilities rather than inside either one's section. */
@@ -1299,93 +1304,14 @@ a.row:active, a.row__main:active { transform: scale(0.99); }
   clip-path: inset(50%); white-space: nowrap;
 }
 
-/* A native <dialog>, so the top layer, the backdrop and the dismiss behaviour
-   all come from the platform. It was a fixed div at --z-modal, which is why it
-   could not open at all: its opener lives inside a sheet that is itself a
-   showModal() dialog, and no z-index reaches above the top layer.
-
-   Everything the old block did -- the manual backdrop fill, the .hidden
-   override with its !important duel, the visibility-delayed fade -- is gone
-   with it. What remains is the same entrance the sheets use, for the same
-   reason: a surface that rises off the bottom edge reads as the same page,
-   deeper. */
-.modal {
-  inline-size: 100%; max-inline-size: 560px;
-  margin: auto auto 0; padding: 0; border: 0;
-  background: none; overflow: visible;
+/* A page whose island could not draw itself (mount.tsx): what
+   happened and the one thing that helps, where a blank page was. */
+.crash {
+  display: grid; justify-items: start; gap: var(--sp-3);
+  padding: var(--sp-8) var(--sp-4);
 }
-@media (min-width: 640px) { .modal { margin: auto; } }
-/* Same entrance as .sheet, same reasoning -- see the note there. */
-.modal {
-  opacity: 0; transform: translateY(14px);
-  transition: opacity var(--dur-2) var(--ease), transform var(--dur-2) var(--ease),
-              overlay var(--dur-2) allow-discrete, display var(--dur-2) allow-discrete;
-}
-.modal[open] {
-  opacity: 1; transform: translateY(0);
-  transition: opacity var(--dur-3) var(--ease-out), transform var(--dur-3) var(--ease-out),
-              overlay var(--dur-3) allow-discrete, display var(--dur-3) allow-discrete;
-}
-@starting-style { .modal[open] { opacity: 0; transform: translateY(14px); } }
-
-.modal::backdrop {
-  background: rgba(0, 0, 0, 0);
-  transition: background var(--dur-2) var(--ease),
-              overlay var(--dur-2) allow-discrete, display var(--dur-2) allow-discrete;
-}
-.modal[open]::backdrop { background: rgba(0, 0, 0, 0.6); }
-@starting-style { .modal[open]::backdrop { background: rgba(0, 0, 0, 0); } }
-
-/* replaces an inline style="margin-top:14px" in a file with a spacing scale */
-.modal-out { margin-top: var(--sp-4); }
-
-.modal__box {
-  inline-size: 100%; max-block-size: 90vh; overflow-y: auto;
-  background: var(--chassis);
-  border: 1px solid var(--edge); border-top-color: var(--edge-hi);
-  border-radius: var(--r-panel) var(--r-panel) 0 0;
-  box-shadow: var(--edge-lit), 0 -8px 32px rgba(0, 0, 0, 0.5);
-  transform: none;
-  transition: transform 240ms var(--ease-out);
-}
-/* mobile is a bottom sheet, so it retreats down; desktop is a centered
-   dialog, so it only settles by scale -- matches each surface's own radius
-   treatment right below (sheet: top corners only vs. dialog: full radius) */
-.modal.hidden .modal__box { transform: translateY(16px) scale(0.98); }
-@media (min-width: 640px) {
-  .modal__box { border-radius: var(--r-panel); }
-  .modal.hidden .modal__box { transform: translateY(0) scale(0.96); }
-}
-
-.modal__head {
-  position: sticky; top: 0; z-index: 1;
-  display: flex; align-items: center; justify-content: space-between; gap: var(--sp-3);
-  padding: var(--sp-4); background: var(--chassis); border-bottom: 1px solid var(--edge);
-}
-.modal__title { font-size: var(--t-name); min-inline-size: 0; overflow-wrap: anywhere; }
-.modal__body { padding: var(--sp-4); }
-
-/* the two PR cards sit side by side until their own content stops fitting;
-   auto-fit lets them stack at 200% instead of forcing the page wider */
-.pr-grid {
-  display: grid;
-  /* 8rem, not 11: at 100% two cards still sit side by side in a 390px
-     phone panel (2x128 + gap < 326), and only at scaled-up text does the
-     minimum exceed the track and force the stack. 11rem stacked them
-     even at normal size, which lost compactness for no reason. */
-  grid-template-columns: repeat(auto-fit, minmax(min(8rem, 100%), 1fr));
-  gap: var(--sp-3); margin-bottom: var(--sp-4);
-}
-.pr-card { min-inline-size: 0; }
-.pr-card { padding: var(--sp-3); background: var(--raised); border: 1px solid var(--edge); border-radius: var(--r-panel); }
-.pr-card .label { display: block; margin-bottom: var(--sp-1); }
-.pr-card .val {
-  font-family: var(--font-display); font-weight: var(--w-bold);
-  font-variant-numeric: tabular-nums; font-size: var(--num-sm); line-height: 1;
-  color: var(--record-ink);
-}
-.pr-card .sub { display: block; margin-top: var(--sp-1); font-size: var(--t-meta); color: var(--dim); }
-.modal-position-note { margin-bottom: var(--sp-3); font-size: var(--t-meta); color: var(--dim); }
+.crash__h { font-size: var(--t-name); font-weight: var(--w-bold); color: var(--ink); }
+.crash__p { color: var(--dim); }
 
 
 /* skip link: off-screen until focused, then a real target at the top-left */
@@ -1451,10 +1377,7 @@ a.row:active, a.row__main:active { transform: scale(0.99); }
    disclosure. Mobile stacks verdict->chart->history->meta, matching the
    template's own block order; desktop puts the chart and the verdict/PR rail
    on one row (chart wide, rail a fixed 22rem) with history and metadata full
-   width below. `.pr-grid`/`.pr-card` are the PROGRESS MODAL section's
-   components above, reused verbatim -- same PR-card concept, same look, on
-   both surfaces (page and modal) since both render the exact same
-   pr_weight/pr_e1rm shape from stats.exercise_progress().
+   width below.
    ============================================================================ */
 
 .exercise-detail {
@@ -2454,7 +2377,7 @@ button.pic { cursor: zoom-in; }
 .note-save__msg { display: block; }
 /* Rises from the edge it is now docked to. */
 @keyframes stall-arrive { from { opacity: 0; transform: translateY(8px); } }
-.session-view .note-save:not(.hidden) { animation: stall-arrive var(--dur-3) var(--ease-out); }
+.session-view .note-save { animation: stall-arrive var(--dur-3) var(--ease-out); }
 
 /* The screen is waiting on the network. A 2px sweep under the header, and only
    after 300ms -- a save that lands inside that window never shows it, so the
@@ -3917,9 +3840,6 @@ summary.sheet-row::-webkit-details-marker { display: none; }
 /* A history that spans one day has one date, and space-between would park it
    at the left edge under the middle of the plot. */
 .chart__axis:has(.label:only-child) { justify-content: center; }
-/* The modal draws the same chart in a smaller box. Only the height differs;
-   everything else is the shared .chart block above. */
-.chart--modal svg { max-block-size: 40vh; }
 
 .chart__legend { grid-column: 2; display: flex; gap: var(--sp-4); margin-top: var(--sp-3); align-items: center; flex-wrap: wrap; }
 

@@ -43,7 +43,6 @@ export function RoutinePlanGroup({ routineName, plan, onSave }: Props) {
       window.removeEventListener('pagehide', settle)
       settle()
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
   const shown = draft ?? plan

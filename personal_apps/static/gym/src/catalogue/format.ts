@@ -27,13 +27,3 @@ export function sincePr(sessions: number | null, lead = false): string {
   if (!sessions) return ''
   return `${lead ? 'Seit' : 'seit'} ${sessions} ${sessions === 1 ? 'Workout' : 'Workouts'} ohne Rekord`
 }
-
-/**
- * Search folding: lowercase, and German umlauts to their two-letter forms so
- * "uebung" finds "Übung" and vice versa.
- */
-export function fold(value: string): string {
-  return value.toLowerCase()
-    .replace(/ä/g, 'ae').replace(/ö/g, 'oe').replace(/ü/g, 'ue').replace(/ß/g, 'ss')
-    .normalize('NFD').replace(/[̀-ͯ]/g, '')
-}

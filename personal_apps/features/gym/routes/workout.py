@@ -12,7 +12,7 @@ import datetime as dt
 
 from flask import abort, current_app, flash, jsonify, redirect, render_template, request, url_for
 from sqlalchemy.exc import IntegrityError
-from sqlalchemy.orm import joinedload, load_only
+from sqlalchemy.orm import joinedload, load_only, selectinload
 
 from extensions import db
 from models import (
@@ -36,15 +36,15 @@ from features.gym.scope import (
 from .. import sharing
 from ..locking import lock_sessions, lock_user
 from ..seeding import (
-    _deload_applies, _pick_session_exercise, _seed_source, _seeded_sets, _seeded_suggestion,
+    _deload_applies, _pick_session_exercises, _seed_source, _seeded_sets, _seeded_suggestion,
     missing_planned_sets, reseed_for_slot,
 )
 from ._blueprint import gym_bp
 from .helpers import (
     NON_MUSCLE_GROUPS, ONBOARDING_WORKOUTS, RECENT_SESSIONS, WEEKDAY_SHORT, InvalidInput,
     _cancel_pending_push, _debrief_args, _discard_session, _finish_session,
-    _get_active_session, _refuse_live_write_if_finished, _refuse_structure_edit_if_finished,
-    _settle_if_abandoned, _to_bodyweight, _to_client_key, _to_int, _to_name, _to_note,
+    _get_active_session, _page_active_session, _refuse_live_write_if_finished,
+    _refuse_structure_edit_if_finished, _settle_if_abandoned, _to_bodyweight, _to_client_key, _to_int, _to_name, _to_note,
     _to_reps, _to_rest_seconds, _to_weight, _was_discarded, _write_time,
     _username, _wants_json,
 )
@@ -208,7 +208,7 @@ def _heute_payload():
     made from the page re-renders from exactly what a fresh load would show.
     Needs a request context: scope.py reads the session."""
     now = dt.datetime.utcnow()
-    active_session = _get_active_session()
+    active_session = _page_active_session()
 
     # Eager-loaded: each routine panel shows its own exercise list, and
     # walking .exercises / .exercise per template without this would be an
@@ -321,14 +321,7 @@ def _heute_payload():
             SharedSession.ended_at.is_(None)).all()
     ]
 
-    # The card's "what was I on" line reuses the session screen's own
-    # live-exercise rule rather than restating it -- one rule, three surfaces.
-    active_exercise = None
-    if active_session:
-        live_ctx = _live_context(active_session)
-        live_se = next((se for se in live_ctx['visible_exercises']
-                        if se.id == live_ctx['live_id']), None)
-        active_exercise = live_se.exercise.name if live_se else None
+    active_exercise = _live_exercise_name(active_session) if active_session else None
 
     return HeutePayload.model_validate({
             'now': now,
@@ -418,6 +411,22 @@ def gym_start():
     return redirect(url_for('gym.session_detail', session_id=session_.id))
 
 
+def _load_rows(session_):
+    """Every row of the workout with its sets and its exercise, in two
+    queries, before anything walks them. Walked lazily, each row cost a query
+    for its sets and one for its exercise -- two per exercise on every live
+    payload, each set tick's included (walkthrough G-140).
+
+    The rows land in the identity map, so session_.exercises and each row's
+    .sets and .exercise read them from there -- for as long as the caller
+    holds the list this returns: the map only keeps weak references, and a
+    row nobody holds is gone again before session_.exercises is read."""
+    return (SessionExercise.query
+            .filter(SessionExercise.session_id == session_.id)
+            .options(joinedload(SessionExercise.exercise), selectinload(SessionExercise.sets))
+            .all())
+
+
 def _live_context(session_, keep_started=False):
     """The ordered, visible exercise list and which one of them is live.
 
@@ -484,6 +493,26 @@ def _live_context(session_, keep_started=False):
             'live_id': live_se.id if live_se else None}
 
 
+def _live_exercise_name(session_):
+    """What the live screen has live, by name, for the lines that say what
+    the lifter was on: Heute's card and the strip every other gym page
+    carries (_nav.html). The screen's own rule, the follower's "keep started"
+    included -- the strip's copy of it in Jinja named another exercise than
+    the screen for a partner, and paid a query per row for the sets
+    (walkthrough G-143). None while nothing is live."""
+    held_rows = _load_rows(session_)  # noqa: F841 -- held, not read: see _load_rows
+    live_ctx = _live_context(session_, keep_started=sharing.is_live_follower(session_.id))
+    live_se = next((se for se in live_ctx['visible_exercises']
+                    if se.id == live_ctx['live_id']), None)
+    return live_se.exercise.name if live_se else None
+
+
+@gym_bp.context_processor
+def _inject_live_exercise_name():
+    """For the resume strip, asked only on the pages that show it."""
+    return {'gym_live_exercise_name': _live_exercise_name}
+
+
 def _replaced_done(session_, visible_exercises):
     """What the hidden originals behind each visible row did, as {se.id:
     {'sets': n, 'volume': kg}} -- zero where nothing was replaced.
@@ -538,12 +567,14 @@ def _typed_bests(history, session_):
     return bests
 
 
-def _live_data(session_):
+def _live_data(session_, catalogue=True):
     """Every value session_detail.html renders from, ORM objects included.
 
     Split out so _session_payload can serialize this same computation
     rather than repeat it: the page and the JSON endpoint must not be
     able to disagree about which exercise is live.
+
+    `catalogue`: whether the add sheet's list is wanted (see _session_payload).
     """
     # visible_exercises and which one is live: see _live_context's own
     # docstring for why this is a call rather than the computation itself.
@@ -555,20 +586,23 @@ def _live_data(session_):
     # leader polling sync.json would burn a request every 5s forever for a
     # version that can never change.
     session_is_shared = sharing.is_live_follower(session_.id)
+    held_rows = _load_rows(session_)  # noqa: F841 -- held, not read: see _load_rows
     live_ctx = _live_context(session_, keep_started=session_is_shared)
     visible_exercises = live_ctx['visible_exercises']
     live_se = next((se for se in visible_exercises if se.id == live_ctx['live_id']), None)
-    # One history pick per exercise, read twice: for the numbers the steppers
-    # pre-fill with, and for the line that says where those numbers came from.
-    picks = {se.id: _pick_session_exercise(se.exercise_id, position=se.position,
-                                           exclude_session_id=session_.id)
-             for se in visible_exercises}
-    suggestions = {se.id: _seeded_suggestion(session_, se.exercise, se.position,
-                                             picked=picks[se.id])
-                   for se in visible_exercises}
-    seed_sources = {se.id: _seed_source(picks[se.id]) for se in visible_exercises}
     # This lifter's step, rest and stack stops for every exercise in the session.
     setups = exercise_setups(session_.user_id, [se.exercise for se in session_.exercises])
+    # One history pick per exercise, read twice: for the numbers the steppers
+    # pre-fill with, and for the line that says where those numbers came from.
+    # All of them in one query (G-140).
+    batch = _pick_session_exercises([(se.exercise_id, se.position) for se in visible_exercises],
+                                    exclude_session_id=session_.id)
+    picks = {se.id: batch[(se.exercise_id, se.position)] for se in visible_exercises}
+    suggestions = {se.id: _seeded_suggestion(session_, se.exercise, se.position,
+                                             picked=picks[se.id],
+                                             setup=setups[se.exercise_id])
+                   for se in visible_exercises}
+    seed_sources = {se.id: _seed_source(picks[se.id]) for se in visible_exercises}
     history = load_performed(exercise_ids=[se.exercise_id for se in visible_exercises])
     # The workouts BEFORE this one: the bar every set here is judged against
     # (D3). "Every other finished workout" let one finished later -- a
@@ -656,26 +690,27 @@ def _live_data(session_):
     # another slot's plan.
     routine_plans = {}
     if session_.template is not None and session_.template.user_id == session_.user_id:
-        for se in visible_exercises:
-            row = routine.get(se.exercise_id) if se.replaces_id is None else None
-            if row is not None:
-                sets, rep_min, rep_max = plan.row_plan(row, session_.user_id,
-                                                       session_.template_id)
-                routine_plans[se.id] = {'sets': sets, 'rep_min': rep_min, 'rep_max': rep_max}
-    exercises = library_exercises()
-    # What the owner of this session does -- the add sheet leads with it. The
-    # session's lifter, not the request's: the same rule as their setups.
-    usage_now = dt.datetime.utcnow()
-    usage = exercise_usage(session_.user_id, usage_now)
+        slots = [(se, routine.get(se.exercise_id)) for se in visible_exercises
+                 if se.replaces_id is None and se.exercise_id in routine]
+        plans = plan.row_plans([row for _, row in slots], session_.user_id, session_.template_id)
+        for (se, _), (sets, rep_min, rep_max) in zip(slots, plans):
+            routine_plans[se.id] = {'sets': sets, 'rep_min': rep_min, 'rep_max': rep_max}
     # The exercises this lifter meets for the first time: no history to plan
     # from -- so _seeded_sets planned them blank -- and nothing of them logged
     # in this workout yet either. The live screen marks these "Erstes Mal".
     logged_here = {se.exercise_id for se in session_.exercises
                    if any(counts(s) for s in se.sets)}
-    first_time = _first_time_refs(
-        [se for se in visible_exercises
-         if picks[se.id][0] is None and se.exercise_id not in logged_here],
-        exercises, usage)
+    first_rows = [se for se in visible_exercises
+                  if picks[se.id][0] is None and se.exercise_id not in logged_here]
+    # The list and what the owner of this session does with it -- the add
+    # sheet leads with it. The session's lifter, not the request's: the same
+    # rule as their setups. Only read when the payload carries the list or a
+    # first time needs the lifter's other variants.
+    exercises, usage, usage_now = [], {}, dt.datetime.utcnow()
+    if catalogue or first_rows:
+        exercises = library_exercises()
+        usage = exercise_usage(session_.user_id, usage_now)
+    first_time = _first_time_refs(first_rows, exercises, usage)
 
     # One tick per set in the whole workout, in order, so the strip reads as
     # the session filling up rather than as a chart. 'now' is the single set
@@ -780,7 +815,7 @@ def _live_data(session_):
         exercises=exercises,
         usage=usage,
         usage_now=usage_now,
-        muscle_groups=MUSCLE_GROUPS,
+        catalogue=catalogue,
         vapid_public_key=current_app.config.get('VAPID_PUBLIC_KEY'),
         # Scoped to the caller: PushSubscription.endpoint is a global table
         # (one row per browser installation, re-pointed on re-subscribe), so
@@ -805,7 +840,7 @@ def _live_data(session_):
     )
 
 
-def _session_payload(session_):
+def _session_payload(session_, catalogue=True):
     """_live_data as a validated, JSON-safe payload.
 
     Fields are listed explicitly rather than dumping ORM rows. extra='forbid'
@@ -816,10 +851,12 @@ def _session_payload(session_):
     and json.dumps cannot serialize one. suggestions and stagnation_counts are
     keyed by SessionExercise.id, and record_details by Set.id -- all ints, and
     JSON object keys are always strings, so doing it here rather than letting
-    Pydantic coerce keeps the client contract explicit. MUSCLE_GROUPS is a
-    tuple.
+    Pydantic coerce keeps the client contract explicit.
+
+    `catalogue=False` leaves the add sheet's list out (None), for a write's
+    answer: see SessionDetailPayload.exercises.
     """
-    data = _live_data(session_)
+    data = _live_data(session_, catalogue)
     row = data['session']
 
     def as_exercise(se):
@@ -902,10 +939,9 @@ def _session_payload(session_):
         'record_set_ids': sorted(data['record_set_ids']),
         'record_details': {str(k): v for k, v in data['record_details'].items()},
         'first_time': {str(k): v for k, v in data['first_time'].items()},
-        'exercises': [_catalogue_entry(e, data['usage'].get(e.id), data['usage_now'])
-                      for e in data['exercises']],
-        'list_groups': list(LIST_GROUPS),
-        'muscle_groups': list(data['muscle_groups']),
+        'exercises': ([_catalogue_entry(e, data['usage'].get(e.id), data['usage_now'])
+                       for e in data['exercises']] if data['catalogue'] else None),
+        'list_groups': list(LIST_GROUPS) if data['catalogue'] else None,
         'vapid_public_key': data['vapid_public_key'],
         'has_completed_set': data['has_completed_set'],
         'deload_applied': data['deload_applied'],
@@ -1008,6 +1044,13 @@ def _mutation_response(session_, endpoint, **values):
         # live screen's shape wearing a finished_at.
         if session_.finished_at:
             return jsonify(_finished_payload(session_).model_dump(mode='json'))
+        # Without the add sheet's list when the island says it keeps its own
+        # (session/api.ts, from the page or detail.json -- G-140). A page
+        # from before that client, open across a deploy, reads the list off
+        # every answer and would come apart without it: it still gets it.
+        if request.headers.get('X-Gym-Catalogue') == 'kept':
+            return jsonify(_session_payload(session_, catalogue=False)
+                           .model_dump(mode='json', exclude={'exercises', 'list_groups'}))
         return jsonify(_session_payload(session_).model_dump(mode='json'))
     return redirect(url_for(endpoint, **values))
 

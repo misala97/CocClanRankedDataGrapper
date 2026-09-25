@@ -1,4 +1,4 @@
-import { kg1 } from './format'
+import { kg, roundTo } from './format'
 
 /**
  * The largest numbers a set can carry -- routes/helpers.py MAX_SET_WEIGHT_KG
@@ -25,8 +25,10 @@ export function parseBodyweight(text: string): number | null {
 }
 
 /** What the field says when a typed number is refused. Short, because it
- *  replaces a label under a number on a 390px screen. */
-export const WEIGHT_HINT = `0 bis ${MAX_WEIGHT_KG} kg`
+ *  replaces a label under a number on a 390px screen. A weight is kept to
+ *  the hundredth (format.kg), so 11,125 is refused rather than shown as
+ *  one number and stored as another (G-146). */
+export const WEIGHT_HINT = `0 bis ${MAX_WEIGHT_KG} kg, auf 0,01 genau`
 export const REPS_HINT = `1 bis ${MAX_REPS} Wdh.`
 
 /** A typed weight, or null when it cannot be one. Comma-tolerant: a German
@@ -35,7 +37,7 @@ export const REPS_HINT = `1 bis ${MAX_REPS} Wdh.`
 export function parseWeight(text: string): number | null {
   if (text.trim() === '') return null
   const w = Number(text.replace(',', '.').trim())
-  return Number.isFinite(w) && w >= 0 && w <= MAX_WEIGHT_KG ? w : null
+  return Number.isFinite(w) && w >= 0 && w <= MAX_WEIGHT_KG && roundTo(w, 2) === w ? w : null
 }
 
 /** A typed rep count, or null when it cannot be one: a set of no reps is not
@@ -88,7 +90,7 @@ export function unlikely(
 ): string | null {
   if (best === null) return null
   if (best.weight > 0 && set.weight > 2 * best.weight) {
-    return `Sicher? Bisher höchstens ${kg1(best.weight)} ${unit}.`
+    return `Sicher? Bisher höchstens ${kg(best.weight)} ${unit}.`
   }
   if (best.reps > 0 && set.reps > 2 * best.reps) {
     return `Sicher? Bisher höchstens ${best.reps} Wdh.`

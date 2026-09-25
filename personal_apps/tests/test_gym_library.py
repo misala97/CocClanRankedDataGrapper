@@ -17,7 +17,8 @@ def _dupes(values):
 
 
 def _found(query):
-    return {e.key for e in library.LIBRARY if library.matches(e, query)}
+    hits, _ = library.find([e.search_text for e in library.LIBRARY], query)
+    return {library.LIBRARY[i].key for i in hits}
 
 
 def test_keys_are_unique_slugs():
@@ -132,3 +133,78 @@ def test_a_query_narrows_instead_of_widening():
     assert _found('lat raise') >= {'dumbbell_lateral_raise', 'machine_lateral_raise'}
     assert {k for k in _found('lat raise') if 'pulldown' in k} == set()
     assert _found('zzz') == set()
+
+
+def _movement(*names):
+    return {e.key for e in library.LIBRARY if e.movement in names}
+
+
+def test_a_movement_name_finds_every_variant():
+    """G-006: "bench" found Negativbankdrücken (Langhantel) and not its
+    Kurzhantel, Maschine or Multipresse variants."""
+    presses = _movement('Bankdrücken', 'Schrägbankdrücken', 'Negativbankdrücken')
+    assert len(presses) == 13
+    assert _found('bench') == presses
+    assert _found('decline bench') == _movement('Negativbankdrücken')
+    assert _found('rowing') == _movement('Rudern')
+    assert _found('romanian') == _movement('Rumänisches Kreuzheben')
+    assert _found('kniebeuge') >= _movement('Goblet Squat')
+
+
+def test_movement_aliases_are_for_movements_with_variants():
+    counts = Counter(e.movement for e in library.LIBRARY)
+    assert {m: counts[m] for m in library.MOVEMENT_AKA if counts[m] < 2} == {}
+
+
+def test_a_long_word_may_be_one_typo_off():
+    """G-006: "Bankdrüken", one letter short, found nothing."""
+    assert 'barbell_bench_press' in _found('Bankdrüken')        # a letter dropped
+    assert 'barbell_bench_press' in _found('Bankdrückken')      # one added
+    assert 'barbell_squat' in _found('kniebeigen')              # one changed
+    assert 'cable_lat_pulldown' in _found('lat pulldwon')       # two swapped
+    assert 'plate_leg_press' in _found('legpress')              # a space dropped
+    assert 'barbell_bench_press' not in _found('Bankdüken')     # two off
+    # What the right spelling finds, flat, incline and decline alike.
+    assert _found('bankdruken kurzhantel') == _found('bankdrucken kurzhantel') == {
+        'dumbbell_bench_press', 'dumbbell_incline_bench_press', 'dumbbell_decline_bench_press'}
+
+
+def test_a_typo_is_only_the_fallback():
+    """One edit from "bench" is "rench": with typos always on, French Press
+    was a bench press."""
+    texts = [e.search_text for e in library.LIBRARY]
+    assert library.find(texts, 'bench')[1] == 'phrase'
+    assert library.find(texts, 'Bankdrüken')[1] == 'typos'
+    assert library.matches('french press', 'bench', typos=True)
+    assert not library.matches('french press', 'bench')
+
+
+def test_the_whole_query_as_one_run_comes_first():
+    """"Push 2" is the workout Push 2, not every Push of 2026 -- and joined by
+    a space, the run went on from Push's name into a date on the 23rd."""
+    push2 = library.fold_apart(('Push 2', '31.07.2026 Juli 2026'))
+    push = library.fold_apart(('Push', '23.09.2026 September 2026'))
+    assert library.find([push2, push], 'push 2') == ([0], 'phrase')
+    assert library.find([push2, push], 'Push 23.09') == ([1], 'words')
+    assert library.find([push2, push], 'juli push') == ([0], 'words')
+
+
+def test_a_date_is_never_a_typo():
+    """One edit off "31.07" are 01.07., 03.07., 13.07. and 31.08.: a day
+    with no workout showed four others."""
+    days = [library.fold_apart(('Push', f'{day}.2026 Juli 2026')) for day in ('01.07', '13.07')]
+    assert library.find(days, '31.07') == ([], 'words')
+    assert not library.matches(days[0], '31.07', typos=True)
+
+
+def test_a_short_word_stays_exact():
+    """One edit is most of a four-letter word."""
+    assert library.FUZZY_FROM == 5
+    assert _found('bnak') == set()
+    assert library.matches('fliegende kabel', 'fliegnede', typos=True)
+    assert not library.matches('kabel', 'kbael', typos=True)
+
+
+def test_a_query_that_folds_to_nothing_is_no_query():
+    assert library.matches('bankdrucken langhantel', '-')
+    assert library.matches('bankdrucken langhantel', '  ')

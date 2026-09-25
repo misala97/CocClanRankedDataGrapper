@@ -51,6 +51,31 @@ def test_the_payload_reflects_the_mutation(client, live_session):
     assert after['sets_done'] == 2
 
 
+def test_a_write_answers_without_the_add_sheet_list(client, live_session):
+    """The list was 47 of a set tick's 52 KB, and a running workout cannot
+    change it: the page and detail.json send it, session/api.ts keeps it, and
+    a write that says so is answered without it (G-140)."""
+    detail = client.get(
+        f"/gym/session/{live_session['session']}/detail.json").get_json()
+    assert detail['exercises'] and detail['list_groups']
+
+    after = client.post(
+        f"/gym/set/{live_session['open_set']}/toggle_complete",
+        data={'completed': '1'}, headers={**JSON, 'X-Gym-Catalogue': 'kept'}).get_json()
+    assert 'exercises' not in after and 'list_groups' not in after
+    assert after['sets_done'] == detail['sets_done'] + 1
+
+
+def test_a_page_from_before_still_gets_the_list(client, live_session):
+    """A page open across the deploy never says it keeps the list: its add
+    sheet reads the list off every answer, and a set tick without one took
+    the whole screen down."""
+    after = client.post(
+        f"/gym/set/{live_session['open_set']}/toggle_complete",
+        data={'completed': '1'}, headers=JSON).get_json()
+    assert after['exercises'] and after['list_groups']
+
+
 def test_a_bare_fetch_does_not_get_json(client, live_session):
     """fetch() with no Accept header sends */*, which accepts HTML too. The
     island has to opt in explicitly, and this pins that it must."""

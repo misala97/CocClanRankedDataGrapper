@@ -1,0 +1,9 @@
+/* The gym's stylesheet as pages get it: built by Vite as its own entry, so it
+ * leaves the build minified (gym.css is half comments), content-hashed and
+ * served immutable like the bundles, with the fonts it names hashed too
+ * (walkthrough G-094, G-142). _base.html links the built file through the
+ * manifest (vite_assets.resolve_style).
+ *
+ * Edit gym.css and figtree.css as before; `npm run build` makes this. */
+@import '../../figtree.css';
+@import '../../gym.css';

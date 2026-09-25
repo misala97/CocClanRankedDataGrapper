@@ -251,10 +251,12 @@ export interface SessionDetailPayload {
    *  are not this one's. Absent key = not a first time. */
   first_time: Record<string, VariantRef[]>
 
+  /** The add sheet's list. Only the page and detail.json send it; a write's
+   *  answer leaves it and list_groups out (SessionReply), and session/api.ts
+   *  fills in the last one it saw, so past api.ts a payload always has it. */
   exercises: CatalogueExercise[]
   /** The add sheet's sections in the list's own order, Brust first. */
   list_groups: string[]
-  muscle_groups: string[]
   /** Null whenever VAPID_PUBLIC_KEY is unset in .env. */
   vapid_public_key: string | null
   has_completed_set: boolean
@@ -267,3 +269,8 @@ export interface SessionDetailPayload {
   partner_status: PartnerStatus[]
   session_is_shared: boolean
 }
+
+/** A write's answer: the payload without the add sheet's list, which never
+ *  changes under a running workout (walkthrough G-140). */
+export type SessionReply = Omit<SessionDetailPayload, 'exercises' | 'list_groups'>
+  & Partial<Pick<SessionDetailPayload, 'exercises' | 'list_groups'>>

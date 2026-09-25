@@ -1,10 +1,12 @@
 import { useEffect, useMemo, useState } from 'react'
 import type { CatalogueEntry, CataloguePayload, RestOverview, SortMode } from './types'
-import { fold, recency, sincePr } from './format'
-import { kg1 } from '../format'
+import { recency, sincePr } from './format'
+import { kg } from '../format'
+import { apart, find, fold, isQuery } from '../search'
 import { useCatalogueUi } from './store'
 import { morphFrom } from '../vt'
 import { Icon } from '../components/Icon'
+import { NearMisses } from '../components/NearMisses'
 import { RestSheet, exceptionCount, listRange } from '../settings/RestSheet'
 import { clock } from '../settings/values'
 
@@ -48,12 +50,12 @@ function ExerciseRow({ entry, group }: {
                 per-side load above a bilateral one, which is the same weight
                 read as half. */}
             <span className="vol">
-              {kg1(entry.last_weight)}
+              {kg(entry.last_weight)}
               <small>{entry.exercise.is_unilateral ? 'kg/Seite' : 'kg'}</small>
             </span>
             <span className="lastline">
               {entry.best_weight !== null && entry.best_weight > entry.last_weight
-                ? `zuletzt · best ${kg1(entry.best_weight)}`
+                ? `zuletzt · best ${kg(entry.best_weight)}`
                 : 'zuletzt'}
             </span>
           </>
@@ -120,18 +122,23 @@ export function CataloguePage({ payload }: { payload: CataloguePayload }) {
     return () => window.removeEventListener('keydown', onKey)
   }, [])
   const total = payload.groups.reduce((n, g) => n + g.entries.length, 0)
-  const needle = fold(query.trim())
+  const searching = isQuery(query)
   const groupNames = payload.groups.map((g) => g.name)
 
-  // Every row with the group it belongs to, folded once rather than per
-  // keystroke. The search matches the group name too, so "Beine" finds them.
+  // Every row with the group it belongs to and what the search looks in:
+  // the add sheet's text -- aliases, English names -- and the group's name,
+  // so "Beine" finds them. One search for both (G-020): "bench" found the
+  // bench press in a workout and nothing here.
   const rows = useMemo(
     () => payload.groups.flatMap((g) => g.entries.map((entry) => ({
-      entry, group: g.name, fold: fold(`${entry.exercise.name} ${g.name}`),
+      entry, group: g.name, search: apart([entry.search, fold(g.name)]),
     }))),
     [payload.groups])
 
-  const hits = needle === '' ? rows : rows.filter((r) => r.fold.includes(needle))
+  const found = useMemo(
+    () => (searching ? find(rows, query, (r) => r.search) : null),
+    [rows, query, searching])
+  const hits = found === null ? rows : found.hits
 
   const flat = useMemo(() => {
     const compareStall = (a: typeof rows[number], b: typeof rows[number]) =>
@@ -168,8 +175,10 @@ export function CataloguePage({ payload }: { payload: CataloguePayload }) {
               value={query} onChange={(e) => setQuery(e.target.value)}
               onKeyDown={(e) => {
                 // Enter opens the first hit: type three letters, Enter, done.
-                if (e.key !== 'Enter' || needle === '') return
-                const first = hits[0]
+                // The first as shown -- a flat sort shows another row on top
+                // than the list's order, and Enter opened that one.
+                if (e.key !== 'Enter' || !searching) return
+                const first = (sort === 'muscle' ? hits : flat)[0]
                 if (first !== undefined) {
                   window.location.href = `/gym/exercises/${first.entry.exercise.id}`
                 }
@@ -192,6 +201,7 @@ export function CataloguePage({ payload }: { payload: CataloguePayload }) {
                 onClick={() => setQuery('')}>Suche zurücksetzen</button>
             </p>
           )}
+          {hits.length > 0 && found?.tier === 'typos' && <NearMisses query={query} />}
 
           <div id="uebungen-list" className={sort === 'muscle' ? undefined : 'is-flat'}>
             {sort === 'muscle'
@@ -199,10 +209,10 @@ export function CataloguePage({ payload }: { payload: CataloguePayload }) {
                 const groupHits = hits.filter((r) => r.group === group.name)
                 // A searching reader wants the matches, not their folders, so
                 // a query opens every band that has one and hides the rest.
-                const expanded = needle !== ''
+                const expanded = searching
                   ? groupHits.length > 0
                   : isOpen(group.name, payload.open_by_default)
-                if (needle !== '' && groupHits.length === 0) return null
+                if (searching && groupHits.length === 0) return null
 
                 return (
                   <section className="group-sec" key={group.name}
@@ -222,7 +232,7 @@ export function CataloguePage({ payload }: { payload: CataloguePayload }) {
                           <span className="label">{group.name}</span>
                           <span className="start__sp" />
                           <span className="label">
-                            {needle !== ''
+                            {searching
                               ? `${groupHits.length} von ${group.entries.length}`
                               : `${group.entries.length} ${group.entries.length === 1 ? 'Übung' : 'Übungen'}`}
                           </span>

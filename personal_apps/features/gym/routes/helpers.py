@@ -17,7 +17,7 @@ import datetime as dt
 import math
 
 from flask import (
-    flash, has_request_context, jsonify, redirect, request, session as flask_session, url_for,
+    flash, g, has_request_context, jsonify, redirect, request, session as flask_session, url_for,
 )
 
 from auth import wants_json
@@ -168,7 +168,10 @@ def _to_weight(value):
         return None
     if parsed is None or not 0 <= parsed <= MAX_SET_WEIGHT_KG:
         raise InvalidInput(f'Gewicht: bitte 0 bis {MAX_SET_WEIGHT_KG} kg.')
-    return parsed
+    # To the hundredth every screen shows (stats.kg_text, format.kg): a typed
+    # 47,505 was stored as it came and shown as 47,51, and the next step up
+    # was worked out from the weight nobody saw (G-146, B9 review).
+    return round(parsed, 2)
 
 
 def _to_reps(value):
@@ -618,6 +621,17 @@ def _get_active_session():
     return session_
 
 
+def _page_active_session():
+    """The running workout as this page found it. A GET asks once: the
+    before-request hook settles and finds it (routes/__init__.py), and the
+    page and the nav read that answer -- they each asked again, a query and
+    a settle apiece (walkthrough G-143). Anything else asks afresh: a write
+    can start or end one."""
+    if request.method == 'GET' and 'gym_active_session' in g:
+        return g.gym_active_session
+    return _get_active_session()
+
+
 @gym_bp.app_template_filter('local')
 def _local_filter(moment):
     """Naive UTC -> naive local, for anything a person reads as a date or time.
@@ -642,7 +656,7 @@ def inject_gym_nav_context():
     and link straight to it from anywhere. An abandoned workout was already
     ended before the page was built (routes/__init__.py), so this only
     reads."""
-    return {'gym_active_session': _get_active_session()}
+    return {'gym_active_session': _page_active_session()}
 
 
 def _cancel_pending_push(session_):

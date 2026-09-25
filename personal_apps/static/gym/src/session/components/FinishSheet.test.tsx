@@ -19,6 +19,12 @@ const mount = (over: Partial<Parameters<typeof FinishSheet>[0]> = {}) => {
 }
 
 describe('FinishSheet', () => {
+  it('says the volume as the debrief will: whole kilos, half to even (G-146)', () => {
+    mount({ volume: 1234.5 })
+    // Its own rounding said 1.235 here and the debrief 1.234.
+    expect(document.querySelector('.finish-sum__vol')?.firstChild?.textContent).toBe('1.234')
+  })
+
   it('finishes a workout with sets in it, and offers no discard', async () => {
     const user = userEvent.setup()
     const props = mount()

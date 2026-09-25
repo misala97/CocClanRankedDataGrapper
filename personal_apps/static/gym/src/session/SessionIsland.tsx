@@ -3,7 +3,7 @@ import {
   QueryClient, QueryClientProvider, useQuery, useQueryClient,
 } from '@tanstack/react-query'
 import type { LiveExercise, SessionDetailPayload } from './types'
-import { fetchSession, MutationFailed, sessionKey } from './api'
+import { fetchSession, MutationFailed, rememberCatalogue, sessionKey } from './api'
 import { postNavigate } from '../api'
 import { enablePush, heartbeatSubscription } from '../push'
 import { useUndo } from '../undo'
@@ -71,6 +71,8 @@ function SessionIslandInner({ initial }: { initial: SessionDetailPayload }) {
 
   const [outbox] = useState(() => {
     sweepDrafts(sessionId)
+    // The page's list, for the write answers that come without one (G-140).
+    rememberCatalogue(initial)
     const saves = useSaveState.getState()
     return new Outbox(initial, {
       specs: writeSpecs(sessionId),

@@ -596,6 +596,35 @@ describe('saving without a reload', () => {
     vi.unstubAllGlobals()
   })
 
+  it('keeps a quarter-kilo weight, as the live screen does (G-146)', async () => {
+    vi.stubGlobal('fetch', fetchPayload({}))
+    mount()
+    await userEvent.click(screen.getByRole('button', { name: /Sätze & Notizen/ }))
+    const sheet = screen.getByRole('dialog')
+    const weight = within(sheet).getByRole('spinbutton', { name: /Satz 1, Gewicht in kg/ })
+    await userEvent.clear(weight)
+    await userEvent.type(weight, '11.25')
+    // A step of 0.5 made the browser refuse it before the save ran.
+    expect((weight as HTMLInputElement).checkValidity()).toBe(true)
+    await userEvent.click(within(sheet).getByRole('button', { name: 'Satz 1 speichern' }))
+
+    const [, init] = (fetch as ReturnType<typeof vi.fn>).mock.calls[0] as [string, RequestInit]
+    expect((init.body as FormData).get('weight')).toBe('11.25')
+    vi.unstubAllGlobals()
+  })
+
+  it('takes a quarter-kilo weight in the new-set form too (G-146)', async () => {
+    vi.stubGlobal('fetch', fetchPayload({}))
+    mount()
+    await userEvent.click(screen.getByRole('button', { name: /Sätze & Notizen/ }))
+    const added = within(screen.getByRole('dialog'))
+      .getAllByRole('spinbutton', { name: /neuer Satz, Gewicht in kg/ })[0]!
+    await userEvent.clear(added)
+    await userEvent.type(added, '11.25')
+    expect((added as HTMLInputElement).checkValidity()).toBe(true)
+    vi.unstubAllGlobals()
+  })
+
   it('re-renders the verdict when the deload toggle answers', async () => {
     vi.stubGlobal('fetch', fetchPayload({
       session: { ...base.session, is_deload: true, deload_pct: 60 },

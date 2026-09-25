@@ -11,31 +11,58 @@
  * not an exotic one. Two of them shipped: "3,25 Workouts pro Woche" printed
  * 3,2 for years and became 3,3, and a 22,5 % share printed 22 and became 23.
  *
- * Exact over that domain, because a dyadic rational scaled by a power of ten
- * is still exact in binary, so the `=== 0.5` test is a real tie test rather
- * than a float comparison. Anything that is not a tie is left alone for the
- * caller to round normally, which agrees with Python everywhere else.
+ * Only a few doubles are ties, and the test for one is exact: half-way to
+ * the next whole is an odd half, to the next tenth an odd quarter (3,25), to
+ * the next hundredth an odd eighth (11,125) -- a value that many of which
+ * make an odd whole number, and multiplying by a power of two rounds
+ * nothing. Scaling by the power of ten first could land on ,5 by rounding:
+ * 0,015 is really 0,01499..., which Python rounds down, and kg printed it
+ * 0,02 (B9 review). Anything that is not a tie is left alone for the caller,
+ * and toFixed rounds it as Python's '%.Nf' does: the double as it is.
  *
- * Outside that domain it can differ by one in the last place: 0,8875 is really
- * 0,887499..., which Python rounds down and the scaling here reads as a tie.
- * Nothing on these pages formats a value like that -- the inputs are ints,
- * one-decimal floats from Python, and quarters -- but it is the boundary.
+ * roundTo still scales before it rounds, so there a value like 0,8875 (really
+ * 0,887499...) can come out one up in its last place -- a CSS length, where
+ * that is nothing.
  *
  * Jinja's `|round` filter documents "common" (half-up) rounding and does not
  * do it -- it delegates to Python's round(). This mirrors the behaviour, not
  * the documentation.
  */
 function halfEven(value: number, places = 0): number {
+  const halves = value * 2 ** (places + 1)
+  if (!Number.isInteger(halves) || halves % 2 === 0) return value
   const scale = 10 ** places
-  const scaled = value * scale
-  const lower = Math.floor(scaled)
-  if (scaled - lower !== 0.5) return value
+  const lower = Math.floor(value * scale)
   return (lower % 2 === 0 ? lower : lower + 1) / scale
 }
 
-/** `'%.1f'|format(x)` + `.replace('.', ',')` */
+/** `'%.1f'|format(x)` + `.replace('.', ',')` -- for a number worked out from
+ *  weights (a 1RM, a share, a rate), never for a weight itself: that is `kg`. */
 export function kg1(value: number): string {
   return halfEven(value, 1).toFixed(1).replace('.', ',')
+}
+
+/**
+ * A weight, to the hundredth the app keeps: 11,25 reads 11,25 on every
+ * screen. A quarter-kilo step is real, and three formatters used to disagree
+ * on it -- 11,2 in the set row, 11,3 in the stepper, 11,25 in the settings --
+ * and the stepper then wrote its 11,3 back (walkthrough G-146).
+ *
+ * A logged weight keeps the one decimal it has always shown: "80,0".
+ */
+export function kg(value: number): string {
+  return hundredths(value).replace('.', ',')
+}
+
+/** The same weight as a setting, read the way it is typed: "20", "2,5". */
+export function kgSetting(value: number): string {
+  return hundredths(value).replace(/\.0$/, '').replace('.', ',')
+}
+
+/** "80.0", "11.5", "11.25": to the hundredth as stats.kg_text's '{:.2f}'
+ *  has it, no zero past the first. */
+function hundredths(value: number): string {
+  return halfEven(value, 2).toFixed(2).replace(/0$/, '')
 }
 
 /** `'{:,.0f}'.format(v).replace(',', '.')` */
@@ -141,5 +168,5 @@ export function whenSaid(iso: string, now: Date = new Date()): string {
 export function setsLine(sets: { weight: number; reps: number }[]): string {
   return sets.map((set, i) => (i > 0 && set.weight === sets[i - 1]!.weight
     ? String(set.reps)
-    : `${kg1(set.weight)} × ${set.reps}`)).join(' · ')
+    : `${kg(set.weight)} × ${set.reps}`)).join(' · ')
 }

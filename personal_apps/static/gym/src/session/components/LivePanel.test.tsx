@@ -1076,3 +1076,31 @@ describe('LivePanel, first time', () => {
     expect(screen.getByText('Satz geschafft')).toBeInTheDocument()
   })
 })
+
+describe('LivePanel and a quarter-kilo weight (G-146)', () => {
+  // 11,25 kg read "11,3" in the stepper and "11,2" on the chips, and opening
+  // the stepper's entry and leaving it wrote 11,3 back: a set logged heavier
+  // than it was lifted, which could read as a record.
+  const quarter = () => withLiveSets(live.sets.map((s) => (s.completed ? s : { ...s, weight: 11.25 })))
+
+  it('shows 11,25 and logs 11,25 after the entry was opened and left', async () => {
+    const user = userEvent.setup()
+    const h = handlers()
+    render(<><LivePanel payload={quarter()} {...h} /><button type="button">elsewhere</button></>)
+    expect(screen.getByLabelText('Gewicht eingeben')).toHaveTextContent('11,25')
+
+    await user.click(screen.getByLabelText('Gewicht eingeben'))
+    expect(screen.getByLabelText('Gewicht eingeben')).toHaveValue('11,25')
+    await user.click(screen.getByText('elsewhere'))
+    await user.click(screen.getByText('Satz geschafft'))
+    const next = live.sets.find((s) => !s.completed)!
+    expect(h.onConfirm).toHaveBeenCalledWith(11.25, next.reps, next.id)
+  })
+
+  it('says the planned sets to the hundredth too', () => {
+    render(<LivePanel payload={quarter()} {...handlers()} />)
+    const later = live.sets.filter((s) => !s.completed)[1]!
+    expect(screen.getByLabelText(new RegExp(`^Satz ${live.sets.indexOf(later) + 1}, geplant`)))
+      .toHaveTextContent(`11,25 × ${later.reps}`)
+  })
+})

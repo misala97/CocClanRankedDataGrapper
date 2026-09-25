@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { flushSync } from 'react-dom'
 import type { ExerciseDetailPayload } from '../types'
 import { getJson } from '../api'
@@ -12,6 +12,9 @@ import { EditSheet } from '../components/EditSheet'
 
 /** "Deine Pause" links an exception here: the page opens on the settings. */
 const SETTINGS_HASH = '#einstellungen'
+
+/** The URL's ?position=, '' when it has none. */
+const positionInUrl = () => new URLSearchParams(window.location.search).get('position') ?? ''
 
 interface Props {
   payload: ExerciseDetailPayload
@@ -35,8 +38,19 @@ export function ExerciseDetailPage({ payload }: Props) {
   // (detail.json honours the filter exactly), so a pill tap is one fetch
   // instead of a full navigation.
   const [p, setP] = useState(payload)
+  // Each position's payload as it came, keyed like the URL's ?position=
+  // ('' for a bare URL, the server's pick): a pill tapped again, or the back
+  // button, swaps without asking (G-150). The page's own is known already.
+  const fetched = useRef(new Map<string, ExerciseDetailPayload>())
   // A genuinely new server-rendered payload replaces any client-side swap.
-  useEffect(() => { setP(payload) }, [payload])
+  useEffect(() => {
+    setP(payload)
+    fetched.current = new Map([[positionInUrl(), payload]])
+  }, [payload])
+  // The latest ask wins. Two quick taps applied their answers in whatever
+  // order they came, and could leave the page on the first pill under the
+  // second one's URL (G-150).
+  const latest = useRef(0)
   const id = p.exercise.id
   const count = p.table.length
   // One row per slot: an exercise done at two positions in one workout is
@@ -52,9 +66,24 @@ export function ExerciseDetailPage({ payload }: Props) {
     history.replaceState(history.state, '', window.location.pathname + window.location.search)
   }, [])
 
-  const fetchPosition = (positionParam: string) =>
-    getJson<ExerciseDetailPayload>(
-      `/gym/exercises/${id}/detail.json?position=${positionParam}`)
+  /** The payload for `positionParam` -- asked once, then from `fetched` --
+   *  or null when a later ask has taken over by the time it is here. A
+   *  failure only counts for the latest ask as well. */
+  const load = async (positionParam: string): Promise<ExerciseDetailPayload | null> => {
+    const ask = ++latest.current
+    try {
+      let fresh = fetched.current.get(positionParam)
+      if (fresh === undefined) {
+        fresh = await getJson<ExerciseDetailPayload>(
+          `/gym/exercises/${id}/detail.json?position=${positionParam}`)
+        fetched.current.set(positionParam, fresh)
+      }
+      return ask === latest.current ? fresh : null
+    } catch (error) {
+      if (ask === latest.current) throw error
+      return null
+    }
+  }
 
   // The swap is wrapped in a view transition where the platform has one --
   // the chart crossfades between filters instead of cutting. flushSync so the
@@ -69,8 +98,9 @@ export function ExerciseDetailPage({ payload }: Props) {
   }
 
   const switchPosition = (positionParam: string) => {
-    fetchPosition(positionParam)
+    load(positionParam)
       .then((fresh) => {
+        if (fresh === null) return
         applyPayload(fresh)
         // pushState, so every pill stays a back-button step, the way the
         // full navigations were.
@@ -83,16 +113,18 @@ export function ExerciseDetailPage({ payload }: Props) {
       })
   }
 
+  // Back and forward through the pills. `load` and `applyPayload` read only
+  // refs, `id` and the state setter, so the listener of the first render
+  // stays right. A bare URL is the page as it was served -- the server's
+  // pick, which "all" was not.
   useEffect(() => {
     const onPop = () => {
-      const positionParam = new URLSearchParams(window.location.search)
-        .get('position') ?? 'all'
-      fetchPosition(positionParam).then(applyPayload)
+      load(positionInUrl())
+        .then((fresh) => { if (fresh !== null) applyPayload(fresh) })
         .catch(() => { window.location.reload() })
     }
     window.addEventListener('popstate', onPop)
     return () => window.removeEventListener('popstate', onPop)
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id])
 
   const oldest = p.table[count - 1]
@@ -202,7 +234,12 @@ export function ExerciseDetailPage({ payload }: Props) {
       </div>
 
       <EditSheet exercise={p.exercise} open={editing} onClose={() => setEditing(false)}
-        onSaved={(exercise) => setP((current) => ({ ...current, exercise }))} />
+        onSaved={(exercise) => {
+          setP((current) => ({ ...current, exercise }))
+          // Every position's payload carries the exercise: none may bring
+          // the old settings back.
+          for (const [key, kept] of fetched.current) fetched.current.set(key, { ...kept, exercise })
+        }} />
     </>
   )
 }

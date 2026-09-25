@@ -1,5 +1,5 @@
 import type { E1rmPR, SessionRow, WeightPR } from '../types'
-import { kg1, shortDate } from '../format'
+import { kg, kg1, shortDate } from '../format'
 
 interface Props {
   prWeight: WeightPR | null
@@ -21,7 +21,7 @@ export function RecordsBand({
         <div className="prs">
           {prWeight !== null && (
             <span className="pr">
-              <span className="pr__val">{kg1(prWeight.weight)}<small>kg</small></span>
+              <span className="pr__val">{kg(prWeight.weight)}<small>kg</small></span>
               <span className="label">Schwerster Satz</span>
               {/* One string, not interpolated children -- see ExerciseHeader for
                   why the raster depends on it. */}
@@ -35,7 +35,7 @@ export function RecordsBand({
               <span className="pr__val">{kg1(prE1rm.e1rm)}<small>kg</small></span>
               <span className="label">Bestes geschätztes Maximum (1RM)</span>
               <span className="pr__sub">
-                {`${kg1(prE1rm.weight)} kg × ${prE1rm.reps} · Pos. ${prE1rm.position} · ${shortDate(prE1rm.started_at)}`}
+                {`${kg(prE1rm.weight)} kg × ${prE1rm.reps} · Pos. ${prE1rm.position} · ${shortDate(prE1rm.started_at)}`}
               </span>
             </span>
           )}
@@ -50,7 +50,7 @@ export function RecordsBand({
           <p className="next-time__body">
             Seit {sessionsSincePr} Workouts kein neuer Rekord — mehr Gewicht
             oder mehr Wiederholungen versuchen, ausgehend von{' '}
-            <b>{kg1(lastProgression.best_weight)} kg</b>.
+            <b>{kg(lastProgression.best_weight)} kg</b>.
           </p>
         </section>
       ) : sessionsSincePr !== null && sessionsSincePr > 0 ? (

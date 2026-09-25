@@ -1,4 +1,5 @@
 {% extends 'gym/_base.html' %}
+{% set island = 'exercise' %}
 
 {# Exercise detail (Puls): the single-exercise instrument.
 
@@ -22,5 +23,5 @@
 
 {% block scripts %}
 <script type="application/json" id="gym-data">{{ payload_json | tojson }}</script>
-<script type="module" src="{{ vite_asset('exercise') }}"></script>
+<script type="module" src="{{ vite_asset(island) }}"></script>
 {% endblock %}

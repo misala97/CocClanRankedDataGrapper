@@ -2,7 +2,7 @@ import { useMemo, useRef, useState, type CSSProperties } from 'react'
 import type {
   ProgressionRow, StatistikPayload, TimelineRecord, TonnageMonth,
 } from './types'
-import { kg1, localParts, roundTo, shortDate, signedWhole, volume as de, whole } from '../format'
+import { kg, kg1, localParts, roundTo, shortDate, signedWhole, volume as de, whole } from '../format'
 import { morphFrom } from '../vt'
 
 const pad = (n: number) => String(n).padStart(2, '0')
@@ -113,7 +113,6 @@ export function StatistikPage({ payload }: { payload: StatistikPayload }) {
     : months.slice(selRange[0], selRange[1] + 1)
   const selKeys = useMemo(
     () => new Set(selMonths.map((m) => `${m.year}-${m.month}`)),
-    // eslint-disable-next-line react-hooks/exhaustive-deps
     [sel, months])
 
   // The lifter's month, matching the server's bucketing (analytics.
@@ -553,7 +552,7 @@ export function StatistikPage({ payload }: { payload: StatistikPayload }) {
                       style={{ inlineSize: `${roundTo((rung.notches / widestRung) * 100, 1)}%` }} />
                   </span>
                   <span className="prog__pct"
-                    title={`${de(rung.from_weight)} → ${de(rung.to_weight)} kg`}>
+                    title={`${kg(rung.from_weight)} → ${kg(rung.to_weight)} kg`}>
                     {`${rung.notches}×`}
                   </span>
                 </div>

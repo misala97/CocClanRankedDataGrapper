@@ -658,8 +658,9 @@ def increment_ladder(rows):
             'exercise_id': sample_row.exercise_id,
             'name': sample_row.name,
             'notches': notches,
-            'from_weight': round(first_weight, 1),
-            'to_weight': round(best_weight, 1),
+            # To the hundredth a weight is kept and shown in (G-146).
+            'from_weight': round(first_weight, 2),
+            'to_weight': round(best_weight, 2),
             'sessions': len(ordered),
         })
 

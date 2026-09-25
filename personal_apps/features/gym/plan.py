@@ -13,6 +13,7 @@ This module says how many sets there are, and the range "Nächstes Mal" aims
 at (stats.next_target). No blueprint here, like seeding.py: sharing.py and
 the routes both read it.
 """
+from sqlalchemy import func
 from sqlalchemy.orm import selectinload
 
 from extensions import db
@@ -27,15 +28,26 @@ def _counted(session_exercise):
     return [s for s in session_exercise.sets if stats.set_counts(s.completed, s.reps)]
 
 
-def _recent_rows(exercise_id, user_id, limit, template_id=None):
-    """The exercise's rows in the lifter's newest finished, non-deload
-    workouts that hold a set of it that counts -- of one routine when
-    `template_id` is given. Newest first, at most `limit`."""
-    query = (
-        SessionExercise.query
+def _recent_rows(exercise_ids, user_id, limit, template_id=None):
+    """{exercise_id: rows}: each exercise's rows in the lifter's newest
+    finished, non-deload workouts that hold a set of it that counts -- of one
+    routine when `template_id` is given. Newest first, at most `limit` each.
+
+    One query for all of them, the limit counted per exercise in the
+    database: asked one exercise at a time, a workout under a routine not
+    filled yet paid up to six queries per exercise on every live payload
+    (walkthrough G-140)."""
+    if not exercise_ids:
+        return {}
+    newest_first = (WorkoutSession.started_at.desc(), SessionExercise.id.desc())
+    ranked = (
+        db.session.query(
+            SessionExercise.id.label('id'),
+            func.row_number().over(partition_by=SessionExercise.exercise_id,
+                                   order_by=newest_first).label('place'))
         .join(WorkoutSession, SessionExercise.session_id == WorkoutSession.id)
         .filter(
-            SessionExercise.exercise_id == exercise_id,
+            SessionExercise.exercise_id.in_(exercise_ids),
             SessionExercise.sets.any((SessionSet.completed == True) & (SessionSet.reps >= 1)),
             WorkoutSession.user_id == user_id,
             WorkoutSession.finished_at.isnot(None),
@@ -43,52 +55,70 @@ def _recent_rows(exercise_id, user_id, limit, template_id=None):
             WorkoutSession.is_deload == False,
         ))
     if template_id is not None:
-        query = query.filter(WorkoutSession.template_id == template_id)
-    return (query.order_by(WorkoutSession.started_at.desc())
-            .options(selectinload(SessionExercise.sets))
-            .limit(limit)
-            .all())
+        ranked = ranked.filter(WorkoutSession.template_id == template_id)
+    ranked = ranked.subquery()
+    found = {exercise_id: [] for exercise_id in exercise_ids}
+    for row in (SessionExercise.query
+                .join(ranked, ranked.c.id == SessionExercise.id)
+                .join(WorkoutSession, SessionExercise.session_id == WorkoutSession.id)
+                .filter(ranked.c.place <= limit)
+                .order_by(*newest_first)
+                .options(selectinload(SessionExercise.sets))
+                .all()):
+        found[row.exercise_id].append(row)
+    return found
 
 
-def history_set_count(exercise_id, user_id, template_id=None):
-    """How many sets the exercise gets, from history: the most any of the
+def history_set_counts(exercise_ids, user_id, template_id=None):
+    """{exercise_id: how many sets it gets, from history}: the most any of the
     routine's last COUNT_WORKOUTS workouts held of it (stats.plan_set_count
     -- a cut-short workout does not shrink it); none there, the lifter's
     last COUNT_WORKOUTS with it anywhere; none at all, the default."""
-    rows = []
+    rows = {}
     if template_id is not None:
-        rows = _recent_rows(exercise_id, user_id, COUNT_WORKOUTS, template_id=template_id)
-    if not rows:
-        rows = _recent_rows(exercise_id, user_id, COUNT_WORKOUTS)
-    return stats.plan_set_count([len(_counted(row)) for row in rows])
+        rows = _recent_rows(exercise_ids, user_id, COUNT_WORKOUTS, template_id=template_id)
+    rows.update(_recent_rows([i for i in exercise_ids if not rows.get(i)], user_id,
+                             COUNT_WORKOUTS))
+    return {i: stats.plan_set_count([len(_counted(row)) for row in rows[i]])
+            for i in exercise_ids}
 
 
-def history_rep_range(exercise_id, user_id):
-    """The rep range from history, any routine (stats.rep_range_from)."""
-    rows = _recent_rows(exercise_id, user_id, stats.RANGE_WORKOUTS)
-    return stats.rep_range_from([[(s.weight, s.reps) for s in _counted(row)] for row in rows])
+def history_rep_ranges(exercise_ids, user_id):
+    """{exercise_id: the rep range from history}, any routine
+    (stats.rep_range_from)."""
+    rows = _recent_rows(exercise_ids, user_id, stats.RANGE_WORKOUTS)
+    return {i: stats.rep_range_from([[(s.weight, s.reps) for s in _counted(row)]
+                                     for row in rows[i]])
+            for i in exercise_ids}
 
 
-def row_plan(row, user_id, template_id):
-    """A row of routine `template_id` as (sets, rep_min, rep_max): its own
-    plan, and for what it has none of yet, what `user_id`'s history gives --
-    the numbers the next start fills in."""
-    sets = row.target_sets
-    if sets is None:
-        sets = history_set_count(row.exercise_id, user_id, template_id=template_id)
-    if row.rep_min is None or row.rep_max is None:
-        rep_min, rep_max = history_rep_range(row.exercise_id, user_id)
-    else:
-        rep_min, rep_max = row.rep_min, row.rep_max
-    return sets, rep_min, rep_max
+def row_plans(rows, user_id, template_id):
+    """Rows of routine `template_id`, each as (sets, rep_min, rep_max), in
+    order: its own plan, and for what it has none of yet, what `user_id`'s
+    history gives -- the numbers the next start fills in."""
+    no_sets = sorted({row.exercise_id for row in rows if row.target_sets is None})
+    no_range = sorted({row.exercise_id for row in rows
+                       if row.rep_min is None or row.rep_max is None})
+    counts = history_set_counts(no_sets, user_id, template_id=template_id) if no_sets else {}
+    ranges = history_rep_ranges(no_range, user_id) if no_range else {}
+    plans = []
+    for row in rows:
+        sets = row.target_sets if row.target_sets is not None else counts[row.exercise_id]
+        if row.rep_min is None or row.rep_max is None:
+            rep_min, rep_max = ranges[row.exercise_id]
+        else:
+            rep_min, rep_max = row.rep_min, row.rep_max
+        plans.append((sets, rep_min, rep_max))
+    return plans
 
 
 def fill_routine_plan(template, user_id):
     """Give every row of `template` that has no plan yet one from `user_id`'s
     history. Once: a filled row is the lifter's from then on, and only an
     explicit edit changes it. Does not commit."""
-    for row in template.exercises:
-        row.target_sets, row.rep_min, row.rep_max = row_plan(row, user_id, template.id)
+    rows = list(template.exercises)
+    for row, (sets, rep_min, rep_max) in zip(rows, row_plans(rows, user_id, template.id)):
+        row.target_sets, row.rep_min, row.rep_max = sets, rep_min, rep_max
 
 
 def replace_routine_rows(template, rows):

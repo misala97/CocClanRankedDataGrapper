@@ -1,4 +1,5 @@
 import { forwardRef, useImperativeHandle, useLayoutEffect, useRef, useState } from 'react'
+import { kg, roundTo } from '../../format'
 
 /** What the live panel can ask of a stepper beyond its props. */
 export interface StepperHandle {
@@ -14,6 +15,8 @@ interface Props {
   value: number | null
   /** The exercise's own loadable step, resolved server-side. */
   step: number
+  /** The most decimals a typed number may have: 2 for a weight (a
+   *  quarter-kilo step is real), 0 for reps. */
   decimals: number
   /** The lowest number the field takes. Reps start at 1 -- the server does
    *  not take a set of none. */
@@ -37,8 +40,11 @@ interface Props {
   onChange(next: number): void
 }
 
+// The readout and the entry say the number the way every other screen does,
+// to the hundredth. toFixed(1) here used to open 11,25 as "11,3" and write
+// that back on close -- a set logged heavier than lifted (walkthrough G-146).
 const de = (value: number, decimals: number) =>
-  decimals ? value.toFixed(decimals).replace('.', ',') : String(Math.round(value))
+  decimals ? kg(value) : String(Math.round(value))
 
 /**
  * A number you change by tapping, not by typing.
@@ -83,7 +89,7 @@ export const Stepper = forwardRef<StepperHandle, Props>(function Stepper({
   const parse = (text: string): number | null => {
     const parsed = Number.parseFloat(text.replace(',', '.'))
     if (!Number.isFinite(parsed)) return null
-    if (!decimals && !Number.isInteger(parsed)) return null
+    if (roundTo(parsed, decimals) !== parsed) return null
     return parsed < min || parsed > max ? null : parsed
   }
 

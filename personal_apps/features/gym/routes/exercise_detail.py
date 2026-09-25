@@ -393,57 +393,8 @@ def exercise_detail(exercise_id):
 @gym_bp.route('/gym/exercises/<int:exercise_id>/detail.json')
 @login_required
 def gym_exercise_detail_json(exercise_id):
-    """The full exercise page as JSON.
-
-    Distinct from gym_exercise_progress_json below, which backs the in-workout
-    quick-glance modal and deliberately falls back to all-time data when the
-    requested slot is empty. This one honours the filter exactly, because the
-    page's pills have to mean what they say.
-    """
+    """The full exercise page as JSON, for its position pills. It honours the
+    filter exactly: the pills have to mean what they say."""
     exercise = exercise_or_404(exercise_id)
     payload = _exercise_detail_payload(exercise, request.args.get('position'))
     return jsonify(payload.model_dump(mode='json'))
-
-
-@gym_bp.route('/gym/exercises/<int:exercise_id>/progress.json')
-@login_required
-def gym_exercise_progress_json(exercise_id):
-    """Backs the in-workout quick-glance modal. Scoped to a position when
-    one is given (same slot in the workout order = comparable fatigue
-    state), but unlike the full exercise page's explicit filter, this falls
-    back to all-time data if that exact slot has no history yet -- the
-    modal should always show *something* useful rather than an empty state
-    just because you haven't done this exercise in this position before."""
-    exercise = exercise_or_404(exercise_id)
-    position = request.args.get('position', type=int)
-    rows = load_performed(exercise_ids=[exercise.id])
-    progress = stats.exercise_progress(rows, position=position)
-    if position is not None and not progress['table']:
-        progress = stats.exercise_progress(rows, position=None)
-
-    def fmt_weight_pr(pr):
-        if not pr:
-            return None
-        return {'weight': pr['weight'], 'reps': pr['reps'], 'position': pr['position'],
-                'date': stats.to_local(pr['started_at']).strftime('%d.%m.%Y')}
-
-    def fmt_e1rm_pr(pr):
-        if not pr:
-            return None
-        return {'e1rm': pr['e1rm'], 'weight': pr['weight'], 'reps': pr['reps'], 'position': pr['position'],
-                'date': stats.to_local(pr['started_at']).strftime('%d.%m.%Y')}
-
-    return jsonify({
-        'exercise_id': exercise.id,
-        'name': exercise.name,
-        'is_unilateral': exercise.is_unilateral,
-        'selected_position': progress['selected_position'],
-        'series': progress['series'],
-        # The same geometry the exercise page draws from. The modal used to ship
-        # raw series and let Chart.js lay them out on a category axis, which drew
-        # a six-week gap and four same-day sessions at the same width -- so the
-        # two charts in this app disagreed about what the x axis meant.
-        'chart': _chart_geometry(progress['series']),
-        'pr_weight': fmt_weight_pr(progress['pr_weight']),
-        'pr_e1rm': fmt_e1rm_pr(progress['pr_e1rm']),
-    })

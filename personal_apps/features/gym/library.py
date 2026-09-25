@@ -38,7 +38,9 @@ the judgement calls are these:
   its German one: "chest fly" and "butterfly" both find the pec deck, and
   every name the lifters used before the list still finds its entry.
   matches() is that contract. An alias never repeats another entry's name or
-  alias.
+  alias: the list's migration looks an old name up by it. What every variant
+  of a movement is called goes in MOVEMENT_AKA instead, which only search
+  reads.
 - No bodyweight exercises: the app logs kg x reps, and the owner dropped
   them for now (2026-09-23).
 """
@@ -107,7 +109,9 @@ class Entry:
 
     @property
     def search_text(self):
-        return fold(' '.join((self.name, *self.aka)))
+        """The folded name, aliases and movement aliases, a line each: what
+        find() looks in."""
+        return fold_apart((self.name, *self.aka, *MOVEMENT_AKA.get(self.movement, ())))
 
 
 def fold(text):
@@ -125,14 +129,96 @@ _FOLD = str.maketrans({'ä': 'a', 'ö': 'o', 'ü': 'u', '-': ' ', ',': ' ',
                        '(': ' ', ')': ' ', '°': ' ', "'": ' '})
 
 
-def matches(entry, query):
-    """True when every word of `query` occurs in the entry's name or aliases.
+def fold_apart(parts):
+    """`parts` folded one by one, a line each: a query's words may come from
+    any of them, its whole phrase only from one (find's 'phrase' tier)."""
+    return '\n'.join(fold(part) for part in parts)
+
+
+#: A query word this long may be one typo off. A shorter one stays exact:
+#: one edit is most of a four-letter word, and "bank" would find "dank".
+#: Letters only: "31.07" one edit off is 01.07., 03.07., 13.07. and 31.08.
+FUZZY_FROM = 5
+
+
+def _may_be_a_typo(word):
+    return len(word) >= FUZZY_FROM and word.isalpha()
+
+
+def _has_words(search, words, typos=False):
+    return all(word in search
+               or (typos and _may_be_a_typo(word) and _one_edit_off(word, search))
+               for word in words)
+
+
+def matches(search, query, typos=False):
+    """True when every word of the folded `query` occurs in `search`, a folded
+    text -- Entry.search_text, or a page's own (a Verlauf workout's).
 
     Words may come from different aliases and in any order, and a fragment
-    counts ("lat raise" finds Lateral Raise). The add sheet's search must
-    keep this contract when it moves to the client."""
-    haystack = entry.search_text
-    return all(word in haystack for word in fold(query).split())
+    counts ("lat raise" finds Lateral Raise). With `typos`, a word of
+    FUZZY_FROM letters or more may be one edit off ("Bankdrüken",
+    "legpress"). A query that folds to nothing ("-") is no query and matches
+    everything."""
+    return _has_words(search, fold(query).split(), typos)
+
+
+def find(texts, query):
+    """(positions, tier): which of the folded `texts` answer `query`, and by
+    which of three tiers -- the first that finds anything:
+
+    - 'phrase': the whole query as one run. "Push 2" is the workout Push 2,
+      not every Push of 2026, and "Bankdrücken Kurzhantel" that exercise, not
+      a workout with Bankdrücken (Langhantel) and Seitheben (Kurzhantel). A
+      text made of several things (a Verlauf workout: its name, its date, each
+      exercise) separates them with a newline, which no folded query holds,
+      so a run never spans two of them.
+    - 'words': every word somewhere, in any order: "lat raise" finds Lateral
+      Raise, "Push 23.09" the Push of that day.
+    - 'typos': the same, with a word of FUZZY_FROM letters or more one edit
+      off. Only as the fallback: "bench" one edit off is "rench", and French
+      Press is no bench press.
+
+    A query that folds to nothing is no query: every text, by 'words'.
+
+    The one search (walkthrough G-145): the add sheet, Übungen and Verlauf all
+    search with static/gym/src/search.ts, which mirrors this rule for rule;
+    tests/test_gym_search_cases.py holds the two to the same answers."""
+    phrase = fold(query)
+    words = phrase.split()
+    if not words:
+        return list(range(len(texts))), 'words'
+    hits = [i for i, text in enumerate(texts) if phrase in text]
+    if hits:
+        return hits, 'phrase'
+    hits = [i for i, text in enumerate(texts) if _has_words(text, words)]
+    if hits or not any(_may_be_a_typo(word) for word in words):
+        return hits, 'words'
+    return [i for i, text in enumerate(texts) if _has_words(text, words, typos=True)], 'typos'
+
+
+def _one_edit_off(word, text):
+    """Whether some stretch of `text` is at most one edit from `word`: a
+    letter added, dropped or changed, or two neighbours swapped.
+
+    Sellers' dynamic programme -- the edit distance with the match free to
+    start anywhere in `text` -- with the swap of optimal string alignment.
+    `above[j]` is the fewest edits that turn the word so far into a stretch
+    of `text` ending at j. That minimum never falls from one letter of the
+    word to the next, so past one edit the search stops."""
+    before, above = None, [0] * (len(text) + 1)
+    for i in range(1, len(word) + 1):
+        row = [i] + [0] * len(text)
+        for j in range(1, len(text) + 1):
+            best = min(above[j] + 1, row[j - 1] + 1,
+                       above[j - 1] + (word[i - 1] != text[j - 1]))
+            if i > 1 and j > 1 and word[i - 1] == text[j - 2] and word[i - 2] == text[j - 1]:
+                best = min(best, before[j - 2] + 1)
+            row[j] = best
+        if min(row) > 1:
+            return False
+        before, above = above, row
+    return True
 
 
 def _e(key, name, group, secondary=(), *, rest=ISOLATION, uni=None, aka=()):
@@ -500,3 +586,27 @@ for _entry in LIBRARY:
     MOVEMENT_GROUP.setdefault(_entry.movement, _entry.group)
 # Those groups in the list's own order, Brust first: the sheet's sections.
 LIST_GROUPS = tuple(dict.fromkeys(MOVEMENT_GROUP.values()))
+
+# What every variant of a movement is also called, for search only (G-006):
+# "bench" found the variants whose own aliases happened to say it and missed
+# the rest -- Negativbankdrücken (Kurzhantel) among them. Kept apart from
+# `aka`, where a name must belong to one entry.
+MOVEMENT_AKA = {
+    'Bankdrücken': ('Bench Press', 'Flachbankdrücken'),
+    'Schrägbankdrücken': ('Incline Bench Press',),
+    'Negativbankdrücken': ('Decline Bench Press',),
+    'Rudern': ('Row', 'Rowing'),
+    'Shrugs': ('Shrug', 'Schulterheben'),
+    'Latzug': ('Lat Pulldown', 'Latziehen'),
+    'Schulterdrücken': ('Shoulder Press', 'Overhead Press'),
+    'Seitheben': ('Lateral Raise', 'Seitenheben'),
+    'Bizepscurls': ('Biceps Curl',),
+    'French Press': ('Skull Crusher', 'Stirndrücken'),
+    'Trizepsstrecken über Kopf': ('Overhead Triceps Extension',),
+    'Trizepsdrücken': ('Triceps Pushdown',),
+    'Kniebeugen': ('Squat',),
+    'Rumänisches Kreuzheben': ('Romanian Deadlift', 'RDL'),
+    'Bulgarische Kniebeugen': ('Bulgarian Split Squat',),
+    'Goblet Squat': ('Goblet Kniebeuge',),
+    'Wadenheben': ('Calf Raise',),
+}

@@ -1,3 +1,4 @@
+import { volume as de } from '../../format'
 import { Sheet } from './Sheet'
 import { useSheets } from '../stores'
 
@@ -56,7 +57,7 @@ export function FinishSheet({
         ) : (
           <>
             <span className="finish-sum__vol">
-              {Math.round(volume).toLocaleString('de-DE')}
+              {de(volume)}
               <small>kg bewegt</small>
             </span>
             <span className="finish-sum__meta">

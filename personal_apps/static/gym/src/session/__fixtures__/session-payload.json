@@ -2081,20 +2081,6 @@
   "live_id": 10,
   "live_increment": 2.0,
   "live_index": 1,
-  "muscle_groups": [
-    "Bizeps",
-    "Trizeps",
-    "Brust",
-    "Rücken",
-    "Schultern",
-    "Beine",
-    "Bauch",
-    "Gesäß",
-    "Waden",
-    "Unterarme",
-    "Cardio",
-    "Sonstiges"
-  ],
   "next_targets": {
     "10": [
       {

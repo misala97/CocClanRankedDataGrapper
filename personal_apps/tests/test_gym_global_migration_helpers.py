@@ -55,7 +55,7 @@ def test_every_old_name_still_finds_its_exercise(rev):
     markers = {library.fold(word) for word in ('Good', 'Hauptbahnhof')}
     for old, key in rev.PRODUCTION_2026_09.items():
         query = ' '.join(w for w in library.fold(old).split() if w not in markers)
-        found = {e.key for e in library.LIBRARY if library.matches(e, query)}
+        found = {e.key for e in library.LIBRARY if library.matches(e.search_text, query)}
         assert key in found, old
 
 

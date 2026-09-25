@@ -13,7 +13,8 @@ import { RoutinePlanGroup } from './RoutinePlanGroup'
 import { Sheet } from './Sheet'
 import { Icon } from '../../components/Icon'
 import { Choice } from '../../settings/Choice'
-import { REST_MAX, REST_MIN, REST_NUDGE, clock, kg, restChoices } from '../../settings/values'
+import { kgSetting } from '../../format'
+import { REST_MAX, REST_MIN, REST_NUDGE, clock, restChoices } from '../../settings/values'
 
 /** How long a row says "Gespeichert" after it saved itself (G-058). */
 export const SAVED_MS = 2000
@@ -175,7 +176,7 @@ export function ExerciseSheet({
             <span className="sheet-row__name">Deine Einstellungen</span>
             <span className="sheet-row__meta">
               {(exercise.rest_setting === null ? '' : `Pause ${clock(exercise.rest_setting)} · `)
-                + `Schritt ${kg(exercise.increment)} kg — gelten immer`}
+                + `Schritt ${kgSetting(exercise.increment)} kg — gelten immer`}
             </span>
           </span>
           <span className="sheet-row__chev"><Icon name="forward" /></span>
@@ -412,7 +413,7 @@ function SetEditor({ set, ordinal, idBase, unit, best, waiting, saved, onSave, o
         <span aria-hidden="true">{set.completed ? <Icon name="check" /> : ordinal}</span>
         <span className="sr-only" id={`${idBase}-state`}>{state}</span>
       </span>
-      <input type="number" step="0.5" min="0" max={MAX_WEIGHT_KG} className="input input--num"
+      <input type="number" step="0.01" min="0" max={MAX_WEIGHT_KG} className="input input--num"
         aria-label={`Satz ${ordinal}, Gewicht in ${unit}`} value={weight}
         aria-describedby={`${idBase}-state`}
         aria-invalid={problem?.startsWith('Gewicht') || undefined}
@@ -513,7 +514,7 @@ function AddSetRow({ seed, unit, best, onAdd }: {
     <>
     <div className="sset">
       <span className="label" aria-hidden="true">+</span>
-      <input type="number" step="0.5" min="0" max={MAX_WEIGHT_KG} className="input input--num" required
+      <input type="number" step="0.01" min="0" max={MAX_WEIGHT_KG} className="input input--num" required
         aria-label={`Neuer Satz, Gewicht in ${unit}`} value={weight}
         aria-invalid={problem?.startsWith('Gewicht') || undefined}
         onChange={(e) => setWeight(e.target.value)} />

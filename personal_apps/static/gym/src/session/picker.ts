@@ -9,7 +9,7 @@
  * often enough to lead the sheet is its `common`.
  */
 import type { CatalogueExercise } from './types'
-import { matches } from '../search'
+import { find, type Tier } from '../search'
 
 /** One movement and its rows, in the order the sheet shows them. */
 export interface Cluster {
@@ -73,9 +73,13 @@ export function sections(catalogue: CatalogueExercise[], groups: string[]): Sect
     }))
 }
 
-/** A search's hits, clustered the same way: what you do first. */
-export function found(catalogue: CatalogueExercise[], query: string): Cluster[] {
-  return clusters(catalogue.filter((row) => matches(row.search, query)))
+/** A search's hits, clustered the same way: what you do first. `tier` says
+ *  how search.find found them -- 'typos', and the sheet says they are a
+ *  typo away. */
+export function found(catalogue: CatalogueExercise[], query: string):
+  { clusters: Cluster[]; tier: Tier } {
+  const { hits, tier } = find(catalogue, query, (row) => row.search)
+  return { clusters: clusters(hits), tier }
 }
 
 const unique = (values: string[]) => [...new Set(values)]

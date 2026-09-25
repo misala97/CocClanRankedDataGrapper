@@ -4,6 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { CataloguePage } from './CataloguePage'
 import type { CatalogueEntry, CataloguePayload, RestOverview } from './types'
 import { useCatalogueUi } from './store'
+import { fold } from '../search'
 
 beforeEach(() => {
   useCatalogueUi.setState(useCatalogueUi.getInitialState(), true)
@@ -19,13 +20,14 @@ const REST: RestOverview = {
 
 const LIST = { default_rest_seconds: 180, weight_increment: 2.5, bar_weight: 20, stack_kg: null }
 
-const entry = (id: number, name: string): CatalogueEntry => ({
+const entry = (id: number, name: string, aka = ''): CatalogueEntry => ({
   exercise: {
     id, name, muscle_group: 'Brust', is_unilateral: false,
     default_rest_seconds: 180, weight_increment: 2.5, equipment: 'barbell',
     bar_weight: 20, stack_kg: null, secondary_muscle_groups: null, list_defaults: LIST,
     own: [], rest_for_all: null,
   },
+  search: fold(`${name} ${aka}`),
   chip_class: null, chip_label: null, last_done: null, best_weight: null,
   last_weight: null, days_ago: null, sessions_since_pr: null,
 })
@@ -96,6 +98,64 @@ describe('CataloguePage', () => {
     expect(meta('Bankdrücken (Langhantel)')).toBe('vor 3 Tagen · seit 4 Workouts ohne Rekord')
     expect(meta('Schrägbankdrücken')).toBe('vor 3 Tagen · seit 1 Workout ohne Rekord')
     expect(meta('Butterfly')).toBe('vor 3 Tagen')
+  })
+})
+
+describe('the Übungen search (G-020)', () => {
+  const groups = [
+    {
+      name: 'Brust',
+      entries: [
+        { ...entry(1, 'Bankdrücken (Langhantel)', 'Bench Press'), last_done: '2026-09-01T10:00:00' },
+        { ...entry(2, 'Butterfly (Maschine)', 'Pec Deck Chest Fly'), last_done: '2026-09-20T10:00:00' },
+      ],
+    },
+    { name: 'Beine', entries: [entry(3, 'Beinpresse (Maschine)', 'Leg Press')] },
+  ]
+  const shown = () => [...document.querySelectorAll('.uebungen-row .nameline__n')]
+    .map((n) => n.textContent)
+
+  it('finds by the add sheet\'s text: English names, and one typo', async () => {
+    mount({ groups })
+    const field = screen.getByRole('searchbox', { name: 'Übungen durchsuchen' })
+    await userEvent.type(field, 'bench')
+    expect(shown()).toEqual(['Bankdrücken (Langhantel)'])
+    expect(screen.queryByText(/Kein genauer Treffer/)).toBeNull()
+    await userEvent.clear(field)
+    await userEvent.type(field, 'Bankdrüken')
+    expect(shown()).toEqual(['Bankdrücken (Langhantel)'])
+    // Found a typo away, and it says so: unlabelled, a near miss read as
+    // what the search matched.
+    expect(screen.getByText('Kein genauer Treffer für „Bankdrüken“ – ähnlich geschrieben:'))
+      .toBeInTheDocument()
+    await userEvent.clear(field)
+    await userEvent.type(field, 'beine')
+    expect(shown()).toEqual(['Beinpresse (Maschine)'])
+  })
+
+  it('reads a query that folds to nothing as none', async () => {
+    const assign = vi.fn()
+    vi.stubGlobal('location', { ...window.location, set href(url: string) { assign(url) } })
+    mount({ groups })
+    await userEvent.type(screen.getByRole('searchbox', { name: 'Übungen durchsuchen' }), '-{Enter}')
+    expect(shown()).toHaveLength(3)
+    expect(screen.queryByText(/Keine Übung gefunden/)).toBeNull()
+    // Not a search: the bands say their size, not "n von m", and Enter
+    // opens nothing.
+    expect(document.querySelector('.uebungen-group-header')?.textContent).not.toMatch(/ von /)
+    expect(assign).not.toHaveBeenCalled()
+  })
+
+  it('opens with Enter the first row as shown, in a flat order too', async () => {
+    const assign = vi.fn()
+    vi.stubGlobal('location', { ...window.location, set href(url: string) { assign(url) } })
+    useCatalogueUi.setState({ sort: 'recent' })
+    mount({ groups })
+    await userEvent.type(screen.getByRole('searchbox', { name: 'Übungen durchsuchen' }),
+      'brust{Enter}')
+    // Newest first: the Butterfly, not the list's first row.
+    expect(shown()[0]).toBe('Butterfly (Maschine)')
+    expect(assign).toHaveBeenCalledWith('/gym/exercises/2')
   })
 })
 

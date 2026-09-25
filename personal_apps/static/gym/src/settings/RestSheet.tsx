@@ -73,7 +73,6 @@ function RestBody({ overview, onSaved }: { overview: RestOverview; onSaved: Prop
       window.removeEventListener('pagehide', onHide)
       settle(false)
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
   const forAll = shown.rest_for_all

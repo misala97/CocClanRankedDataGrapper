@@ -57,6 +57,18 @@ def test_an_impossible_set_number_is_refused_with_the_reason(client, live_sessio
     assert _set_row(set_id) == (60.0, 8, False)
 
 
+def test_a_weight_is_kept_to_the_hundredth_it_shows(client, live_session):
+    """Every screen shows a weight to the hundredth (G-146); a third decimal
+    was stored as typed and then planned from, unseen. Rounded as Python
+    rounds the double: 47.505 is a hair above the tie, 11.125 is one."""
+    set_id = live_session['open_set']
+    for typed, kept in (('47.505', 47.51), ('11,125', 11.12), ('62.5', 62.5)):
+        response = client.post(f'/gym/set/{set_id}/update',
+                               data={'weight': typed, 'reps': '8'}, headers=JSON)
+        assert response.status_code == 200
+        assert _set_row(set_id)[0] == kept
+
+
 def test_confirming_a_set_with_an_impossible_weight_leaves_it_open(client, live_session):
     set_id = live_session['open_set']
     response = client.post(f'/gym/set/{set_id}/toggle_complete',

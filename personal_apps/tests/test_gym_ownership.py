@@ -324,7 +324,6 @@ def test_a_stranger_gets_404_on_someone_elses_template(
 # owned their rows.)
 EXERCISE_ROUTES = [
     ('GET',  '/gym/exercises/{}',               'exercise_id'),
-    ('GET',  '/gym/exercises/{}/progress.json', 'exercise_id'),
     ('GET',  '/gym/exercises/{}/detail.json',   'exercise_id'),
     ('GET',  '/gym/exercises/{}/settings.json', 'exercise_id'),
     ('POST', '/gym/exercises/{}/update',        'exercise_id'),
@@ -494,7 +493,7 @@ def test_starting_from_another_users_template_seeds_nothing_and_stores_no_link(t
                     db.session.commit()
 
 
-# The pages render weights German-style (123,5); progress.json emits a raw JSON
+# The pages render weights German-style (123,5); the JSON routes emit a raw
 # number (123.5). Every leak assertion has to cover both, or an HTML check
 # passes against markup that could never have contained the dotted form and
 # proves nothing.

@@ -382,3 +382,109 @@ describe('Deine Einstellungen', () => {
       .toEqual([['stack_kg', '5, 12, 19']])
   })
 })
+
+describe('the position pills (G-150)', () => {
+  afterEach(() => {
+    vi.unstubAllGlobals()
+    history.replaceState(null, '', '/')
+  })
+
+  const served = payload({ table: [row()], available_positions: [1, 2] })
+  const at = (position: number) => payload({
+    table: [row({ position, session_id: 10 + position })], available_positions: [1, 2],
+    selected_position: position,
+  })
+  /** The chart's count, which names the position it is scoped to. */
+  const scope = (position: number) =>
+    screen.queryByText(new RegExp(`^Pos\\. ${position} · \\d+ Workouts?$`))
+
+  /** A server that answers each position when the test says so. */
+  function server() {
+    const waiting = new Map<string, (body: ExerciseDetailPayload) => void>()
+    const fetchMock = vi.fn((url: string) => new Promise<Response>((resolve) => {
+      const position = new URL(url, window.location.href).searchParams.get('position')!
+      waiting.set(position, (body) => resolve({
+        ok: true, status: 200, redirected: false, url, json: async () => body,
+      } as Response))
+    }))
+    vi.stubGlobal('fetch', fetchMock)
+    return { fetchMock, answer: (position: string, body: ExerciseDetailPayload) => waiting.get(position)!(body) }
+  }
+
+  it('shows the pill tapped last, whatever order the answers come in', async () => {
+    const { answer } = server()
+    render(<ExerciseDetailPage payload={served} />)
+    await userEvent.click(screen.getByText('Position 1'))
+    await userEvent.click(screen.getByText('Position 2'))
+    answer('2', at(2))
+    await waitFor(() => expect(scope(2)).toBeInTheDocument())
+    answer('1', at(1))
+    await new Promise((settle) => setTimeout(settle, 0))
+    expect(scope(2)).toBeInTheDocument()
+    expect(window.location.search).toBe('?position=2')
+  })
+
+  it('asks for a position once', async () => {
+    const { fetchMock, answer } = server()
+    render(<ExerciseDetailPage payload={served} />)
+    await userEvent.click(screen.getByText('Position 1'))
+    answer('1', at(1))
+    await waitFor(() => expect(scope(1)).toBeInTheDocument())
+    await userEvent.click(screen.getByText('Position 2'))
+    answer('2', at(2))
+    await waitFor(() => expect(scope(2)).toBeInTheDocument())
+    await userEvent.click(screen.getByText('Position 1'))
+    await waitFor(() => expect(scope(1)).toBeInTheDocument())
+    expect(fetchMock).toHaveBeenCalledTimes(2)
+  })
+
+  it('goes back to the page as it was served, without asking', async () => {
+    const { fetchMock, answer } = server()
+    render(<ExerciseDetailPage payload={served} />)
+    await userEvent.click(screen.getByText('Position 2'))
+    answer('2', at(2))
+    await waitFor(() => expect(scope(2)).toBeInTheDocument())
+
+    history.replaceState(null, '', '/gym/exercises/1')
+    window.dispatchEvent(new PopStateEvent('popstate'))
+    await waitFor(() => expect(scope(2)).toBeNull())
+    expect(fetchMock).toHaveBeenCalledTimes(1)
+  })
+
+  it('asks for "Alle" on a page served on its default slot', async () => {
+    // A bare URL is the server's pick, not every position: the page opened
+    // on Position 1 has not shown "Alle" yet (G-037).
+    const { fetchMock, answer } = server()
+    history.replaceState(null, '', '/gym/exercises/1')
+    render(<ExerciseDetailPage payload={at(1)} />)
+    await userEvent.click(screen.getByText('Alle'))
+    expect(fetchMock).toHaveBeenCalledOnce()
+    answer('all', served)
+    await waitFor(() => expect(scope(1)).toBeNull())
+    expect(window.location.search).toBe('?position=all')
+  })
+
+  it('leaves a failed answer alone once a later tap has taken over', async () => {
+    // The latest tap's failure falls back to the link; an earlier one's
+    // would navigate away from the pill tapped since.
+    const moved: string[] = []
+    const answers = new Map<string, { ok: (body: ExerciseDetailPayload) => void, fail: () => void }>()
+    vi.stubGlobal('fetch', vi.fn((url: string) => new Promise<Response>((resolve, reject) => {
+      const position = new URL(url, 'http://localhost').searchParams.get('position')!
+      answers.set(position, {
+        ok: (body) => resolve({
+          ok: true, status: 200, redirected: false, url, json: async () => body,
+        } as Response),
+        fail: () => reject(new TypeError('Failed to fetch')),
+      })
+    })))
+    vi.stubGlobal('location', { ...window.location, search: '', set href(url: string) { moved.push(url) } })
+    render(<ExerciseDetailPage payload={served} />)
+    await userEvent.click(screen.getByText('Position 1'))
+    await userEvent.click(screen.getByText('Position 2'))
+    answers.get('1')!.fail()
+    answers.get('2')!.ok(at(2))
+    await waitFor(() => expect(scope(2)).toBeInTheDocument())
+    expect(moved).toEqual([])
+  })
+})

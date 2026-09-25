@@ -24,7 +24,7 @@ from auth import (
 )
 from features.gym.exercises import (
     exercise_or_404, rest_overview, save_setup,
-    set_rest_for_all, setup as exercise_setup, setups as exercise_setups,
+    search_text, set_rest_for_all, setup as exercise_setup, setups as exercise_setups,
     touched_exercises,
 )
 from features.gym.scope import (
@@ -94,6 +94,9 @@ def _catalogue_payload():
         last_done = max((row.started_at for row in rows), default=None)
         entries_by_id[exercise.id] = {
             'exercise': exercise,
+            # What the page's search looks in: the add sheet's text, so a
+            # word that finds an exercise there finds it here (G-020).
+            'search': search_text(exercise),
             'chip_class': chip_class,
             'chip_label': chip_label,
             'last_done': last_done,

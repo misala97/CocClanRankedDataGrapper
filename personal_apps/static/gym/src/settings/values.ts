@@ -1,6 +1,8 @@
 // What the settings pills offer and how their values read. A rest reads
 // m:ss, a weight with a comma -- the way the lifter would say it.
 
+import { kgSetting } from '../format'
+
 /** 150 -> "2:30". */
 export function clock(seconds: number): string {
   const two = (n: number) => String(n).padStart(2, '0')
@@ -12,14 +14,9 @@ export function clock(seconds: number): string {
   return `${Math.floor(seconds / 60)}:${two(seconds % 60)}`
 }
 
-/** 2.5 -> "2,5", 5 -> "5": a setting reads the way it is typed. */
-export function kg(value: number): string {
-  return String(Math.round(value * 100) / 100).replace('.', ',')
-}
-
 /** A bar of nothing is a real setting: the logged number is plates only. */
 export function barLabel(value: number): string {
-  return value === 0 ? 'Ohne' : kg(value)
+  return value === 0 ? 'Ohne' : kgSetting(value)
 }
 
 /** A rest's ends, as the server keeps them (exercises.REST_MIN_SECONDS and
@@ -85,7 +82,7 @@ export function barChoices(reference: number | null): number[] {
  *  comma -- "2,5, 5, 7,5" reads as five numbers. */
 export function stopsLine(stops: number[]): string {
   const first = stops.slice(0, 5)
-  const shown = first.map(kg).join(first.every(Number.isInteger) ? ', ' : ' · ')
+  const shown = first.map(kgSetting).join(first.every(Number.isInteger) ? ', ' : ' · ')
   return stops.length > 5 ? `${shown} …` : shown
 }
 

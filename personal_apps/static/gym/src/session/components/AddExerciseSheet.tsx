@@ -3,6 +3,8 @@ import type { CatalogueExercise, LiveExercise } from '../types'
 import { useSheets } from '../stores'
 import { recency } from '../../catalogue/format'
 import { Icon } from '../../components/Icon'
+import { NearMisses } from '../../components/NearMisses'
+import { isQuery } from '../../search'
 import { found, mine, movementMeta, sections, workouts, yoursFirst } from '../picker'
 import { Sheet } from './Sheet'
 
@@ -47,10 +49,11 @@ const ID = 'sheet-add-exercise'
  * Nothing takes focus on open: the common case is one tap on something you
  * always do, and a keyboard that jumps up over the list hides it.
  *
- * The search keeps library.matches' contract: every word of the query has to
+ * The search keeps library.find's contract: every word of the query has to
  * occur in the exercise's name or aliases, so "Bench Press" and "bankdruecken"
- * still find Bankdrücken (Langhantel). Nothing is created here: an exercise
- * that is not on the list is not in the app.
+ * still find Bankdrücken (Langhantel) -- the whole query as one run first, a
+ * typo only when nothing else matches, and then it says so. Nothing is
+ * created here: an exercise that is not on the list is not in the app.
  *
  * The sheet stays open after an add, so building a workout is not a round
  * trip per exercise. A search empties once its add has landed -- otherwise
@@ -86,7 +89,6 @@ export function AddExerciseSheet({
     setPending(null)
     setAdded(pending.name)
     setQuery('')
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [inSession, pending])
 
   // The confirmation and the level belong to this visit to the sheet.
@@ -131,13 +133,15 @@ export function AddExerciseSheet({
     onAdd(exercise.id)
     // A search is typed: its row is about to vanish, and the cursor goes back
     // where the next name goes. A tap from the list keeps the keyboard down.
-    if (query.trim() !== '') field.current?.focus()
+    if (isQuery(query)) field.current?.focus()
   }
 
-  const searching = query.trim() !== ''
+  const searching = isQuery(query)
   // Client-side over the list the server already sent -- 158 rows -- because
   // a round trip per keystroke on gym wifi would be worse than useless.
-  const hits = useMemo(() => (searching ? found(catalogue, query) : []), [catalogue, query, searching])
+  const search = useMemo(() => (searching ? found(catalogue, query) : null),
+    [catalogue, query, searching])
+  const hits = search?.clusters ?? []
   const common = useMemo(() => mine(catalogue), [catalogue])
   const listed = useMemo(() => sections(catalogue, groups), [catalogue, groups])
 
@@ -215,6 +219,7 @@ export function AddExerciseSheet({
   } else if (searching) {
     body = (
       <>
+        {hits.length > 0 && search?.tier === 'typos' && <NearMisses query={query} />}
         {hits.map((cluster) => (
           <div className="exadd__cluster" key={cluster.movement}>{cluster.rows.map(exact)}</div>
         ))}

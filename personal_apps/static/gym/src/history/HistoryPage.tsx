@@ -2,19 +2,27 @@ import { Fragment, useMemo } from 'react'
 import type { HistoryEntry, HistoryPayload } from './types'
 import { useHistoryUi } from './store'
 import { Icon } from '../components/Icon'
-import { instant, localParts } from '../format'
+import { instant, localParts, volume as de } from '../format'
+import { apart, find, fold, isQuery, mentions } from '../search'
+import { NearMisses } from '../components/NearMisses'
 import { morphFrom } from '../vt'
 
-const de = (value: number) => Math.round(value).toLocaleString('de-DE')
+/** An exercise's search text: the add sheet's, from the payload -- or its
+ *  folded name, for one the payload has none for. */
+const exerciseText = (payload: HistoryPayload, name: string) =>
+  payload.exercise_search[name] ?? fold(name)
 
-function Row({ entry, weekdayShort }: {
+
+function Row({ entry, weekdayShort, hit }: {
   entry: HistoryEntry
   weekdayShort: string[]
+  /** Whether an exercise of the row is what the search found it by; null
+   *  while nothing is searched. */
+  hit: ((exerciseName: string) => boolean) | null
 }) {
   const exporting = useHistoryUi((s) => s.exporting)
   const selected = useHistoryUi((s) => s.selected.includes(entry.session_id))
   const toggle = useHistoryUi((s) => s.toggle)
-  const needle = useHistoryUi((s) => s.query).trim().toLowerCase()
 
   const started = localParts(entry.started_at)
   const pad = (n: number) => String(n).padStart(2, '0')
@@ -51,14 +59,12 @@ function Row({ entry, weekdayShort }: {
             sort, so the rest keeps its order) and carry weight -- a hit that
             fell past the ellipsis looked like a false positive. */}
         <span className="row__sub">
-          {(needle === '' ? entry.exercises
-            : [...entry.exercises].sort((a, b) =>
-              Number(b.toLowerCase().includes(needle))
-              - Number(a.toLowerCase().includes(needle)))
+          {(hit === null ? entry.exercises
+            : [...entry.exercises].sort((a, b) => Number(hit(b)) - Number(hit(a)))
           ).map((exerciseName, i) => (
             <Fragment key={`${exerciseName}-${i}`}>
               {i > 0 && ' · '}
-              {needle !== '' && exerciseName.toLowerCase().includes(needle)
+              {hit !== null && hit(exerciseName)
                 ? <mark className="row__hit">{exerciseName}</mark>
                 : exerciseName}
             </Fragment>
@@ -93,24 +99,33 @@ export function HistoryPage({ payload }: { payload: HistoryPayload }) {
   const selected = useHistoryUi((s) => s.selected)
   const replaceSelection = useHistoryUi((s) => s.replaceSelection)
 
-  const needle = query.trim().toLowerCase()
-
-  // Matches name + every exercise + the date text, exactly what the server
-  // used to bake into data-search.
-  const searchable = useMemo(() => {
+  // What each row is searched by: its name and date words, and each of its
+  // exercises' texts -- the add sheet's, so a word that finds an exercise
+  // in a workout finds the workouts that had it (G-145). This page matched
+  // the bare names, lower-cased, and "bench" or "Bankdrucken" found nothing.
+  const texts = useMemo(() => {
     const map = new Map<number, string>()
     for (const month of payload.months) {
       for (const entry of month.entries) {
-        map.set(entry.session_id, [
-          entry.name ?? 'Workout', ...entry.exercises, entry.search_date,
-        ].join(' ').toLowerCase())
+        map.set(entry.session_id, apart([
+          entry.search, ...entry.exercises.map((name) => exerciseText(payload, name)),
+        ]))
       }
     }
     return map
-  }, [payload.months])
+  }, [payload])
 
-  const shows = (entry: HistoryEntry) =>
-    needle === '' || (searchable.get(entry.session_id) ?? '').includes(needle)
+  const found = useMemo(() => {
+    if (!isQuery(query)) return null
+    const entries = payload.months.flatMap((month) => month.entries)
+    const { hits, tier } = find(entries, query, (e) => texts.get(e.session_id) ?? '')
+    return { ids: new Set(hits.map((e) => e.session_id)), tier }
+  }, [payload.months, texts, query])
+
+  const shows = (entry: HistoryEntry) => found === null || found.ids.has(entry.session_id)
+  // The exercises a row was found by float to the front of its line, marked.
+  const hit = found === null ? null
+    : (name: string) => mentions(exerciseText(payload, name), query, found.tier)
 
   const visible = payload.months
     .map((month) => ({ month, entries: month.entries.filter(shows) }))
@@ -193,6 +208,7 @@ export function HistoryPage({ payload }: { payload: HistoryPayload }) {
                 onClick={() => setQuery('')}>Suche zurücksetzen</button>
             </p>
           )}
+          {hitCount > 0 && found?.tier === 'typos' && <NearMisses query={query} />}
 
           <div id="verlauf-list">
             {visible.map(({ month, entries }) => (
@@ -223,7 +239,7 @@ export function HistoryPage({ payload }: { payload: HistoryPayload }) {
                     {entry.gap_days !== null && entry.gap_days >= payload.gap_threshold && (
                       <p className="gap">{`${entry.gap_days} Tage Pause`}</p>
                     )}
-                    <Row entry={entry} weekdayShort={payload.weekday_short} />
+                    <Row entry={entry} weekdayShort={payload.weekday_short} hit={hit} />
                   </div>
                 ))}
               </section>

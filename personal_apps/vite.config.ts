@@ -27,8 +27,13 @@ export default defineConfig({
     outDir: resolve(here, 'static/gym/dist'),
     emptyOutDir: true,
     manifest: true,
+    // The stylesheet entry below is minified, never rewritten: gym.css was
+    // served as written, so nothing in it (oklch, nesting, color-mix) may be
+    // lowered for older browsers on the way through the build.
+    cssTarget: 'esnext',
     rollupOptions: {
       input: {
+        styles: resolve(here, 'static/gym/src/entries/styles.css'),
         exercise: resolve(here, 'static/gym/src/entries/exercise.tsx'),
         session: resolve(here, 'static/gym/src/entries/session.tsx'),
         catalogue: resolve(here, 'static/gym/src/entries/catalogue.tsx'),

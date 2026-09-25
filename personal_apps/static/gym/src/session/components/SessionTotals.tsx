@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { useCountUp } from '../../countup'
+import { volume as de } from '../../format'
 
 interface Props {
   volume: number
@@ -45,7 +46,7 @@ export function SessionTotals({ volume, setsDone, startedAt }: Props) {
       <h2 className="sr-only">Dieses Workout</h2>
       <div className="grew">
         <span className={`grew__num${counting ? ' is-counting' : ''}`}>
-          {Math.round(shown).toLocaleString('de-DE')}
+          {de(shown)}
         </span>
         <span className="grew__unit">kg bewegt</span>
         <span className="grew__sp" />

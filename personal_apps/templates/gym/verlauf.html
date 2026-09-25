@@ -1,4 +1,5 @@
 {% extends 'gym/_base.html' %}
+{% set island = 'history' %}
 
 {# Verlauf (Puls): the whole training history.
 
@@ -24,5 +25,5 @@
 
 {% block scripts %}
 <script type="application/json" id="gym-data">{{ payload_json | tojson }}</script>
-<script type="module" src="{{ vite_asset('history') }}"></script>
+<script type="module" src="{{ vite_asset(island) }}"></script>
 {% endblock %}

@@ -1,4 +1,4 @@
-import type { RoutinePlan, SessionDetailPayload } from './types'
+import type { RoutinePlan, SessionDetailPayload, SessionReply } from './types'
 import { getJson, postForm, MutationFailed } from '../api'
 
 /**
@@ -13,6 +13,11 @@ export { MutationFailed }
  *  server tells a stale live screen (refused, 409) from a correction. */
 const LIVE = { 'X-Gym-Surface': 'live' }
 
+/** Asks for an answer without the add sheet's list, which withCatalogue fills
+ *  in. A page from before this file never asked, and the server sends that
+ *  one the list as it always did. */
+const KEEPS_LIST = { 'X-Gym-Catalogue': 'kept' }
+
 /** Every write goes out through the outbox (./outbox.ts), which may send it
  *  minutes or a day after the tap: `at` says when the lifter made it, and
  *  the server stamps the set and runs the rest from there, not from when it
@@ -23,12 +28,39 @@ const LIVE = { 'X-Gym-Surface': 'live' }
  *  -- a no-op by then. */
 const post = (url: string, fields: Record<string, string | number | boolean> = {},
   at?: number) =>
-  postForm<SessionDetailPayload>(url, fields, {
+  postForm<SessionReply>(url, fields, {
     headers: at === undefined
-      ? LIVE
-      : { ...LIVE, 'X-Gym-Write-Age': String(Math.max(0, Math.round(Date.now() - at))) },
+      ? { ...LIVE, ...KEEPS_LIST }
+      : { ...LIVE, ...KEEPS_LIST,
+        'X-Gym-Write-Age': String(Math.max(0, Math.round(Date.now() - at))) },
     keepalive: true,
-  })
+  }).then(withCatalogue)
+
+/** The add sheet's list, as the page or detail.json last sent it. A write's
+ *  answer leaves it out -- it was 47 of that answer's 52 KB, on every set
+ *  tick, and it cannot change under a running workout (G-140) -- so it is
+ *  filled in here, and nothing past this file ever sees a payload without. */
+let catalogue: Pick<SessionDetailPayload, 'exercises' | 'list_groups'> = {
+  exercises: [], list_groups: [],
+}
+
+/** Keep `payload`'s list for the answers that come without one. The island
+ *  calls it with the page's payload; fetchSession calls it with each fresh
+ *  one. */
+export function rememberCatalogue<P extends SessionReply>(payload: P): P {
+  if (payload.exercises && payload.list_groups) {
+    catalogue = { exercises: payload.exercises, list_groups: payload.list_groups }
+  }
+  return payload
+}
+
+function withCatalogue(reply: SessionReply): SessionDetailPayload {
+  return {
+    ...reply,
+    exercises: reply.exercises ?? catalogue.exercises,
+    list_groups: reply.list_groups ?? catalogue.list_groups,
+  }
+}
 
 /** A workout's own bodyweight and note. A key left out is left alone; a
  *  null bodyweight clears it. */
@@ -42,6 +74,7 @@ export const sessionKey = (sessionId: number) => ['session', sessionId] as const
 
 export function fetchSession(sessionId: number): Promise<SessionDetailPayload> {
   return getJson<SessionDetailPayload>(`/gym/session/${sessionId}/detail.json`)
+    .then(rememberCatalogue)
 }
 
 /** The follower's version check. Reads the caller's OWN session -- a

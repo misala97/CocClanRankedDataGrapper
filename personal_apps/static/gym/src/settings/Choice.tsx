@@ -66,7 +66,6 @@ export function Choice({ label, values, on, mark, markWord, format, onPick, nudg
       window.removeEventListener('pagehide', onHide)
       settle(false)
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
   const shown = draft ?? on

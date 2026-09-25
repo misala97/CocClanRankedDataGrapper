@@ -268,4 +268,24 @@ describe('Stepper with no number yet', () => {
     expect(onChange).not.toHaveBeenCalled()
     expect(screen.getByText('1 bis 1000 Wdh.')).toBeInTheDocument()
   })
+
+  it('takes a weight to the hundredth and refuses one finer (G-146)', async () => {
+    // A weight is kept and shown to the hundredth. 11,125 would read 11,12
+    // and be stored as 11,125 -- two numbers for one set.
+    const user = userEvent.setup()
+    const onChange = vi.fn()
+    render(<Stepper label="kg" value={20} step={1.25} decimals={2} max={1000}
+      refusedHint="0 bis 1000 kg, auf 0,01 genau" ariaLabel="Gewicht eingeben" onChange={onChange} />)
+
+    await user.click(screen.getByLabelText('Gewicht eingeben'))
+    await user.clear(screen.getByRole('textbox'))
+    await user.type(screen.getByRole('textbox'), '11,125{Enter}')
+    expect(onChange).not.toHaveBeenCalled()
+    expect(screen.getByText('0 bis 1000 kg, auf 0,01 genau')).toBeInTheDocument()
+
+    await user.click(screen.getByLabelText('Gewicht eingeben'))
+    await user.clear(screen.getByRole('textbox'))
+    await user.type(screen.getByRole('textbox'), '11,25{Enter}')
+    expect(onChange).toHaveBeenLastCalledWith(11.25)
+  })
 })

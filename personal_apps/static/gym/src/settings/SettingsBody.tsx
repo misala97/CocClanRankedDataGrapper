@@ -1,10 +1,11 @@
 import { useId, useRef, useState, type ReactNode } from 'react'
+import { kgSetting } from '../format'
 import type { ExerciseMeta, SettingField } from '../types'
 import { saveSetting } from './api'
 import { Choice } from './Choice'
 import { useSaveQueue } from './useSaveQueue'
 import {
-  REST_MAX, REST_MIN, REST_NUDGE, barChoices, barLabel, clock, kg,
+  REST_MAX, REST_MIN, REST_NUDGE, barChoices, barLabel, clock,
   parseStops, restChoices, stepChoices, stopsLine,
 } from './values'
 
@@ -104,7 +105,7 @@ export function SettingsBody({ exercise, onSaved }: Props) {
       <Setting name={meta.is_unilateral ? 'Schritt je Seite (kg)' : 'Schritt bei + und − (kg)'}
         source={source('weight_increment')} own={mine('weight_increment')}>
         <Choice label="Schritt" values={stepChoices(meta.equipment, list.weight_increment)}
-          on={meta.weight_increment} mark={list.weight_increment} markWord="Standard" format={kg}
+          on={meta.weight_increment} mark={list.weight_increment} markWord="Standard" format={kgSetting}
           onPick={(value, leaving) => save('weight_increment', value, leaving)}
           nudge={{ step: 0.25, min: 0.25, max: 25, label: 'kg je Tipp', keyNoun: '0,25 kg' }} />
       </Setting>
@@ -205,7 +206,7 @@ function StackStops({ meta, own, onSave }: {
           ? stopsLine(stops)
           : step === null
             ? 'Gleichmäßig.'
-            : `Gleichmäßig, in Schritten von ${kg(step)} kg.`}
+            : `Gleichmäßig, in Schritten von ${kgSetting(step)} kg.`}
       </p>
       {own ? (
         <div className="setting__acts">

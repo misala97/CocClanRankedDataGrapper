@@ -729,6 +729,13 @@ def test_increment_ladder_counts_the_steps_of_the_default_stack():
     assert result['exercises'][0]['to_weight'] == 70.0
 
 
+def test_increment_ladder_keeps_a_quarter_kilo():
+    """11,25 -> 13,75 was sent as 11,2 -> 13,8 (G-146)."""
+    result = analytics.increment_ladder(climb([11.25, 13.75], weight_increment=1.25))
+    assert (result['exercises'][0]['from_weight'], result['exercises'][0]['to_weight']) == \
+        (11.25, 13.75)
+
+
 def test_increment_ladder_counts_the_steps_of_this_machine_not_a_generic_one():
     result = analytics.increment_ladder(climb([60.0, 70.0], weight_increment=5.0))
     assert result['exercises'][0]['notches'] == 2

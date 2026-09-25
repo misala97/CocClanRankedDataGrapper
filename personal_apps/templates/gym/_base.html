@@ -43,15 +43,27 @@
        German UI actually hits on nearly every glyph) means it starts
        downloading with the stylesheet rather than after it. latin-ext is not
        preloaded: it only carries the long tail, and preloading a file most
-       page views never need costs more than it saves. #}
-    <link rel="preload" href="{{ url_for('static', filename='gym/fonts/figtree-latin.woff2') }}" as="font" type="font/woff2" crossorigin>
-    <link rel="stylesheet" href="{{ url_for('static', filename='gym/figtree.css') }}">
-    <link rel="stylesheet" href="{{ url_for('static', filename='gym/gym.css') }}">
+       page views never need costs more than it saves.
+
+       Both come out of the build (src/entries/styles.css): minified, hashed,
+       cached for good -- and the preload names the hashed font the built
+       stylesheet asks for, or the browser would fetch it twice (G-094, G-142). #}
+    <link rel="preload" href="{{ vite_built('static/gym/fonts/figtree-latin.woff2') }}" as="font" type="font/woff2" crossorigin>
+    <link rel="stylesheet" href="{{ vite_style('styles') }}">
+    {# The page's island and everything it imports, fetched in parallel from
+       here. The browser otherwise learns of an import only after fetching and
+       parsing the file that names it: up to a dozen files in a row on the
+       session page (G-142). Each page template sets `island`. #}
+    {% if island %}
+    <link rel="modulepreload" href="{{ vite_asset(island) }}">
+    {% for href in vite_preloads(island) %}<link rel="modulepreload" href="{{ href }}">
+    {% endfor %}
+    {% endif %}
     {# The CSRF token the islands read: src/api.ts sends it as X-CSRF-Token on
        every fetch, <CsrfField/> embeds it in every native form. Minted per
        session by auth._get_csrf_token (the same token the auth forms use). #}
     <meta name="csrf-token" content="{{ csrf_token() }}">
-    <script src="{{ url_for('static', filename='gym/gym.js') }}"></script>
+    <script src="{{ static_v('gym/gym.js') }}"></script>
     {# Registered on every page load, not only when push is enabled -- the
        worker also serves the hashed bundles cache-first (sw.js), and a cache
        that only exists for push users is not a cache. Idempotent; same

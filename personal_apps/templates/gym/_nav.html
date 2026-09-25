@@ -9,8 +9,9 @@
    ever needs it standalone again.
 
    `gym_active_session` is injected into every gym-blueprint template's
-   context automatically by inject_gym_nav_context() in routes.py -- no view
-   needs to pass it explicitly. #}
+   context automatically by inject_gym_nav_context() in routes/helpers.py,
+   and `gym_live_exercise_name` by routes/workout.py -- no view needs to
+   pass either explicitly. #}
 {% set gym_nav_items = [
     {'label': 'Start', 'endpoint': 'gym.gym_heute', 'icon': 'home'},
     {'label': 'Übungen', 'endpoint': 'gym.gym_uebungen', 'icon': 'dumbbell'},
@@ -51,21 +52,10 @@
    the card (see heute.html). _base.html's has-resume condition mirrors this
    one exactly; change both or neither. #}
 {% if gym_active_session and request.endpoint not in ('gym.session_detail', 'gym.gym_heute') %}
-{# "Current exercise": the first visible exercise (position order, skipping
-   skipped rows and originals a mid-workout replace superseded -- the same
-   visibility rule session_detail's route uses) that isn't fully logged yet,
-   or the last visible one if everything is already done. A resume-strip
-   heuristic ("what was I on") -- not the authoritative live-set concept the
-   session detail page itself owns from Task 7 onward. #}
-{% set replaced_ids = gym_active_session.exercises | selectattr('replaces_id') | map(attribute='replaces_id') | list %}
-{% set visible_exercises = gym_active_session.exercises | rejectattr('skipped') | rejectattr('id', 'in', replaced_ids) | list %}
-{% set ns = namespace(current=none) %}
-{% for se in visible_exercises %}
-    {% if ns.current is none and (se.sets | length == 0 or (se.sets | rejectattr('completed') | list | length > 0)) %}
-        {% set ns.current = se %}
-    {% endif %}
-{% endfor %}
-{% if ns.current is none and visible_exercises %}{% set ns.current = visible_exercises[-1] %}{% endif %}
+{# "Current exercise": the one the live screen has live, by the screen's own
+   rule (workout._live_exercise_name) -- a copy of it here named another
+   exercise than the screen for a partner (walkthrough G-143). #}
+{% set live_exercise = gym_live_exercise_name(gym_active_session) %}
 {# No aria-label. It used to read "Aktives Workout fortsetzen", which is a
    correct sentence and strictly worse than nothing: an aria-label REPLACES the
    element's content in the accessible name, so the workout's name, the current
@@ -78,7 +68,7 @@
     <span class="resume__pulse" aria-hidden="true"></span>
     <span class="resume__body">
         <span class="resume__name">{{ gym_active_session.name or 'Workout' }}</span>
-        <span class="resume__meta">{{ ns.current.exercise.name if ns.current else 'Wird fortgesetzt' }}</span>
+        <span class="resume__meta">{{ live_exercise or 'Wird fortgesetzt' }}</span>
     </span>
     {# Two clocks, one slot. Leaving the session mid-rest is exactly when the
        countdown matters most and is exactly when the session screen is not on

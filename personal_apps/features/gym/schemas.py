@@ -497,10 +497,14 @@ class SessionDetailPayload(_Model):
     # none; absent key when the exercise is not a first time.
     first_time: dict[str, list[VariantRef]]
 
-    exercises: list[CatalogueExercise]
-    # The add sheet's sections in the list's own order (library.LIST_GROUPS).
-    list_groups: list[str]
-    muscle_groups: list[str]
+    # The add sheet's list, and its sections in the list's own order
+    # (library.LIST_GROUPS): sent with the page and by detail.json, never in
+    # a write's answer -- it was 47 of that answer's 52 KB, on every set tick,
+    # and it cannot change under a running workout: its counts are of
+    # finished workouts (walkthrough G-140). The island keeps the last one it
+    # was given (session/api.ts). None only while being left out.
+    exercises: list[CatalogueExercise] | None
+    list_groups: list[str] | None
     # None whenever VAPID_PUBLIC_KEY is unset in .env, which is the normal
     # state on a fresh checkout.
     vapid_public_key: str | None
@@ -530,6 +534,9 @@ class CatalogueEntry(_Model):
     all-time best, unlabelled, so a personal record could not be told apart
     from a working weight."""
     exercise: ExerciseMeta
+    #: The folded name and aliases the add sheet searches too (library.fold,
+    #: exercises.search_text); the page adds the group's name.
+    search: str
     chip_class: str | None
     chip_label: str | None
     last_done: datetime | None
@@ -582,11 +589,11 @@ class HistoryEntry(_Model):
     # every SessionExercise including ones swapped out mid-workout, so a
     # session showed 10 names next to a total built from 7.
     exercises: list[str]
-    # Searchable date text, so a query like "31.07" or "juli" works. The
-    # searchable string carried only the name and the exercises, and session
-    # names stopped carrying the date -- so date search was degrading to
-    # nothing as history accumulated.
-    search_date: str
+    # The name and the date words ("push\n31.07.2026 juli 2026"), folded
+    # apart (library.fold_apart): session names stopped carrying the date, so
+    # date search was degrading to nothing as history accumulated. The
+    # exercises' texts are HistoryPayload.exercise_search.
+    search: str
     # Days since the session AFTER this one in time. history is newest-first,
     # so the gap belongs to the row below the break. None on the newest row.
     gap_days: int | None
@@ -611,6 +618,9 @@ class HistoryPayload(_Model):
     # Stated rather than taken from strftime('%a'), which follows the server's
     # locale and not the UI's.
     weekday_short: list[str]
+    # Each listed exercise's search text by name -- the add sheet's, aliases
+    # and all (exercises.search_text): once per exercise, not per row.
+    exercise_search: dict[str, str]
 
 
 # ---------------------------------------------------------------------------

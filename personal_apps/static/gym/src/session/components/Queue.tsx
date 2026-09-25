@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import type { LiveExercise } from '../types'
 import { useAnnouncer, useSheets, useWorkoutUi } from '../stores'
 import { Icon } from '../../components/Icon'
-import { kg1 } from '../../format'
+import { kg } from '../../format'
 import { PictureTile } from './Picture'
 
 interface Props {
@@ -27,7 +27,7 @@ function loadSummary(se: LiveExercise, isLive: boolean): string {
   if (total > 0) {
     // A blank plan has no weight to show yet: the lifter has never done it.
     const first = se.sets[0]!.weight
-    return first === null ? 'neu' : `${total} × ${kg1(first)}`
+    return first === null ? 'neu' : `${total} × ${kg(first)}`
   }
   return '—'
 }
@@ -117,7 +117,6 @@ export function Queue({ exercises, liveId, deloadHints = {}, onReorder }: Props)
     if (dragOrder !== null && drag.current === null && draggedId === null) {
       setDragOrder(null)
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [exercises])
 
   // Moving a focused node can blur it, and a reorder that ejects a keyboard
@@ -403,7 +402,7 @@ export function Queue({ exercises, liveId, deloadHints = {}, onReorder }: Props)
               : (
                 <span className="row__trail row__trail--stack queue__load">
                   <span>{loadSummary(se, isLive)}</span>
-                  <span className="queue__deload">{`Deload ≈ ${kg1(deloadHint)}`}</span>
+                  <span className="queue__deload">{`Deload ≈ ${kg(deloadHint)}`}</span>
                 </span>
               )}
           </div>

@@ -1,4 +1,5 @@
 {% extends 'gym/_base.html' %}
+{% set island = 'catalogue' %}
 
 {# The exercise catalogue.
 
@@ -23,5 +24,5 @@
 
 {% block scripts %}
 <script type="application/json" id="gym-data">{{ payload_json | tojson }}</script>
-<script type="module" src="{{ vite_asset('catalogue') }}"></script>
+<script type="module" src="{{ vite_asset(island) }}"></script>
 {% endblock %}

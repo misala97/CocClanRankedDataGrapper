@@ -30,6 +30,21 @@ def test_performed_exercise_defaults_to_not_deload():
     assert perf([(80.0, 8)]).is_deload is False
 
 
+@pytest.mark.parametrize('weight, text', [
+    (80.0, '80,0'), (62.5, '62,5'), (11.25, '11,25'), (102.75, '102,75'),
+    (11.125, '11,12'), (0.0, '0,0'),
+])
+def test_a_weight_reads_to_the_hundredth_the_app_keeps(weight, text):
+    """What the client's format.kg says (G-146): '%.1f' printed a logged
+    11,25 as 11,2 while the stepper said 11,3. Half-even, as there."""
+    assert stats.kg_text(weight) == text
+
+
+def test_a_rows_sets_read_with_the_hundredth():
+    assert stats._sets_display(perf([(11.25, 8), (11.25, 7), (10.0, 9)])) == (
+        '11,25 × 8 · 11,25 × 7 · 10,0 × 9')
+
+
 def test_performed_exercise_carries_the_deload_flag():
     assert perf([(80.0, 8)], is_deload=True).is_deload is True
 

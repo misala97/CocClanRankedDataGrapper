@@ -6,8 +6,9 @@ self.addEventListener('install', (event) => {
 // entry can never go stale -- a rebuild changes the URL, not the bytes. The
 // server says the same thing (Cache-Control: immutable, app.py); this makes
 // repeat loads instant even before the HTTP cache warms, and survives it
-// being evicted. Everything else (pages, gym.css, this file) stays
-// network-only: those DO change in place.
+// being evicted. gym.css is one of them now, built into the bundles'
+// stylesheet. Everything else (pages, this file) stays network-only: those
+// DO change in place.
 const ASSET_CACHE = 'gym-hashed-assets-v1';
 const HASHED_PREFIX = '/static/gym/dist/assets/';
 

@@ -314,6 +314,23 @@ describe('ExerciseSheet', () => {
     expect(a.onAddSet).toHaveBeenCalledWith(20, 10)
   })
 
+  it('takes a quarter-kilo weight as a valid one, and nothing finer (G-146)', async () => {
+    // step="0.5" marked 11,25 invalid. The weight is kept to the hundredth.
+    const user = userEvent.setup()
+    const { actions: a } = open({ exercise: { ...exercise, sets: [] }, suggestion: null })
+    const weight = screen.getByLabelText('Neuer Satz, Gewicht in kg je Seite') as HTMLInputElement
+    await user.type(weight, '11.25')
+    expect(weight.validity.valid).toBe(true)
+    await user.type(screen.getByLabelText('Neuer Satz, Wiederholungen'), '8')
+    await user.click(screen.getByRole('button', { name: 'Satz anhängen' }))
+    expect(a.onAddSet).toHaveBeenCalledWith(11.25, 8)
+
+    await user.clear(weight)
+    await user.type(weight, '11.125')
+    expect(weight.validity.valid).toBe(false)
+    expect(screen.getByRole('button', { name: 'Satz anhängen' })).toBeDisabled()
+  })
+
   it('never holds the append row for the connection (G-138)', () => {
     // Held while an append was in flight, it stayed held for as long as the
     // wifi was gone. A double tap is the island's to drop.

@@ -251,6 +251,19 @@ describe('AddExerciseSheet', () => {
       .map((head) => head.querySelector('.label')!.textContent)).toEqual(['Brust', 'Rücken'])
   })
 
+  it('reads a query that folds to nothing as none, and keeps the list', async () => {
+    // "-" folds to no word at all: it searched, found every row, and swapped
+    // the sections for one long list of hits (G-145).
+    const user = userEvent.setup()
+    render(<AddExerciseSheet {...lived} />)
+    open('sheet-add-exercise')
+
+    await user.type(screen.getByLabelText('Übung suchen'), '-')
+    expect(screen.getByText('Alle Übungen')).toBeInTheDocument()
+    expect(names(section('Deine'))).toEqual(
+      ['Rudern (Maschine)', 'Scottcurls (Maschine)', 'Scottcurls (Maschine, Scheiben)'])
+  })
+
   it('filters the list as you type, without a round trip', async () => {
     const user = userEvent.setup()
     render(<AddExerciseSheet {...props} />)
@@ -276,6 +289,18 @@ describe('AddExerciseSheet', () => {
     await user.clear(field)
     await user.type(field, 'bankdruecken')
     expect(screen.getByText('Bankdrücken (Langhantel)')).toBeInTheDocument()
+    expect(screen.queryByText(/Kein genauer Treffer/)).not.toBeInTheDocument()
+  })
+
+  it('says when what it found is only a typo away', async () => {
+    const user = userEvent.setup()
+    render(<AddExerciseSheet {...props} />)
+    open('sheet-add-exercise')
+
+    await user.type(screen.getByLabelText('Übung suchen'), 'Latzgu')
+    expect(screen.getByText('Latzug (Kabel)')).toBeInTheDocument()
+    expect(screen.getByText('Kein genauer Treffer für „Latzgu“ – ähnlich geschrieben:'))
+      .toBeInTheDocument()
   })
 
   it('offers nothing to create, and says when the list has no match', async () => {

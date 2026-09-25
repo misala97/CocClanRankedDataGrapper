@@ -183,5 +183,3 @@ def test_the_running_workout_stays_off_the_page(lifter):
 
     page = client.get(f'/gym/exercises/{press_id}/detail.json').get_json()
     assert len(page['table']) == 1
-    glance = client.get(f'/gym/exercises/{press_id}/progress.json').get_json()
-    assert glance['pr_weight']['weight'] == 60.0

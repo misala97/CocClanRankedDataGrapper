@@ -12,7 +12,7 @@ routes.py split into this package without touching a single caller.
 """
 from urllib.parse import urlsplit, urlunsplit
 
-from flask import abort, current_app, flash, jsonify, redirect, request, url_for
+from flask import abort, current_app, flash, g, jsonify, redirect, request, url_for
 
 from extensions import db
 from ..scope import current_user_id
@@ -69,7 +69,8 @@ def _settle_an_abandoned_workout_first():
     browser on its own -- ended the workout a phone still held sets for."""
     if (request.method == 'GET' and request.path.startswith('/gym')
             and current_user_id() is not None):
-        helpers._get_active_session()
+        # Kept for the page and the nav (helpers._page_active_session).
+        g.gym_active_session = helpers._get_active_session()
 
 
 @gym_bp.before_request

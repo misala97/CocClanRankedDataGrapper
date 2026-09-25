@@ -4,7 +4,7 @@ import type {
   FinishedExercise, FinishedPayload, RecordKind, SessionRecord,
 } from './types'
 import { postForm, MutationFailed } from '../api'
-import { dayMonth, instant, kg1, localParts, shortDate, volume as de } from '../format'
+import { dayMonth, instant, kg, kg1, localParts, shortDate, volume as de } from '../format'
 import {
   BODYWEIGHT_MAX_KG, BODYWEIGHT_MIN_KG, MAX_NAME_CHARS, MAX_NOTE_CHARS, MAX_REPS, MAX_WEIGHT_KG,
   parseSetInput, unlikely,
@@ -339,8 +339,8 @@ export function FinishedPage({ payload: initial }: { payload: FinishedPayload })
           {payload.advice.map((item) => (
             <p className="next-time__body" key={item.exercise_id}>
               <b>{item.name}</b>
-              {` steht seit ${item.sessions} ${item.sessions === 1 ? 'Workout' : 'Workouts'} auf ${kg1(item.stuck_at)} kg — auf `}
-              <b>{`${kg1(item.suggested_weight)} kg`}</b>
+              {` steht seit ${item.sessions} ${item.sessions === 1 ? 'Workout' : 'Workouts'} auf ${kg(item.stuck_at)} kg — auf `}
+              <b>{`${kg(item.suggested_weight)} kg`}</b>
               {' gehen, notfalls 2 Wdh. weniger.'}
             </p>
           ))}
@@ -549,7 +549,7 @@ export function FinishedPage({ payload: initial }: { payload: FinishedPayload })
                     <span className="label">{i + 1}</span>
                     {/* required + min: the browser refuses an empty or zero-rep
                         row before the submit handler ever runs. */}
-                    <input type="number" name="weight" step="0.5" min="0" max={MAX_WEIGHT_KG}
+                    <input type="number" name="weight" step="0.01" min="0" max={MAX_WEIGHT_KG}
                       required className="input input--num" defaultValue={s.weight}
                       aria-label={`${entry.name}, Satz ${i + 1}, Gewicht in kg`} />
                     <span className="sset__unit">kg</span><span className="sset__unit">×</span>
@@ -636,7 +636,7 @@ function AddSetForm({ sessionExerciseId, name, seed, best, onSubmit }: {
           className="sset" id={formId} {...ask}>
           <CsrfField />
           <span className="label" aria-hidden="true">+</span>
-          <input type="number" name="weight" step="0.5" min="0" max={MAX_WEIGHT_KG} required
+          <input type="number" name="weight" step="0.01" min="0" max={MAX_WEIGHT_KG} required
             className="input input--num" defaultValue={seed?.weight ?? ''}
             aria-label={`${name}, neuer Satz, Gewicht in kg`} />
           <span className="sset__unit">kg</span><span className="sset__unit">×</span>

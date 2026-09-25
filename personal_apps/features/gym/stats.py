@@ -510,9 +510,18 @@ def _sets_display(row):
     saying so three times.
     """
     return ' · '.join(
-        '{:.1f}'.format(weight).replace('.', ',') + ' × {}'.format(reps)
+        kg_text(weight) + ' × {}'.format(reps)
         for weight, reps in row.sets
     )
+
+
+def kg_text(weight):
+    """A weight to the hundredth the app keeps, one decimal at least: 80,0,
+    62,5, 11,25 -- what the client's format.kg says. '%.1f' printed a logged
+    11,25 as 11,2 here while the stepper said 11,3 (walkthrough G-146).
+    """
+    text = '{:.2f}'.format(weight)
+    return (text[:-1] if text.endswith('0') else text).replace('.', ',')
 
 
 def _pr_weight(rows):

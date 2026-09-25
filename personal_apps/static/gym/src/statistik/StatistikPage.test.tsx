@@ -536,6 +536,19 @@ describe('StatistikPage', () => {
       expect(section).toHaveTextContent('3×')
     })
 
+    it('names a climb in the weights as logged (G-146)', () => {
+      // A whole-kilo rounding made 16,25 → 22 read "16 → 22".
+      const { container } = mount({
+        increment_ladder: {
+          ...base.increment_ladder,
+          exercises: [{ ...base.increment_ladder.exercises[0]!, from_weight: 16.25 }],
+        },
+      })
+      const section = container.querySelector('[aria-labelledby="ladder-h"]')!
+      expect(within(section as HTMLElement).getByText('3×'))
+        .toHaveAttribute('title', '16,25 → 22,0 kg')
+    })
+
     it('leaves out the lifts that never climbed a step', () => {
       const { container } = mount()
       const section = container.querySelector('[aria-labelledby="ladder-h"]')!

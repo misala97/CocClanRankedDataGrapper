@@ -1,0 +1,593 @@
+{
+ "fuzzy_from": 5,
+ "fold": [
+  [
+   "Bankdrücken (Kurzhantel)",
+   "bankdrucken kurzhantel"
+  ],
+  [
+   "Bankdruecken KH",
+   "bankdrucken kh"
+  ],
+  [
+   "MAßE Straße",
+   "masse strasse"
+  ],
+  [
+   "T-Bar-Rudern",
+   "t bar rudern"
+  ],
+  [
+   "Farmer's Walk",
+   "farmer s walk"
+  ],
+  [
+   "45° Beinpresse",
+   "45 beinpresse"
+  ],
+  [
+   "  Übungen,  Überzüge ",
+   "ubungen uberzuge"
+  ],
+  [
+   "ÄÖÜ äöü",
+   "aou aou"
+  ],
+  [
+   "-",
+   ""
+  ],
+  [
+   "",
+   ""
+  ]
+ ],
+ "library": {
+  "barbell_bench_press": "bankdrucken langhantel\nbench press\nbarbell bench press\nflachbankdrucken\nbench press\nflachbankdrucken",
+  "barbell_incline_bench_press": "schragbankdrucken langhantel\nincline bench press\nbarbell incline press\nincline bench press",
+  "barbell_decline_bench_press": "negativbankdrucken langhantel\ndecline bench press\ndecline bench press",
+  "barbell_floor_press": "floor press langhantel\nbodendrucken",
+  "dumbbell_bench_press": "bankdrucken kurzhantel\ndumbbell bench press\nbench press dumbbell\nkurzhanteldrucken\nkh bankdrucken\nbench press\nflachbankdrucken",
+  "dumbbell_incline_bench_press": "schragbankdrucken kurzhantel\nincline dumbbell press\nkh schragbankdrucken\nincline bench press",
+  "dumbbell_decline_bench_press": "negativbankdrucken kurzhantel\ndecline dumbbell press\ndecline bench press",
+  "dumbbell_fly": "fliegende kurzhantel\ndumbbell fly\nflys\nkurzhantel fliegende",
+  "dumbbell_incline_fly": "fliegende kurzhantel schrag\nincline dumbbell fly",
+  "dumbbell_pullover": "uberzuge kurzhantel\ndumbbell pullover\npullover",
+  "smith_bench_press": "bankdrucken multipresse\nsmith machine bench press\nbench press\nflachbankdrucken",
+  "smith_incline_bench_press": "schragbankdrucken multipresse\nsmith machine incline press\nincline bench press",
+  "smith_decline_bench_press": "negativbankdrucken multipresse\nsmith machine decline press\ndecline bench press",
+  "cable_fly": "fliegende kabel\ncable fly\ncable crossover\nkabelzug uber kreuz\nkabelziehen",
+  "cable_fly_high_to_low": "fliegende kabel von oben\nhigh to low cable fly",
+  "cable_fly_low_to_high": "fliegende kabel von unten\nlow to high cable fly",
+  "machine_chest_press": "brustpresse maschine\nchest press\nchest press machine",
+  "machine_incline_chest_press": "brustpresse maschine schrag\nincline chest press machine",
+  "machine_fly": "butterfly maschine\npec deck\nchest fly machine\nbutterflymaschine",
+  "plate_chest_press": "brustpresse maschine scheiben\niso lateral chest press\nchest press plate loaded",
+  "plate_bench_press": "bankdrucken maschine scheiben\niso lateral bench press\nlying chest press\nchest press machine lying\nbrustpresse liegend\nbench press\nflachbankdrucken",
+  "plate_incline_chest_press": "schragbankdrucken maschine scheiben\niso lateral incline press\nincline bench press",
+  "plate_decline_chest_press": "negativbankdrucken maschine scheiben\niso lateral decline press\ndecline bench press",
+  "barbell_deadlift": "kreuzheben langhantel\ndeadlift\nconventional deadlift",
+  "barbell_rack_pull": "rack pulls langhantel\nrack pull\nteilkreuzheben",
+  "barbell_row": "rudern langhantel\nbarbell row\nbent over row\nlanghantelrudern\nvorgebeugtes rudern\nrow\nrowing",
+  "barbell_row_underhand": "rudern langhantel untergriff\nunderhand barbell row\nyates row\nrow\nrowing",
+  "barbell_pendlay_row": "rudern langhantel pendlay\npendlay row\nrow\nrowing",
+  "barbell_shrug": "shrugs langhantel\nbarbell shrug\nschulterheben\nshrug\nschulterheben",
+  "dumbbell_row": "rudern kurzhantel\ndumbbell row\nbent over dumbbell row\nrow\nrowing",
+  "dumbbell_row_one_arm": "rudern kurzhantel einarmig\none arm dumbbell row\nkurzhantelrudern\nrow\nrowing",
+  "dumbbell_row_chest_supported": "rudern kurzhantel brustgestutzt\nchest supported dumbbell row\nincline dumbbell row\nseal row\nrow\nrowing",
+  "dumbbell_shrug": "shrugs kurzhantel\ndumbbell shrug\nshrug\nschulterheben",
+  "smith_row": "rudern multipresse\nsmith machine row\nrow\nrowing",
+  "smith_shrug": "shrugs multipresse\nsmith machine shrug\nshrug\nschulterheben",
+  "trap_bar_shrug": "shrugs trap bar\ntrap bar shrug\nshrug\nschulterheben",
+  "tbar_row": "rudern t bar stehend\nt bar row\nt bar row standing\nt bar rudern\nrow\nrowing",
+  "tbar_row_chest_supported": "rudern t bar liegend\nchest supported t bar row\nt bar row lying\nt bar rudern liegend\nrow\nrowing",
+  "cable_lat_pulldown": "latzug kabel\nlat pulldown\nlat pulldown kabelzug\nlatziehen\nlatzug breit\nlat pulldown\nlatziehen",
+  "cable_lat_pulldown_close": "latzug kabel eng\nclose grip lat pulldown\nlatzug v griff\nlat pulldown\nlatziehen",
+  "cable_lat_pulldown_underhand": "latzug kabel untergriff\nreverse grip lat pulldown\nlat pulldown\nlatziehen",
+  "cable_lat_pulldown_one_arm": "latzug kabel einarmig\nsingle arm lat pulldown\nlat pulldown\nlatziehen",
+  "cable_row": "rudern kabel\nseated cable row\nkabelrudern\nrudern sitzend\nrow\nrowing",
+  "cable_row_wide": "rudern kabel breit\nwide grip cable row\nrow\nrowing",
+  "cable_row_one_arm": "rudern kabel einarmig\nsingle arm cable row\nrow\nrowing",
+  "cable_straight_arm_pulldown": "uberzuge kabel\nstraight arm pulldown\nlat pullover\npullover am kabel",
+  "machine_lat_pulldown": "latzug maschine\nlat pulldown machine\nlat pulldown\nlatziehen",
+  "machine_row": "rudern maschine\nseated row machine\nrow machine\nrudermaschine\nrow\nrowing",
+  "machine_back_extension": "ruckenstrecker maschine\nback extension machine\nlower back machine",
+  "plate_lat_pulldown": "latzug maschine scheiben\niso lateral lat pulldown\nlat pulldown plate loaded\nlat pulldown single arm\nlat pulldown\nlatziehen",
+  "plate_row": "rudern maschine scheiben\niso lateral row\nlow row\nrow\nrowing",
+  "plate_high_row": "high row maschine scheiben\niso lateral high row\nrudern von oben",
+  "barbell_overhead_press": "schulterdrucken langhantel stehend\nmilitary press\noverhead press\nohp\nuberkopfdrucken\nshoulder press\noverhead press",
+  "barbell_overhead_press_seated": "schulterdrucken langhantel sitzend\nseated barbell press\nseated military press\nshoulder press\noverhead press",
+  "barbell_upright_row": "aufrechtes rudern langhantel\nupright row\nbarbell upright row",
+  "ez_upright_row": "aufrechtes rudern sz stange\nez bar upright row",
+  "dumbbell_shoulder_press": "schulterdrucken kurzhantel sitzend\ndumbbell shoulder press\nseated dumbbell press\nshoulder press\noverhead press",
+  "dumbbell_shoulder_press_standing": "schulterdrucken kurzhantel stehend\nstanding dumbbell press\nshoulder press\noverhead press",
+  "arnold_press": "arnold press kurzhantel\narnold drucken",
+  "dumbbell_lateral_raise": "seitheben kurzhantel\nlateral raise\ndumbbell lateral raise\nseitenheben\nlateral raise\nseitenheben",
+  "dumbbell_front_raise": "frontheben kurzhantel\nfront raise\ndumbbell front raise",
+  "dumbbell_rear_delt_fly": "vorgebeugtes seitheben kurzhantel\nrear delt fly\nreverse fly dumbbell\nreverse flys",
+  "smith_shoulder_press": "schulterdrucken multipresse\nsmith machine shoulder press\nshoulder press\noverhead press",
+  "landmine_press": "schulterdrucken landmine einarmig\nlandmine press\nshoulder press\noverhead press",
+  "cable_lateral_raise": "seitheben kabel einarmig\ncable lateral raise\nlateral raise\nseitenheben",
+  "cable_front_raise": "frontheben kabel\ncable front raise",
+  "cable_front_raise_one_arm": "frontheben kabel einarmig\nsingle arm cable front raise\nfront raises cable one arm",
+  "cable_face_pull": "face pulls kabel\nface pull",
+  "cable_rear_delt_fly": "reverse butterfly kabel\ncable reverse fly\nrear delt cable fly",
+  "cable_upright_row": "aufrechtes rudern kabel\ncable upright row",
+  "cable_external_rotation": "aussenrotation kabel\nexternal rotation\nrotatorenmanschette",
+  "machine_shoulder_press": "schulterpresse maschine\nshoulder press machine\nshoulder press",
+  "machine_lateral_raise": "seitheben maschine\nlateral raise machine\nseitheben maschine\nlateral raise\nseitenheben",
+  "machine_rear_delt_fly": "reverse butterfly maschine\nreverse fly machine\nrear delt machine\nbutterfly reverse",
+  "plate_shoulder_press": "schulterpresse maschine scheiben\niso lateral shoulder press",
+  "plate_lateral_raise": "seitheben maschine scheiben\nlateral raise plate loaded\niso lateral lateral raise\nlateral raise\nseitenheben",
+  "barbell_curl": "bizepscurls langhantel\nbarbell curl\nlanghantelcurls\nbiceps curl",
+  "ez_curl": "bizepscurls sz stange\nez bar curl\nsz curls\nbiceps curl",
+  "ez_preacher_curl": "scottcurls sz stange\npreacher curl\npreacher curl ez bar\nscott curls",
+  "dumbbell_curl": "bizepscurls kurzhantel\ndumbbell curl\nbiceps curl\nbiceps curl rotating\nkurzhantelcurls\nbiceps curl",
+  "dumbbell_hammer_curl": "hammercurls kurzhantel\nhammer curl\nhammer curl dumbbell",
+  "dumbbell_concentration_curl": "konzentrationscurls kurzhantel\nconcentration curl",
+  "dumbbell_incline_curl": "schragbankcurls kurzhantel\nincline dumbbell curl",
+  "dumbbell_preacher_curl": "scottcurls kurzhantel\ndumbbell preacher curl",
+  "cable_curl": "bizepscurls kabel\ncable curl\nkabelcurls\nbizeps sz kabel\nbiceps curl",
+  "cable_curl_one_arm": "bizepscurls kabel einarmig\nsingle arm cable curl\nbiceps curl",
+  "cable_hammer_curl": "hammercurls kabel seil\ncable hammer curl\nrope hammer curl",
+  "cable_bayesian_curl": "bayesian curls kabel\nbayesian curl",
+  "machine_preacher_curl": "scottcurls maschine\npreacher curl machine\npreacher curl bilateral\nbizepsmaschine\nbizeps curl maschine",
+  "plate_preacher_curl": "scottcurls maschine scheiben\npreacher curl machine plate loaded\niso lateral preacher curl",
+  "barbell_close_grip_bench_press": "bankdrucken langhantel eng\nclose grip bench press\nenges bankdrucken\nbench press\nflachbankdrucken",
+  "ez_skull_crusher": "french press sz stange\nskull crusher\nstirndrucken\nlying triceps extension\nskull crusher\nstirndrucken",
+  "dumbbell_skull_crusher": "french press kurzhantel\ndumbbell skull crusher\nskull crusher\nstirndrucken",
+  "dumbbell_overhead_extension": "trizepsstrecken uber kopf kurzhantel\noverhead triceps extension dumbbell\noverhead triceps extension",
+  "dumbbell_overhead_extension_one_arm": "trizepsstrecken uber kopf kurzhantel einarmig\nsingle arm overhead extension\noverhead triceps extension",
+  "ez_overhead_extension": "trizepsstrecken uber kopf sz stange\nez bar overhead extension\noverhead triceps extension",
+  "dumbbell_triceps_kickback": "trizeps kickbacks kurzhantel\ntriceps kickback",
+  "cable_pushdown": "trizepsdrucken kabel stange\ntriceps pushdown\ntriceps pushdown cable ez bar\npushdown\ntrizepsdrucken am kabel\ntrizepsdrucken v griff\ntriceps pushdown",
+  "cable_pushdown_rope": "trizepsdrucken kabel seil\nrope pushdown\ntriceps pushdown",
+  "cable_pushdown_reverse": "trizepsdrucken kabel untergriff\nreverse grip pushdown\ntriceps pushdown",
+  "cable_pushdown_one_arm": "trizepsdrucken kabel einarmig\nsingle arm pushdown\ntriceps pushdown",
+  "cable_overhead_extension": "trizepsstrecken uber kopf kabel\noverhead cable extension\noverhead triceps extension cable\noverhead triceps extension",
+  "cable_triceps_kickback": "trizeps kickbacks kabel\ncable triceps kickback",
+  "machine_dip": "dips maschine\ndip machine\nseated dip",
+  "machine_triceps_extension": "trizepsstrecken maschine\ntriceps extension machine\ntrizepsmaschine",
+  "barbell_squat": "kniebeugen langhantel\nsquat\nback squat\nkniebeuge\nsquat",
+  "barbell_front_squat": "frontkniebeugen langhantel\nfront squat",
+  "barbell_lunge": "ausfallschritte langhantel\nbarbell lunge",
+  "barbell_romanian_deadlift": "rumanisches kreuzheben langhantel\nromanian deadlift\nrdl\nromanian deadlift\nrdl",
+  "barbell_stiff_leg_deadlift": "kreuzheben langhantel gestreckte beine\nstiff leg deadlift\nsteifbeiniges kreuzheben",
+  "barbell_sumo_deadlift": "kreuzheben langhantel sumo\nsumo deadlift",
+  "barbell_good_morning": "good mornings langhantel\ngood morning",
+  "trap_bar_deadlift": "kreuzheben trap bar\ntrap bar deadlift\nhex bar deadlift\nhexbar",
+  "dumbbell_goblet_squat": "goblet squat kurzhantel\ngoblet squat\ngoblet kniebeuge\ngoblet kniebeuge",
+  "kettlebell_goblet_squat": "goblet squat kettlebell\nkettlebell goblet squat\ngoblet kniebeuge",
+  "dumbbell_sumo_squat": "kniebeugen kurzhantel sumo\nsumo squat\nsumo kniebeuge\nsquat",
+  "dumbbell_lunge": "ausfallschritte kurzhantel\ndumbbell lunge\nlunges",
+  "dumbbell_bulgarian_split_squat": "bulgarische kniebeugen kurzhantel\nbulgarian split squat\nsplit squat\nbulgarian split squat",
+  "dumbbell_step_up": "step ups kurzhantel\nstep up\naufsteiger",
+  "dumbbell_romanian_deadlift": "rumanisches kreuzheben kurzhantel\ndumbbell romanian deadlift\ndumbbell rdl\nromanian deadlift\nrdl",
+  "dumbbell_single_leg_rdl": "rumanisches kreuzheben kurzhantel einbeinig\nsingle leg rdl\nromanian deadlift\nrdl",
+  "smith_squat": "kniebeugen multipresse\nsmith machine squat\nsquat",
+  "smith_split_squat": "bulgarische kniebeugen multipresse\nsmith machine split squat\nbulgarian split squat",
+  "machine_leg_extension": "beinstrecker maschine\nleg extension\nbeinstrecken",
+  "machine_leg_curl_seated": "beinbeuger maschine sitzend\nseated leg curl",
+  "machine_leg_curl_lying": "beinbeuger maschine liegend\nlying leg curl",
+  "machine_leg_curl_standing": "beinbeuger maschine stehend\nstanding leg curl",
+  "machine_leg_press": "beinpresse maschine\nleg press machine\nseated leg press\nsitzbeinpresse",
+  "machine_adductor": "adduktoren maschine\nadductor machine\nadduktion\nhip adduction",
+  "plate_leg_press": "beinpresse maschine scheiben\nleg press\nleg press plate loaded\n45 beinpresse",
+  "plate_hack_squat": "hackenschmidt maschine scheiben\nhack squat\nhackenschmidt kniebeuge",
+  "plate_pendulum_squat": "pendulum squat maschine scheiben\npendel kniebeuge",
+  "plate_belt_squat": "belt squat maschine scheiben\ngurtelkniebeuge",
+  "barbell_hip_thrust": "hip thrust langhantel\nbarbell hip thrust\nhip thrusts",
+  "barbell_glute_bridge": "glute bridge langhantel\nbarbell glute bridge\nbeckenheben",
+  "smith_hip_thrust": "hip thrust multipresse\nsmith machine hip thrust",
+  "machine_hip_thrust": "hip thrust maschine\nhip thrust machine",
+  "plate_hip_thrust": "hip thrust maschine scheiben\nglute drive",
+  "cable_glute_kickback": "glute kickbacks kabel\ncable kickback\nglute kickback",
+  "machine_glute_kickback": "glute kickbacks maschine\nglute machine\nglute kickback machine",
+  "machine_abductor": "abduktoren maschine\nabductor machine\nhip abduction",
+  "cable_abduction": "abduktion kabel\ncable hip abduction",
+  "cable_pull_through": "pull through kabel\ncable pull through",
+  "kettlebell_swing": "swings kettlebell\nkettlebell swing\nkb swings",
+  "machine_standing_calf_raise": "wadenheben maschine stehend\nstanding calf raise\ncalf raise",
+  "machine_seated_calf_raise": "wadenheben maschine sitzend\nseated calf raise\ncalf raise",
+  "leg_press_calf_raise": "wadenheben beinpresse\ncalf press\nwadendrucken\ncalf raise",
+  "smith_calf_raise": "wadenheben multipresse\nsmith machine calf raise\ncalf raise",
+  "dumbbell_calf_raise_one_leg": "wadenheben kurzhantel einbeinig\nsingle leg calf raise\ncalf raise",
+  "cable_crunch": "crunches kabel\ncable crunch\nkabelcrunch",
+  "machine_crunch": "crunches maschine\nab crunch machine\nbauchmaschine",
+  "machine_torso_rotation": "rumpfrotation maschine\ntorso rotation\nrotationsmaschine",
+  "cable_woodchopper": "holzhacker kabel\nwoodchopper\nwood chop",
+  "cable_pallof_press": "pallof press kabel\npallof",
+  "dumbbell_side_bend": "seitbeugen kurzhantel\nside bend",
+  "barbell_wrist_curl": "handgelenkcurls langhantel\nwrist curl",
+  "dumbbell_wrist_curl": "handgelenkcurls kurzhantel\ndumbbell wrist curl",
+  "ez_reverse_curl": "reverse curls sz stange\nreverse curl\nobergriff curls"
+ },
+ "queries": [
+  {
+   "query": "bench",
+   "tier": "phrase",
+   "hits": [
+    "barbell_bench_press",
+    "barbell_incline_bench_press",
+    "barbell_decline_bench_press",
+    "dumbbell_bench_press",
+    "dumbbell_incline_bench_press",
+    "dumbbell_decline_bench_press",
+    "smith_bench_press",
+    "smith_incline_bench_press",
+    "smith_decline_bench_press",
+    "plate_bench_press",
+    "plate_incline_chest_press",
+    "plate_decline_chest_press",
+    "barbell_close_grip_bench_press"
+   ]
+  },
+  {
+   "query": "decline bench",
+   "tier": "phrase",
+   "hits": [
+    "barbell_decline_bench_press",
+    "dumbbell_decline_bench_press",
+    "smith_decline_bench_press",
+    "plate_decline_chest_press"
+   ]
+  },
+  {
+   "query": "Bankdrüken",
+   "tier": "typos",
+   "hits": [
+    "barbell_bench_press",
+    "barbell_incline_bench_press",
+    "barbell_decline_bench_press",
+    "dumbbell_bench_press",
+    "dumbbell_incline_bench_press",
+    "dumbbell_decline_bench_press",
+    "smith_bench_press",
+    "smith_incline_bench_press",
+    "smith_decline_bench_press",
+    "plate_bench_press",
+    "plate_incline_chest_press",
+    "plate_decline_chest_press",
+    "barbell_close_grip_bench_press"
+   ]
+  },
+  {
+   "query": "Bankdrückken",
+   "tier": "typos",
+   "hits": [
+    "barbell_bench_press",
+    "barbell_incline_bench_press",
+    "barbell_decline_bench_press",
+    "dumbbell_bench_press",
+    "dumbbell_incline_bench_press",
+    "dumbbell_decline_bench_press",
+    "smith_bench_press",
+    "smith_incline_bench_press",
+    "smith_decline_bench_press",
+    "plate_bench_press",
+    "plate_incline_chest_press",
+    "plate_decline_chest_press",
+    "barbell_close_grip_bench_press"
+   ]
+  },
+  {
+   "query": "bankdruken kurzhantel",
+   "tier": "typos",
+   "hits": [
+    "dumbbell_bench_press",
+    "dumbbell_incline_bench_press",
+    "dumbbell_decline_bench_press"
+   ]
+  },
+  {
+   "query": "kniebeu",
+   "tier": "phrase",
+   "hits": [
+    "barbell_squat",
+    "barbell_front_squat",
+    "dumbbell_goblet_squat",
+    "kettlebell_goblet_squat",
+    "dumbbell_sumo_squat",
+    "dumbbell_bulgarian_split_squat",
+    "smith_squat",
+    "smith_split_squat",
+    "plate_hack_squat",
+    "plate_pendulum_squat",
+    "plate_belt_squat"
+   ]
+  },
+  {
+   "query": "kniebeigen",
+   "tier": "typos",
+   "hits": [
+    "barbell_squat",
+    "barbell_front_squat",
+    "dumbbell_sumo_squat",
+    "dumbbell_bulgarian_split_squat",
+    "smith_squat",
+    "smith_split_squat"
+   ]
+  },
+  {
+   "query": "lat raise",
+   "tier": "words",
+   "hits": [
+    "dumbbell_lateral_raise",
+    "cable_lateral_raise",
+    "machine_lateral_raise",
+    "plate_lateral_raise"
+   ]
+  },
+  {
+   "query": "lat pulldwon",
+   "tier": "typos",
+   "hits": [
+    "cable_lat_pulldown",
+    "cable_lat_pulldown_close",
+    "cable_lat_pulldown_underhand",
+    "cable_lat_pulldown_one_arm",
+    "cable_straight_arm_pulldown",
+    "machine_lat_pulldown",
+    "plate_lat_pulldown"
+   ]
+  },
+  {
+   "query": "legpress",
+   "tier": "typos",
+   "hits": [
+    "machine_leg_press",
+    "plate_leg_press"
+   ]
+  },
+  {
+   "query": "rowing",
+   "tier": "phrase",
+   "hits": [
+    "barbell_row",
+    "barbell_row_underhand",
+    "barbell_pendlay_row",
+    "dumbbell_row",
+    "dumbbell_row_one_arm",
+    "dumbbell_row_chest_supported",
+    "smith_row",
+    "tbar_row",
+    "tbar_row_chest_supported",
+    "cable_row",
+    "cable_row_wide",
+    "cable_row_one_arm",
+    "machine_row",
+    "plate_row"
+   ]
+  },
+  {
+   "query": "romanian",
+   "tier": "phrase",
+   "hits": [
+    "barbell_romanian_deadlift",
+    "dumbbell_romanian_deadlift",
+    "dumbbell_single_leg_rdl"
+   ]
+  },
+  {
+   "query": "curls kabel",
+   "tier": "phrase",
+   "hits": [
+    "cable_curl",
+    "cable_curl_one_arm",
+    "cable_hammer_curl",
+    "cable_bayesian_curl"
+   ]
+  },
+  {
+   "query": "fliegnede",
+   "tier": "typos",
+   "hits": [
+    "dumbbell_fly",
+    "dumbbell_incline_fly",
+    "cable_fly",
+    "cable_fly_high_to_low",
+    "cable_fly_low_to_high"
+   ]
+  },
+  {
+   "query": "bnak",
+   "tier": "words",
+   "hits": []
+  },
+  {
+   "query": "zzz",
+   "tier": "words",
+   "hits": []
+  },
+  {
+   "query": "T Bar",
+   "tier": "phrase",
+   "hits": [
+    "tbar_row",
+    "tbar_row_chest_supported"
+   ]
+  },
+  {
+   "query": "aussenrotation",
+   "tier": "phrase",
+   "hits": [
+    "cable_external_rotation"
+   ]
+  },
+  {
+   "query": "ueberzuege",
+   "tier": "phrase",
+   "hits": [
+    "dumbbell_pullover",
+    "cable_straight_arm_pulldown"
+   ]
+  },
+  {
+   "query": "Schulterdrücken stehend",
+   "tier": "words",
+   "hits": [
+    "barbell_overhead_press",
+    "dumbbell_shoulder_press_standing"
+   ]
+  },
+  {
+   "query": "squat",
+   "tier": "phrase",
+   "hits": [
+    "barbell_squat",
+    "barbell_front_squat",
+    "dumbbell_goblet_squat",
+    "kettlebell_goblet_squat",
+    "dumbbell_sumo_squat",
+    "dumbbell_bulgarian_split_squat",
+    "smith_squat",
+    "smith_split_squat",
+    "plate_hack_squat",
+    "plate_pendulum_squat",
+    "plate_belt_squat"
+   ]
+  },
+  {
+   "query": "bench press",
+   "tier": "phrase",
+   "hits": [
+    "barbell_bench_press",
+    "barbell_incline_bench_press",
+    "barbell_decline_bench_press",
+    "dumbbell_bench_press",
+    "dumbbell_incline_bench_press",
+    "dumbbell_decline_bench_press",
+    "smith_bench_press",
+    "smith_incline_bench_press",
+    "smith_decline_bench_press",
+    "plate_bench_press",
+    "plate_incline_chest_press",
+    "plate_decline_chest_press",
+    "barbell_close_grip_bench_press"
+   ]
+  },
+  {
+   "query": "press bench",
+   "tier": "words",
+   "hits": [
+    "barbell_bench_press",
+    "barbell_incline_bench_press",
+    "barbell_decline_bench_press",
+    "dumbbell_bench_press",
+    "dumbbell_incline_bench_press",
+    "dumbbell_decline_bench_press",
+    "smith_bench_press",
+    "smith_incline_bench_press",
+    "smith_decline_bench_press",
+    "plate_bench_press",
+    "plate_incline_chest_press",
+    "plate_decline_chest_press",
+    "barbell_close_grip_bench_press"
+   ]
+  }
+ ],
+ "history": {
+  "Push 2 31.07.2026": {
+   "search": "push 2\n31.07.2026 juli 2026",
+   "exercises": [
+    "barbell_bench_press",
+    "dumbbell_lateral_raise"
+   ]
+  },
+  "Push 23.09.2026": {
+   "search": "push\n23.09.2026 september 2026",
+   "exercises": [
+    "dumbbell_bench_press"
+   ]
+  },
+  "Push 01.07.2026": {
+   "search": "push\n01.07.2026 juli 2026",
+   "exercises": [
+    "barbell_bench_press",
+    "dumbbell_lateral_raise"
+   ]
+  },
+  "Beine 13.07.2026": {
+   "search": "beine\n13.07.2026 juli 2026",
+   "exercises": [
+    "barbell_squat"
+   ]
+  },
+  "Pull 31.08.2026": {
+   "search": "pull\n31.08.2026 august 2026",
+   "exercises": [
+    "cable_lat_pulldown"
+   ]
+  }
+ },
+ "history_queries": [
+  {
+   "query": "31.07",
+   "tier": "phrase",
+   "hits": [
+    "Push 2 31.07.2026"
+   ]
+  },
+  {
+   "query": "30.07",
+   "tier": "words",
+   "hits": []
+  },
+  {
+   "query": "juli",
+   "tier": "phrase",
+   "hits": [
+    "Push 2 31.07.2026",
+    "Push 01.07.2026",
+    "Beine 13.07.2026"
+   ]
+  },
+  {
+   "query": "push 2",
+   "tier": "phrase",
+   "hits": [
+    "Push 2 31.07.2026"
+   ]
+  },
+  {
+   "query": "Push 23.09",
+   "tier": "words",
+   "hits": [
+    "Push 23.09.2026"
+   ]
+  },
+  {
+   "query": "Bankdrücken Kurzhantel",
+   "tier": "phrase",
+   "hits": [
+    "Push 23.09.2026"
+   ]
+  },
+  {
+   "query": "bankdrucken seitheben",
+   "tier": "words",
+   "hits": [
+    "Push 2 31.07.2026",
+    "Push 01.07.2026"
+   ]
+  },
+  {
+   "query": "Bankdrüken",
+   "tier": "typos",
+   "hits": [
+    "Push 2 31.07.2026",
+    "Push 23.09.2026",
+    "Push 01.07.2026"
+   ]
+  },
+  {
+   "query": "kurzhantel",
+   "tier": "phrase",
+   "hits": [
+    "Push 2 31.07.2026",
+    "Push 23.09.2026",
+    "Push 01.07.2026"
+   ]
+  }
+ ]
+}

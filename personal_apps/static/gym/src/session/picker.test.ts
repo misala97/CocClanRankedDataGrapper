@@ -76,11 +76,11 @@ describe('found', () => {
       listed(3, 'Latzug (Kabel)'),
       listed(4, 'Bizepscurls (Kurzhantel)', { rank: 2 }),
     ]
-    expect(found(rows, 'curls').map((c) => names(c.rows))).toEqual([
+    expect(found(rows, 'curls').clusters.map((c) => names(c.rows))).toEqual([
       ['Hammercurls (Kurzhantel)'],
       ['Bizepscurls (Kurzhantel)', 'Bizepscurls (Langhantel)'],
     ])
-    expect(found(rows, 'nackenzieher')).toEqual([])
+    expect(found(rows, 'nackenzieher').clusters).toEqual([])
   })
 })
 

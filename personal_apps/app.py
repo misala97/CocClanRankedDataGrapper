@@ -86,18 +86,28 @@ request_timing.install(app)
 # Gym templates call {{ vite_asset('exercise') }} for the content-hashed bundle
 # built by `npm run build`. Raises rather than returning an empty src when the
 # build has not run -- see vite_assets.py and DEPLOY_FRONTEND.md.
-from vite_assets import resolve_asset, resolve_asset_css
+from vite_assets import (
+    resolve_asset, resolve_asset_css, resolve_built, resolve_preloads, resolve_style,
+    versioned_static,
+)
 app.jinja_env.globals['vite_asset'] = resolve_asset
 # {{ vite_asset_css(...) }} for an entry that imports its own stylesheet: Vite
 # emits it as a separate hashed file, and a template that linked only the
 # script would render unstyled with nothing in the console to say why.
 app.jinja_env.globals['vite_asset_css'] = resolve_asset_css
+# The gym's stylesheet and fonts go through the build too, and each page
+# preloads its entry's imports (walkthrough G-094, G-142).
+app.jinja_env.globals['vite_style'] = resolve_style
+app.jinja_env.globals['vite_built'] = resolve_built
+app.jinja_env.globals['vite_preloads'] = resolve_preloads
+app.jinja_env.globals['static_v'] = versioned_static
 
 
 _HASHED_ASSET_PATH = re.compile(r'^/static/[^/]+/dist/assets/')
 # The gym's exercise drawings keep their names; their URLs carry the file's
 # hash instead (features/gym/art.py), so only a request that names one is.
-_HASHED_BY_QUERY_PATH = re.compile(r'^/static/gym/art/[^/]+\.webp$')
+# gym.js likewise (vite_assets.versioned_static).
+_HASHED_BY_QUERY_PATH = re.compile(r'^/static/gym/(art/[^/]+\.webp|gym\.js)$')
 
 
 @app.after_request
@@ -105,8 +115,9 @@ def _immutable_hashed_assets(response):
     # The dist bundles carry their content hash in the filename, so a URL can
     # never mean different bytes -- a rebuild changes the name, not the file.
     # Flask's default (no-cache) made the browser revalidate every bundle on
-    # every navigation for nothing. Scoped to dist/assets/: gym.css, radar.css
-    # and sw.js DO change in place and must keep revalidating.
+    # every navigation for nothing. Scoped to dist/assets/ and to URLs that
+    # carry their file's hash: radar.css and sw.js DO change in place and must
+    # keep revalidating.
     #
     # Matched by shape rather than by a list of features, so a new feature's
     # bundles are covered the day it builds instead of the day someone

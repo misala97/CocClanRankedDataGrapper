@@ -5,6 +5,9 @@ export type { ExerciseMeta, RestOverview }
 
 export interface CatalogueEntry {
   exercise: ExerciseMeta
+  /** The folded name and aliases the add sheet searches too (../search);
+   *  the page adds the group's name. */
+  search: string
   chip_class: string | null
   chip_label: string | null
   last_done: string | null

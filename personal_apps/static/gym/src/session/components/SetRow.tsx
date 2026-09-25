@@ -1,6 +1,6 @@
 import type { LiveSet } from '../types'
 import { Icon } from '../../components/Icon'
-import { kg1 } from '../../format'
+import { kg } from '../../format'
 import { useWaitingFor } from '../stores'
 
 interface Props {
@@ -55,7 +55,7 @@ export function SetRow({
     )
   }
 
-  const weight = kg1(set.weight)
+  const weight = kg(set.weight)
   const perSide = isUnilateral ? ' je Seite' : ''
   const amount = `${weight} kg${perSide} mal ${set.reps}`
 

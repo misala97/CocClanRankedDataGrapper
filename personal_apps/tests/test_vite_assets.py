@@ -212,6 +212,93 @@ def test_hashed_bundles_are_served_immutable():
     assert 'immutable' not in (plain.headers.get('Cache-Control') or '')
 
 
+# The gym's stylesheet and fonts go through the build, and each page preloads
+# its island's imports (walkthrough G-094, G-142).
+
+def test_resolves_a_stylesheet_built_as_an_entry(tmp_path):
+    from vite_assets import resolve_style
+    _write_manifest(tmp_path, {
+        'static/gym/src/entries/styles.css': {'file': 'assets/styles-1a2b3c4d.css', 'isEntry': True},
+    })
+    assert resolve_style('styles', dist_dir=tmp_path) == '/static/gym/dist/assets/styles-1a2b3c4d.css'
+    with pytest.raises(ViteManifestError, match='nostyles'):
+        resolve_style('nostyles', dist_dir=tmp_path)
+
+
+def test_resolves_a_file_the_build_hashed_by_its_source(tmp_path):
+    from vite_assets import resolve_built
+    _write_manifest(tmp_path, {
+        'static/gym/fonts/figtree-latin.woff2': {'file': 'assets/figtree-latin-D_ZTVpCC.woff2'},
+    })
+    assert (resolve_built('static/gym/fonts/figtree-latin.woff2', dist_dir=tmp_path)
+            == '/static/gym/dist/assets/figtree-latin-D_ZTVpCC.woff2')
+    with pytest.raises(ViteManifestError, match='nosuch.woff2'):
+        resolve_built('static/gym/fonts/nosuch.woff2', dist_dir=tmp_path)
+
+
+def test_preloads_every_static_import_once_and_no_dynamic_one(tmp_path):
+    from vite_assets import resolve_preloads
+    _write_manifest(tmp_path, {
+        'static/gym/src/entries/session.tsx': {
+            'file': 'assets/session-1.js', 'imports': ['_fresh.js', '_api.js'],
+            'dynamicImports': ['_lazy.js']},
+        '_fresh.js': {'file': 'assets/fresh-2.js', 'imports': ['_api.js']},
+        '_api.js': {'file': 'assets/api-3.js', 'imports': ['_fresh.js']},
+        '_lazy.js': {'file': 'assets/lazy-4.js'},
+    })
+    assert resolve_preloads('session', dist_dir=tmp_path) == [
+        '/static/gym/dist/assets/fresh-2.js', '/static/gym/dist/assets/api-3.js']
+
+
+def _page(client, path='/gym/verlauf'):
+    from app import app as flask_app
+    flask_app.config['TESTING'] = True
+    response = client.get(path)
+    assert response.status_code == 200
+    return response.get_data(as_text=True)
+
+
+def test_a_gym_page_links_the_built_stylesheet_and_its_font(client):
+    """gym.css went out as written: 218 KB, half of it comments, revalidated on
+    every page. The built one is minified and hashed, and the preload names
+    the very font URL the built stylesheet asks for -- a different URL would
+    fetch the font twice."""
+    import re
+    _skip_without_build()
+    html = _page(client)
+    assert '/static/gym/gym.css' not in html and '/static/gym/figtree.css' not in html
+    sheet = re.search(r'<link rel="stylesheet" href="(/static/gym/dist/assets/styles-[^"]+\.css)">', html)
+    assert sheet, 'the built stylesheet is not linked'
+    font = re.search(r'<link rel="preload" href="([^"]+)" as="font"', html).group(1)
+    css = client.get(sheet.group(1))
+    assert css.headers['Cache-Control'] == 'public, max-age=31536000, immutable'
+    text = css.get_data(as_text=True)
+    assert f'url({font})' in text
+    assert '/*' not in text, 'comments survived the build'
+
+
+def test_a_gym_page_preloads_its_island_and_the_island_s_imports(client):
+    import re
+    from vite_assets import resolve_asset, resolve_preloads
+    _skip_without_build()
+    html = _page(client)
+    preloaded = re.findall(r'<link rel="modulepreload" href="([^"]+)">', html)
+    assert preloaded[0] == resolve_asset('history')
+    assert preloaded[1:] == resolve_preloads('history') and preloaded[1:]
+
+
+def test_gym_js_is_versioned_and_cached_for_good(client):
+    import re
+    _skip_without_build()
+    html = _page(client)
+    src = re.search(r'<script src="(/static/gym/gym\.js\?v=[0-9a-f]{8})"></script>', html)
+    assert src, 'gym.js is not linked with its hash'
+    versioned = client.get(src.group(1))
+    plain = client.get('/static/gym/gym.js')
+    assert versioned.headers['Cache-Control'] == 'public, max-age=31536000, immutable'
+    assert 'immutable' not in (plain.headers.get('Cache-Control') or '')
+
+
 # Radar builds separately (vite.radar.config.ts, its own outDir and manifest),
 # so the resolver takes a feature. Gym stays the default because every gym
 # template calls vite_asset() unqualified.

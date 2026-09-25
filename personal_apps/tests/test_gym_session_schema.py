@@ -55,7 +55,7 @@ def _minimal():
                        'movement': 'Bankdrücken', 'label': 'Langhantel',
                        'movement_group': 'Brust', 'workouts': 3, 'days_ago': 2,
                        'rank': 1, 'common': True}],
-        'list_groups': ['Brust'], 'muscle_groups': ['Brust'], 'vapid_public_key': None,
+        'list_groups': ['Brust'], 'vapid_public_key': None,
         'has_completed_set': False, 'deload_applied': False,
         'deload_pcts': [10, 20], 'deload_default_pct': 20,
         'partners': [], 'partner_status': [], 'session_is_shared': False,

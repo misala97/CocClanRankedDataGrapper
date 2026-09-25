@@ -66,9 +66,9 @@ def _manifest(dist: Path) -> dict:
     return cached
 
 
-def _record(entry: str, dist_dir: Path | None, feature: str) -> dict:
+def _record(entry: str, dist_dir: Path | None, feature: str, ext: str = 'tsx') -> dict:
     dist = dist_dir or (_STATIC / feature / 'dist')
-    key = f'static/{feature}/src/entries/{entry}.tsx'
+    key = f'static/{feature}/src/entries/{entry}.{ext}'
     record = _manifest(dist).get(key)
     if record is None:
         raise ViteManifestError(
@@ -127,3 +127,73 @@ def resolve_asset_css(entry: str, dist_dir: Path | None = None,
         pending.extend(record.get('imports', []))
         pending.extend(record.get('dynamicImports', []))
     return [f'/static/{feature}/dist/{href}' for href in seen]
+
+
+_versions: dict[tuple[str, float], str] = {}
+
+
+def versioned_static(filename: str) -> str:
+    """url_for('static') with `?v=` the file's content hash, for a file the
+    build does not take through (gym.js: a classic script in <head>, which a
+    module bundle could not stand in for). app._immutable_hashed_assets caches
+    such a URL for good; the hash is memoised on the file's mtime."""
+    from flask import url_for
+    path = _STATIC / filename
+    key = (filename, path.stat().st_mtime)
+    version = _versions.get(key)
+    if version is None:
+        import hashlib
+        version = hashlib.md5(path.read_bytes()).hexdigest()[:8]
+        _versions[key] = version
+    return url_for('static', filename=filename, v=version)
+
+
+def resolve_style(entry: str, dist_dir: Path | None = None,
+                  feature: str = 'gym') -> str:
+    """URL path for a stylesheet built as an entry of its own,
+    static/<feature>/src/entries/<entry>.css -- e.g. resolve_style('styles').
+
+    Built rather than linked as written: the build minifies it and hashes its
+    name, so it can be cached for good like the bundles (walkthrough G-094,
+    G-142)."""
+    return f'/static/{feature}/dist/{_record(entry, dist_dir, feature, "css")["file"]}'
+
+
+def resolve_built(source: str, dist_dir: Path | None = None,
+                  feature: str = 'gym') -> str:
+    """URL path for a file the build hashed on the way through, by its source
+    path -- a font a stylesheet names, e.g.
+    resolve_built('static/gym/fonts/figtree-latin.woff2').
+
+    A preload must name the very URL the stylesheet asks for, or the browser
+    fetches the file twice."""
+    dist = dist_dir or (_STATIC / feature / 'dist')
+    record = _manifest(dist).get(source)
+    if record is None:
+        raise ViteManifestError(
+            f'{source!r} is not in the Vite manifest: nothing the build '
+            f'processes for feature {feature!r} refers to it.')
+    return f'/static/{feature}/dist/{record["file"]}'
+
+
+def resolve_preloads(entry: str, dist_dir: Path | None = None,
+                     feature: str = 'gym') -> list[str]:
+    """URL paths of every chunk an entry imports statically, for
+    <link rel="modulepreload">.
+
+    Without them the browser learns of an entry's imports only once it has
+    fetched and parsed the entry, and then of their imports after those: a
+    waterfall of up to a dozen files on the session page (G-142). Dynamic
+    imports are left out -- they load on demand by design."""
+    dist = dist_dir or (_STATIC / feature / 'dist')
+    manifest = _manifest(dist)
+    found: list[str] = []
+    pending = list(_record(entry, dist_dir, feature).get('imports', []))
+    while pending:
+        key = pending.pop(0)
+        record = manifest.get(key)
+        if record is None or record['file'] in found:
+            continue
+        found.append(record['file'])
+        pending.extend(record.get('imports', []))
+    return [f'/static/{feature}/dist/{href}' for href in found]
