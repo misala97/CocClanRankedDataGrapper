@@ -1,0 +1,179 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>How to Grow a Tree</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Abril+Fatface&family=Caveat:wght@500;700&family=Permanent+Marker&display=swap">
+<style>
+  :root {
+    --mat: #d6e1d8;
+    --grid: rgba(30, 74, 54, 0.12);
+    --grid-strong: rgba(30, 74, 54, 0.22);
+    --ink: #1f2c25;
+    --muted: #46594f;
+    --tag: #ffd23f;
+    --tag-ink: #2e2420;
+    --button: #fffaf0;
+    --button-ink: #2e2420;
+    --focus: #1d63c4;
+    --lift: 0 22px 44px -22px rgba(18, 40, 30, 0.6), 0 2px 6px rgba(18, 40, 30, 0.22);
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      color-scheme: dark;
+      --mat: #14231c;
+      --grid: rgba(170, 220, 190, 0.06);
+      --grid-strong: rgba(170, 220, 190, 0.12);
+      --ink: #e1ece5;
+      --muted: #a6bbaf;
+      --button: #22372d;
+      --button-ink: #e1ece5;
+      --focus: #8cc4ff;
+      --lift: 0 22px 44px -18px rgba(0, 0, 0, 0.8), 0 2px 6px rgba(0, 0, 0, 0.5);
+    }
+  }
+  :root[data-theme="dark"] {
+    color-scheme: dark;
+    --mat: #14231c;
+    --grid: rgba(170, 220, 190, 0.06);
+    --grid-strong: rgba(170, 220, 190, 0.12);
+    --ink: #e1ece5;
+    --muted: #a6bbaf;
+    --button: #22372d;
+    --button-ink: #e1ece5;
+    --focus: #8cc4ff;
+    --lift: 0 22px 44px -18px rgba(0, 0, 0, 0.8), 0 2px 6px rgba(0, 0, 0, 0.5);
+  }
+  [hidden] { display: none !important; }
+  html, body { height: 100%; }
+  body {
+    margin: 0;
+    color: var(--ink);
+    background-color: var(--mat);
+    /* a self-healing cutting mat: fine grid every 24px, bold every 120px */
+    background-image:
+      linear-gradient(var(--grid-strong) 1px, transparent 1px),
+      linear-gradient(90deg, var(--grid-strong) 1px, transparent 1px),
+      linear-gradient(var(--grid) 1px, transparent 1px),
+      linear-gradient(90deg, var(--grid) 1px, transparent 1px);
+    background-size: 120px 120px, 120px 120px, 24px 24px, 24px 24px;
+    font-family: Caveat, "Segoe Print", "Bradley Hand", "Comic Sans MS", cursive;
+  }
+  .desk {
+    box-sizing: border-box;
+    min-height: 100%;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 14px;
+    padding-inline: 16px;
+    padding-block: 20px;
+  }
+  .frame, .bar {
+    width: min(100%, 1280px, calc((100vh - 150px) * 16 / 9));
+    width: min(100%, 1280px, calc((100dvh - 150px) * 16 / 9));
+    max-width: 100%;
+  }
+  .frame { position: relative; aspect-ratio: 16 / 9; container-type: inline-size; }
+  #stage {
+    display: block;
+    width: 100%;
+    height: 100%;
+    border-radius: 3px;
+    background: #efe3c8;
+    box-shadow: var(--lift);
+    cursor: pointer;
+  }
+  .tag {
+    position: absolute;
+    left: 50%;
+    top: 50%;
+    display: grid;
+    justify-items: center;
+    gap: 2px;
+    padding: 14px 30px 12px;
+    padding: clamp(7px, 1.2cqw, 14px) clamp(14px, 2.6cqw, 30px) clamp(6px, 1cqw, 12px);
+    border: 0;
+    border-radius: 4px 9px 5px 8px / 8px 4px 9px 5px;
+    background: var(--tag);
+    color: var(--tag-ink);
+    box-shadow: 3px 5px 0 rgba(46, 36, 32, 0.28), 0 12px 26px -10px rgba(46, 36, 32, 0.5);
+    font: inherit;
+    cursor: pointer;
+    transform: translate(-50%, -50%) rotate(-3deg);
+    transition: transform 160ms ease;
+  }
+  .tag:hover { transform: translate(-50%, -50%) rotate(-1deg) scale(1.04); }
+  .tag .label {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    font-size: clamp(30px, 5vw, 46px);
+    font-size: clamp(20px, 3.6cqw, 46px);
+    font-weight: 700;
+    line-height: 1;
+  }
+  .tag .label::before {
+    content: "";
+    width: 0.62em;
+    height: 0.7em;
+    background: currentColor;
+    clip-path: polygon(4% 2%, 100% 48%, 6% 98%, 12% 50%);
+  }
+  .tag .sub { font-size: clamp(17px, 2.4vw, 22px); font-size: clamp(13px, 1.75cqw, 22px); font-weight: 500; white-space: nowrap; }
+  .bar {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px 24px;
+  }
+  .caption {
+    margin: 0;
+    max-width: 60ch;
+    color: var(--muted);
+    font-size: 21px;
+    line-height: 1.2;
+    text-wrap: balance;
+  }
+  .controls { display: flex; gap: 10px; }
+  .controls button {
+    padding: 7px 16px 6px;
+    border: 2px solid var(--button-ink);
+    border-radius: 6px 10px 7px 9px / 9px 6px 10px 7px;
+    background: var(--button);
+    color: var(--button-ink);
+    box-shadow: 2px 3px 0 rgba(0, 0, 0, 0.22);
+    font: 700 22px/1 Caveat, "Segoe Print", "Comic Sans MS", cursive;
+    cursor: pointer;
+  }
+  .controls button:active { transform: translate(1px, 2px); box-shadow: 1px 1px 0 rgba(0, 0, 0, 0.22); }
+  button:focus-visible, #stage:focus-visible { outline: 3px solid var(--focus); outline-offset: 3px; }
+  @media (prefers-reduced-motion: reduce) {
+    .tag, .tag:hover { transition: none; transform: translate(-50%, -50%) rotate(-3deg); }
+  }
+</style>
+</head>
+<body>
+<main class="desk">
+  <div class="frame">
+    <canvas id="stage" width="1280" height="720" role="img"
+      aria-label="Paper-cutout animation. An acorn drops into the soil, gets watered, wakes up in the sunshine, sprouts, and grows through twenty years into an apple tree while a to-do list ticks off each step."></canvas>
+    <button id="play" class="tag" type="button"><span class="label">Play</span><span class="sub">10 seconds, sound on</span></button>
+  </div>
+  <div class="bar">
+    <p class="caption">Five steps, ten seconds. Every scrap of paper is cut and every note is played live, in plain JavaScript.</p>
+    <div class="controls">
+      <button id="again" type="button">Play</button>
+      <button id="sound" type="button" aria-pressed="true">Sound: on</button>
+    </div>
+  </div>
+  <noscript><p class="caption">This animation is drawn by JavaScript. Turn it on to watch the tree grow.</p></noscript>
+</main>
+<script src="grow-a-tree.js"></script>
+</body>
+</html>
