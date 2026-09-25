@@ -172,6 +172,33 @@ class ExerciseAbout(_Model):
     variants: list[Variant]
 
 
+class RunningWorkout(_Model):
+    """The workout running when the page was read: the exercise's page
+    offers "Zu „<name>“ hinzufügen" instead of beginning one."""
+    session_id: int
+    #: None for a workout begun without one: "Zum laufenden Workout".
+    name: str | None
+    #: Its visible rows of this exercise. One or more and the page asks
+    #: before adding it again, as the add sheet does.
+    count: int
+    #: Its sets of this exercise that count (Q1: done, one rep or more), on
+    #: every row of it, a replaced original's too: lifted today, but not on
+    #: the page yet, which reads finished workouts only -- and shows them so.
+    logged: int
+
+
+class RoutineChoice(_Model):
+    """A routine of the lifter's, as the exercise page's routine sheet lists
+    it."""
+    id: int
+    name: str
+    #: Its rows: "7 Übungen".
+    count: int
+    #: It holds this exercise already: the sheet says "drin" on a row that
+    #: stays a button, aria-disabled, so the row just tapped keeps the focus.
+    has: bool
+
+
 class E1rmPR(_Model):
     """The set with the highest estimated 1RM. Not always the heaviest one:
     more reps at less weight can estimate higher."""
@@ -216,6 +243,12 @@ class ExerciseDetailPayload(_Model):
     chip_label: str | None
     about: ExerciseAbout
     equipment_labels: dict[str, str]
+    #: On today's list. A retired row is offered no way on (M6): nothing
+    #: else offers it either.
+    on_list: bool
+    running: RunningWorkout | None
+    #: The lifter's routines, A-Z.
+    routines: list[RoutineChoice]
 
 
 # ---------------------------------------------------------------------------
@@ -635,15 +668,35 @@ class CatalogueEntry(_Model):
     last_weight: float | None
     days_ago: int | None
     sessions_since_pr: int | None
+    #: The drawing's 52 px tile (art.picture_url); None off the list.
+    picture: str | None
+    #: The running workout holds sets of it that count (Q1). With no
+    #: finished one yet the row says "Heute im Workout", as its page says
+    #: "Heute im laufenden Workout", not "Noch kein Satz".
+    in_running: bool
 
 
 class CatalogueGroup(_Model):
-    """A muscle group and its exercises. Seeded from MUSCLE_GROUPS rather than
-    from the catalogue, so a group with nothing in it still gets a band -- the
-    strongest signal for the planning question was otherwise rendered as
-    nothing at all."""
+    """A muscle group and its exercises, in the list's order. Every group of
+    the list is here, an empty one too: the page names those ("Noch nichts
+    für Beine") and links each to its band of the rest of the list."""
     name: str
     entries: list[CatalogueEntry]
+
+
+class LibraryEntry(_Model):
+    """A list entry the lifter has not had yet: "Noch nie gemacht" (M6)."""
+    id: int
+    name: str
+    #: The movement it is a variant of, and what sets it apart: "Bankdrücken"
+    #: and "Kurzhantel" of "Bankdrücken (Kurzhantel)".
+    movement: str
+    label: str
+    #: The band it is listed under: its movement's group, as in the add
+    #: sheet -- a movement never splits across two bands.
+    movement_group: str
+    search: str
+    picture: str | None
 
 
 class CataloguePayload(_Model):
@@ -653,6 +706,10 @@ class CataloguePayload(_Model):
     # contained no information about the catalogue's size.
     open_by_default: bool
     rest: RestOverview
+    #: The rest of the list: every list exercise that is not the lifter's.
+    library: list[LibraryEntry]
+    #: The list's group order (library.LIST_GROUPS).
+    list_groups: list[str]
 
 
 # ---------------------------------------------------------------------------

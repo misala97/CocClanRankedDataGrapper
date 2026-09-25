@@ -306,6 +306,7 @@ def test_a_rejected_write_changed_nothing(intruder_client, two_users):
 TEMPLATE_ROUTES = [
     ('POST', '/gym/templates/{}/rename', 'template_id'),
     ('POST', '/gym/templates/{}/delete', 'template_id'),
+    ('POST', '/gym/templates/{}/exercises/add', 'template_id'),
 ]
 
 

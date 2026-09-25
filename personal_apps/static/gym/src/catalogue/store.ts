@@ -28,6 +28,28 @@ function writeOpen(open: string[]): void {
   }
 }
 
+const NIE_KEY = 'gym.uebungen.nie'
+
+/** The open bands of "Noch nie gemacht", apart from yours: that part starts
+ *  folded whatever its size -- it is the whole list -- and a band opened
+ *  there says nothing about the same group's band of yours. */
+function readNie(): string[] {
+  try {
+    const raw = sessionStorage.getItem(NIE_KEY)
+    return raw === null ? [] : JSON.parse(raw) as string[]
+  } catch {
+    return []
+  }
+}
+
+function writeNie(open: string[]): void {
+  try {
+    sessionStorage.setItem(NIE_KEY, JSON.stringify(open))
+  } catch {
+    /* private mode */
+  }
+}
+
 const SORT_KEY = 'gym.uebungen.sort'
 
 /** The sort IS a preference (a power user who lives in "Stagniert zuerst" re-tapped it
@@ -42,6 +64,15 @@ function readSort(): SortMode {
   }
 }
 
+/** Whether a band of yours is open. A pure function of `open`, which a page
+ *  selects itself: the store's own `isOpen` never changed identity, so a
+ *  page that selected it was never told of a toggle and a tapped band
+ *  stayed as it was until a reload (G-019). */
+export function bandOpen(open: string[] | null, name: string, openByDefault: boolean): boolean {
+  // Nothing remembered yet: fall back to what the catalogue's size implies.
+  return open === null ? openByDefault : open.includes(name)
+}
+
 interface CatalogueUi {
   query: string
   sort: SortMode
@@ -51,24 +82,37 @@ interface CatalogueUi {
   setQuery(query: string): void
   setSort(sort: SortMode): void
   toggleGroup(name: string, openByDefault: boolean, allGroups: string[]): void
-  isOpen(name: string, openByDefault: boolean): boolean
+  /** The open bands of "Noch nie gemacht". */
+  nieOpen: string[]
+  toggleNie(name: string): void
+  /** Opened, never closed: "Noch nichts für Beine" jumps to that band. */
+  openNie(name: string): void
 }
 
-export const useCatalogueUi = create<CatalogueUi>((set, get) => ({
+export const useCatalogueUi = create<CatalogueUi>((set) => ({
   query: '',
   sort: readSort(),
   open: readOpen(),
+  nieOpen: readNie(),
+
+  toggleNie: (name) => set((state) => {
+    const next = state.nieOpen.includes(name)
+      ? state.nieOpen.filter((g) => g !== name)
+      : [...state.nieOpen, name]
+    writeNie(next)
+    return { nieOpen: next }
+  }),
+  openNie: (name) => set((state) => {
+    if (state.nieOpen.includes(name)) return {}
+    const next = [...state.nieOpen, name]
+    writeNie(next)
+    return { nieOpen: next }
+  }),
 
   setQuery: (query) => set({ query }),
   setSort: (sort) => {
     try { localStorage.setItem(SORT_KEY, sort) } catch { /* private mode */ }
     set({ sort })
-  },
-
-  isOpen: (name, openByDefault) => {
-    const open = get().open
-    // Nothing remembered yet: fall back to what the catalogue's size implies.
-    return open === null ? openByDefault : open.includes(name)
   },
 
   toggleGroup: (name, openByDefault, allGroups) => set((state) => {

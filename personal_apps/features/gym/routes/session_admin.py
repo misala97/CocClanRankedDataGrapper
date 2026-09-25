@@ -4,18 +4,19 @@ and saving it back to a template."""
 from features.gym import plan, stats
 
 from flask import (
-    flash, jsonify, redirect, request, url_for,
+    abort, flash, jsonify, redirect, request, url_for,
 )
 from extensions import (
     db,
 )
 from models import (
-    WorkoutTemplate,
+    TemplateExercise, WorkoutTemplate,
 )
 from auth import (
     login_required,
 )
-from features.gym.exercises import setups as exercise_setups
+from features.gym.exercises import exercise_or_404, setups as exercise_setups
+from features.gym.library import BY_KEY
 from features.gym.scope import (
     current_user_id, my_sessions, my_templates, owned_session, owned_template,
 )
@@ -24,6 +25,7 @@ from .helpers import (
     InvalidInput, _debrief_args, _delete_session_and_links, _refuse_live_write_if_finished,
     _to_int, _to_name, _wants_json,
 )
+from .exercise_detail import _routines
 from .history import counts
 from .partner_view import followed_a_leader
 from .workout import (
@@ -278,6 +280,45 @@ def gym_rename_template(template_id):
     else:
         flash('Kein Name eingegeben — die Routine heißt weiter wie vorher.', 'error')
     return redirect(url_for('gym.gym_heute'))
+
+
+@gym_bp.route('/gym/templates/<int:template_id>/exercises/add', methods=['POST'])
+@login_required
+def gym_add_template_exercise(template_id):
+    """"Zur Routine" on an exercise's page (M6): the exercise goes at the end
+    of one of the lifter's routines. Nothing added a single exercise to a
+    routine before -- only "Als Routine speichern" and "Routine
+    aktualisieren", from a whole workout.
+
+    The row has no plan: the routine's next start fills it from history, as
+    for any row new to a routine (plan.fill_routine_plan). Once per routine:
+    the plan is read from one row per exercise (plan.routine_row), so a
+    routine that holds it already gets nothing more -- and the answer is the
+    same fresh list either way, which says "drin". A double tap, or a second
+    tab, cannot add it twice."""
+    # Before anything is read: taking the lock ends the transaction, and two
+    # taps must not both find the routine without the exercise. Then whose
+    # routine it is, before what was sent: someone else's is a 404 whatever
+    # the form holds (test_gym_ownership).
+    lock_user(current_user_id())
+    template = owned_template(template_id)
+    exercise_id = request.form.get('exercise_id', type=int)
+    if not exercise_id:
+        abort(400)
+    exercise = exercise_or_404(exercise_id)
+    if exercise.library_key not in BY_KEY:
+        # A retired row: nothing offers it any more (the add sheet, the page).
+        abort(400)
+    held = any(row.exercise_id == exercise.id for row in template.exercises)
+    if not held:
+        last = max((row.position for row in template.exercises), default=0)
+        template.exercises.append(TemplateExercise(exercise_id=exercise.id, position=last + 1))
+        db.session.commit()
+    if _wants_json():
+        return jsonify({'routines': _routines(exercise)})
+    if not held:
+        flash(f'{exercise.name} ist jetzt in „{template.name}“.', 'success')
+    return redirect(url_for('gym.exercise_detail', exercise_id=exercise.id))
 
 
 @gym_bp.route('/gym/templates/<int:template_id>/delete', methods=['POST'])

@@ -11,8 +11,13 @@ import datetime as dt
 from flask import (
     jsonify, render_template, request,
 )
+from sqlalchemy.orm import selectinload
+
+from extensions import (
+    db,
+)
 from models import (
-    EQUIPMENT_LABELS, Exercise,
+    EQUIPMENT_LABELS, Exercise, SessionExercise, SessionSet, WorkoutTemplate,
 )
 from auth import (
     login_required,
@@ -25,13 +30,13 @@ from features.gym.library import (
     BY_KEY, LIBRARY,
 )
 from features.gym.scope import (
-    current_user_id,
+    current_user_id, my_templates,
 )
 from features.gym.schemas import (
     ExerciseDetailPayload,
 )
 from .helpers import (
-    EXERCISE_STATE_CHIP, _exercise_meta, _to_int,
+    EXERCISE_STATE_CHIP, _exercise_meta, _page_active_session, _to_int,
 )
 from .history import (
     load_performed,
@@ -59,6 +64,42 @@ def _about(exercise):
     variants.sort(key=lambda variant: variant['label'].casefold())
     return {'picture': art.picture_url(exercise.library_key), 'movement': entry.movement,
             'variants': variants}
+
+
+def _running(exercise):
+    """The running workout, as the page offers it: "Zu „<name>“
+    hinzufügen" (RunningWorkout). Its rows of this exercise count as the add
+    sheet counts them -- the visible ones, a skipped row too. `logged` is
+    what was lifted of it today, which the page (read from finished
+    workouts) does not show yet: the sets that count (Q1) on every row of
+    it, a replaced-away original's too -- as the page will show them once
+    the workout is finished."""
+    session_ = _page_active_session()
+    if session_ is None:
+        return None
+    rows = db.session.query(SessionExercise.id, SessionExercise.exercise_id,
+                            SessionExercise.replaces_id).filter(
+        SessionExercise.session_id == session_.id).all()
+    # A replaced original is hidden behind its substitute (_live_context).
+    replaced = {row.replaces_id for row in rows if row.replaces_id is not None}
+    row_ids = [row.id for row in rows if row.exercise_id == exercise.id]
+    logged = (SessionSet.query.filter(SessionSet.session_exercise_id.in_(row_ids),
+                                      SessionSet.completed == True,  # noqa: E712
+                                      SessionSet.reps >= 1).count()
+              if row_ids else 0)
+    return {'session_id': session_.id, 'name': session_.name,
+            'count': sum(1 for row_id in row_ids if row_id not in replaced),
+            'logged': logged}
+
+
+def _routines(exercise):
+    """The lifter's routines for the routine sheet, A-Z: each with its size
+    and whether it holds this exercise already."""
+    templates = my_templates().options(selectinload(WorkoutTemplate.exercises)).all()
+    choices = [{'id': template.id, 'name': template.name, 'count': len(template.exercises),
+                'has': any(row.exercise_id == exercise.id for row in template.exercises)}
+               for template in templates]
+    return sorted(choices, key=lambda choice: (choice['name'].casefold(), choice['id']))
 
 
 def _stairs(rows, state, since):
@@ -120,6 +161,11 @@ def _exercise_detail_payload(exercise, raw_position):
         'about': _about(exercise),
         # The settings sheet names the equipment; it no longer picks one.
         'equipment_labels': dict(EQUIPMENT_LABELS),
+        # The two ways on (M6): into a workout, into a routine. Only for an
+        # exercise on the list -- nothing else offers a retired row.
+        'on_list': exercise.library_key in BY_KEY,
+        'running': _running(exercise),
+        'routines': _routines(exercise),
         **data,
     })
 

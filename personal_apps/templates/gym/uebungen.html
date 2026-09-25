@@ -7,8 +7,9 @@
    only mounts it.
 
    Its three sorts and its search are client-side re-orderings of the SAME rows
-   the payload carries, never a second round trip: a lifter's catalogue is tens
-   of rows, and a request per keystroke would be worse than useless.
+   the payload carries, never a second round trip: the lifter's own and the
+   rest of the list (M6) come to the one list's size, about 160 rows, and a
+   request per keystroke would be worse than useless.
 
    `tojson` escapes <, > and & for embedding in HTML, so no |safe here. #}
 

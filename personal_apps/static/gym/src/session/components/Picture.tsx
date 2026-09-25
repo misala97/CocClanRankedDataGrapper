@@ -21,8 +21,10 @@ export function Drawing({ src, alt = '', lazy = false }: { src: string; alt?: st
 }
 
 /** A small tile: the drawing, or the dumbbell while the exercise has none
- *  yet. Decorative -- the exercise's name sits right beside it. */
-export function PictureTile({ src, size }: { src: string | null; size: 'live' | 'queue' }) {
+ *  yet. Decorative -- the exercise's name sits right beside it. 'list' is
+ *  Übungen's (M6): 52px, and lazy like the queue's -- the page holds the
+ *  whole list. */
+export function PictureTile({ src, size }: { src: string | null; size: 'live' | 'queue' | 'list' }) {
   if (src === null) {
     return (
       <span className={`pic pic--${size} pic--none`} aria-hidden="true">
@@ -32,7 +34,7 @@ export function PictureTile({ src, size }: { src: string | null; size: 'live' | 
   }
   return (
     <span className={`pic pic--${size}`} aria-hidden="true">
-      <Drawing src={src} lazy={size === 'queue'} />
+      <Drawing src={src} lazy={size !== 'live'} />
     </span>
   )
 }

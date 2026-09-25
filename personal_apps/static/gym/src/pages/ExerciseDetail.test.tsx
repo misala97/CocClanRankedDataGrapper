@@ -3,7 +3,8 @@ import userEvent from '@testing-library/user-event'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { ExerciseDetailPage } from './ExerciseDetail'
 import type {
-  E1rmPR, ExerciseDetailPayload, ExerciseGoal, ExerciseMeta, SessionRow, Stair, StairCol, WeightReps,
+  E1rmPR, ExerciseDetailPayload, ExerciseGoal, ExerciseMeta, RoutineChoice, RunningWorkout,
+  SessionRow, Stair, StairCol, WeightReps,
 } from '../types'
 
 /** Every date on the page is said against today: "Di", "03.08." without a
@@ -48,6 +49,7 @@ function payload(over: Partial<ExerciseDetailPayload> = {}): ExerciseDetailPaylo
     chip_class: null, chip_label: null,
     about: { picture: null, movement: null, variants: [] },
     equipment_labels: { barbell: 'Langhantel', stack: 'Stack', dumbbell: 'Kurzhantel' },
+    on_list: true, running: null, routines: [],
     ...over,
   }
 }
@@ -142,9 +144,8 @@ describe('ExerciseDetailPage', () => {
     render(<ExerciseDetailPage payload={payload({
       about: { picture: '/static/gym/art/bench.webp', movement: 'Bankdrücken', variants: [] },
     })} />)
-    expect(screen.getByText(/Noch keine Sätze protokolliert/)).toHaveTextContent(
-      'Noch keine Sätze protokolliert. Sobald du diese Übung in einem Workout loggst, stehen '
-      + 'hier dein nächstes Ziel, deine Rekorde und jedes einzelne Workout.')
+    expect(screen.getByText(/Noch kein Satz/)).toHaveTextContent(
+      /^Noch kein Satz\. Sobald du sie loggst, stehen hier dein nächstes Ziel, deine Rekorde und jedes Workout\.$/)
     expect(screen.queryByRole('heading', { name: /^Workouts/ })).not.toBeInTheDocument()
     expect(screen.getByRole('img', { name: 'Zeichnung: Bankdrücken' })).toBeInTheDocument()
   })
@@ -742,6 +743,224 @@ describe('the exercise itself', () => {
     expect(document.querySelector('.exalt__n')).toHaveTextContent(/^1 Variante$/)
     rerender(<ExerciseDetailPage payload={logged({ about: { ...rowing, variants: [] } })} />)
     expect(document.querySelector('.exalt')).toBeNull()
+  })
+})
+
+describe('the page of an exercise never done (M6 screen 2, G-041)', () => {
+  const rowing = {
+    picture: '/static/gym/art/rudern.webp', movement: 'Rudern',
+    variants: [{ id: 5, label: 'Kabel, sitzend' }, { id: 6, label: 'Langhantel' }],
+  }
+  const routines: RoutineChoice[] = [
+    { id: 3, name: 'Pull', count: 6, has: true },
+    { id: 4, name: 'Push', count: 7, has: false },
+  ]
+
+  it('leads with the exercise, then the ways on, what fills the page, the other variants', () => {
+    const { container } = render(<ExerciseDetailPage payload={payload({ about: rowing, routines })} />)
+    const order = [...container.querySelectorAll(
+      '.exabout__art, .exabout__facts, .exnew__acts, .exnew__none, .exnew__alt, .sec--maint')]
+      .map((node) => node.className.split(' ').find((name) => /^(ex|sec--)/.test(name)))
+    expect(order).toEqual(['exabout__art', 'exabout__facts', 'exnew__acts', 'exnew__none',
+      'exnew__alt', 'sec--maint'])
+    // The variants open, not folded: the rack is taken, the Smith machine
+    // is free.
+    expect(document.querySelector('details.exalt')).toBeNull()
+    const alt = screen.getByRole('region', { name: 'Rudern auch mit' })
+    expect(within(alt).getAllByRole('link').map((link) => [link.textContent, link.getAttribute('href')]))
+      .toEqual([['Rudern Kabel, sitzend', '/gym/exercises/5'], ['Rudern Langhantel', '/gym/exercises/6']])
+  })
+
+  it('says a lift done today in the running workout, which the page cannot show yet', () => {
+    const running: RunningWorkout = { session_id: 9, name: 'Push', count: 1, logged: 2 }
+    render(<ExerciseDetailPage payload={payload({ running })} />)
+    expect(document.querySelector('.exnew__none')).toHaveTextContent(
+      /^Heute im laufenden Workout\. Sobald es beendet ist, stehen hier dein nächstes Ziel, deine Rekorde und jedes Workout\.$/)
+  })
+
+  it('offers no way on for an exercise off the list', () => {
+    render(<ExerciseDetailPage payload={payload({ on_list: false, routines })} />)
+    expect(document.querySelector('.exnew__acts')).toBeNull()
+    expect(screen.queryByRole('button', { name: /Workout damit beginnen|Zur Routine/ })).toBeNull()
+    expect(screen.getByText(/^Noch kein Satz/)).toBeInTheDocument()
+  })
+})
+
+describe('the ways on: a workout, a routine (M6 screen 2)', () => {
+  /** The form the page posts, as the server receives it. */
+  function posted() {
+    const submit = vi.spyOn(HTMLFormElement.prototype, 'submit').mockImplementation(() => {})
+    return () => submit.mock.contexts.map((form) => {
+      const fields = Object.fromEntries(new FormData(form as HTMLFormElement))
+      delete fields.csrf_token
+      return [(form as HTMLFormElement).getAttribute('action'), fields]
+    })
+  }
+
+  it('begins a workout with the exercise when none is running', async () => {
+    const user = userEvent.setup()
+    const forms = posted()
+    render(<ExerciseDetailPage payload={payload()} />)
+    const go = screen.getByRole('button', { name: 'Workout damit beginnen' })
+    expect(document.querySelector('.exnew__note')).toBeNull()
+    await user.click(go)
+    expect(forms()).toEqual([['/gym/start', { exercise_id: '1' }]])
+    // A page change is on its way: a second tap would post a second workout.
+    expect(go).toBeDisabled()
+  })
+
+  it('adds it at the end of the running workout, by that workout\'s name', async () => {
+    const user = userEvent.setup()
+    const forms = posted()
+    const running: RunningWorkout = { session_id: 9, name: 'Push', count: 0, logged: 0 }
+    render(<ExerciseDetailPage payload={payload({ running })} />)
+    const go = screen.getByRole('button', { name: 'Zu „Push“ hinzufügen' })
+    expect(go).toHaveAccessibleDescription('Kommt ans Ende des laufenden Workouts.')
+    await user.click(go)
+    // `back`: finished elsewhere since, the server sends the lifter back
+    // here, told so.
+    expect(forms()).toEqual([['/gym/session/9/exercises/add', { exercise_id: '1', back: 'exercise' }]])
+  })
+
+  it('says a running workout with no name as the running workout', () => {
+    render(<ExerciseDetailPage payload={payload({
+      running: { session_id: 9, name: null, count: 0, logged: 0 },
+    })} />)
+    expect(screen.getByRole('button', { name: 'Zum laufenden Workout hinzufügen' })).toBeInTheDocument()
+  })
+
+  it('asks before adding it to a workout it is already in', async () => {
+    const user = userEvent.setup()
+    const forms = posted()
+    render(<ExerciseDetailPage payload={payload({
+      running: { session_id: 9, name: 'Push', count: 1, logged: 0 },
+    })} />)
+    const go = screen.getByRole('button', { name: 'Zu „Push“ hinzufügen' })
+    expect(go).toHaveAccessibleDescription('Ist schon drin.')
+    await user.click(go)
+    expect(forms()).toEqual([])
+    expect(go).toHaveAccessibleDescription('Nochmal hinzufügen?')
+    await user.click(go)
+    expect(forms()).toEqual([['/gym/session/9/exercises/add', { exercise_id: '1', back: 'exercise' }]])
+  })
+
+  it('counts it when it is in twice', () => {
+    render(<ExerciseDetailPage payload={payload({
+      running: { session_id: 9, name: 'Push', count: 2, logged: 0 },
+    })} />)
+    expect(screen.getByRole('button', { name: 'Zu „Push“ hinzufügen' }))
+      .toHaveAccessibleDescription('Ist schon 2× drin.')
+  })
+
+  it('sits under "Nächstes Ziel" on a page with history', () => {
+    const { container } = render(<ExerciseDetailPage payload={logged({ goal: goal() })} />)
+    const main = container.querySelector('.exdetail__main')!
+    expect([...main.children].slice(0, 2).map((node) => node.className))
+      .toEqual(['exgoal', 'exnew__acts'])
+    expect(within(main as HTMLElement).getByRole('button', { name: 'Workout damit beginnen' }))
+      .toBeInTheDocument()
+  })
+
+  it('offers a routine only to a lifter with one', () => {
+    render(<ExerciseDetailPage payload={payload()} />)
+    expect(screen.queryByRole('button', { name: 'Zur Routine …' })).toBeNull()
+  })
+})
+
+describe('Zur Routine', () => {
+  const ROUTINES: RoutineChoice[] = [
+    { id: 3, name: 'Pull', count: 6, has: true },
+    { id: 4, name: 'Push', count: 7, has: false },
+  ]
+
+  /** The server's answer to each add: the routines after it, or a failure. */
+  function server(answer: () => RoutineChoice[] | Error) {
+    const fetchMock = vi.fn(async (_url: string, _init: RequestInit) => {
+      const reply = answer()
+      if (reply instanceof Error) return { ok: false, status: 500, json: async () => ({}) } as Response
+      return { ok: true, status: 200, json: async () => ({ routines: reply }) } as Response
+    })
+    vi.stubGlobal('fetch', fetchMock)
+    return fetchMock
+  }
+
+  async function open(user: ReturnType<typeof userEvent.setup>) {
+    render(<ExerciseDetailPage payload={payload({ routines: ROUTINES })} />)
+    await user.click(screen.getByRole('button', { name: 'Zur Routine …' }))
+    return within(document.getElementById('sheet-routine')!)
+  }
+
+  it('lists the routines, and says where the exercise already is', async () => {
+    const user = userEvent.setup()
+    const fetchMock = server(() => ROUTINES)
+    const sheet = await open(user)
+    expect(sheet.getByText('Bankdrücken kommt ans Ende der Routine, die du antippst.')).toBeInTheDocument()
+    const pull = sheet.getByRole('button', { name: /Pull/ })
+    expect(pull).toHaveTextContent('Pull6 Übungendrin')
+    expect(pull).toHaveAttribute('aria-disabled', 'true')
+    await user.click(pull)
+    expect(fetchMock).not.toHaveBeenCalled()
+    expect(sheet.getByRole('button', { name: /Push/ })).not.toHaveAttribute('aria-disabled')
+  })
+
+  it('adds it to the routine tapped, and stays open for another', async () => {
+    const user = userEvent.setup()
+    const fetchMock = server(() => [ROUTINES[0]!, { ...ROUTINES[1]!, count: 8, has: true }])
+    const sheet = await open(user)
+    await user.click(sheet.getByRole('button', { name: /Push/ }))
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledOnce())
+    const [url, init] = fetchMock.mock.calls[0]!
+    expect(url).toBe('/gym/templates/4/exercises/add')
+    expect((init.body as FormData).get('exercise_id')).toBe('1')
+    expect(await sheet.findByRole('status')).toHaveTextContent('Bankdrücken ist jetzt in „Push“.')
+    const push = sheet.getByRole('button', { name: /Push/ })
+    expect(push).toHaveTextContent('Push8 Übungendrin')
+    expect(push).toHaveAttribute('aria-disabled', 'true')
+    // The row tapped keeps the focus as it turns.
+    expect(push).toHaveFocus()
+    expect(document.getElementById('sheet-routine')).toHaveAttribute('open')
+  })
+
+  it('says a failed add, and lets the row be tapped again', async () => {
+    const user = userEvent.setup()
+    let fail = true
+    const fetchMock = server(() => (fail ? new Error('down') : [ROUTINES[0]!, { ...ROUTINES[1]!, count: 8, has: true }]))
+    const sheet = await open(user)
+    await user.click(sheet.getByRole('button', { name: /Push/ }))
+    expect(await sheet.findByText('Nicht gespeichert. Nochmal antippen.')).toBeInTheDocument()
+    const push = sheet.getByRole('button', { name: /Push/ })
+    expect(push).not.toHaveAttribute('aria-disabled')
+    expect(push).toHaveTextContent('Push7 Übungen')
+    fail = false
+    await user.click(push)
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(2))
+    expect(await sheet.findByText('Bankdrücken ist jetzt in „Push“.')).toBeInTheDocument()
+  })
+
+  it('dims the row on its way, and takes no other tap until it lands', async () => {
+    // A slow add read as a tap that did nothing, and a tap on the next
+    // routine went nowhere, unsaid.
+    const user = userEvent.setup()
+    let land: (reply: Response) => void = () => {}
+    const fetchMock = vi.fn(() => new Promise<Response>((resolve) => { land = resolve }))
+    vi.stubGlobal('fetch', fetchMock)
+    const routines = [...ROUTINES, { id: 5, name: 'Beine', count: 5, has: false }]
+    render(<ExerciseDetailPage payload={payload({ routines })} />)
+    await user.click(screen.getByRole('button', { name: 'Zur Routine …' }))
+    const sheet = within(document.getElementById('sheet-routine')!)
+    const push = sheet.getByRole('button', { name: /Push/ })
+    const beine = sheet.getByRole('button', { name: /Beine/ })
+    await user.click(push)
+    expect(push).toHaveClass('is-busy')
+    expect(beine).toHaveAttribute('aria-disabled', 'true')
+    expect(beine).not.toHaveClass('is-busy')
+    await user.click(beine)
+    expect(fetchMock).toHaveBeenCalledOnce()
+    land({ ok: true, status: 200, json: async () => ({
+      routines: [ROUTINES[0]!, { ...ROUTINES[1]!, count: 8, has: true }, routines[2]!],
+    }) } as Response)
+    await waitFor(() => expect(push).not.toHaveClass('is-busy'))
+    expect(beine).not.toHaveAttribute('aria-disabled')
   })
 })
 

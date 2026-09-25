@@ -11,29 +11,39 @@
 import type { CatalogueExercise } from './types'
 import { find, type Tier } from '../search'
 
-/** One movement and its rows, in the order the sheet shows them. */
-export interface Cluster {
+/** What the list's order needs of a row: the add sheet's rows, and
+ *  Übungen's "Noch nie gemacht" (M6), whose rows have no rank -- never
+ *  done, so A-Z. */
+export interface Listed {
   movement: string
-  rows: CatalogueExercise[]
+  label: string
+  movement_group: string
+  rank?: number | null
+}
+
+/** One movement and its rows, in the order the sheet shows them. */
+export interface Cluster<T extends Listed = CatalogueExercise> {
+  movement: string
+  rows: T[]
 }
 
 /** One muscle group of the full list: every movement listed under it, A-Z. */
-export interface Section {
+export interface Section<T extends Listed = CatalogueExercise> {
   group: string
-  movements: Cluster[]
+  movements: Cluster<T>[]
 }
 
 const collator = new Intl.Collator('de')
-const rankOf = (row: CatalogueExercise) => row.rank ?? Number.POSITIVE_INFINITY
+const rankOf = (row: Listed) => row.rank ?? Number.POSITIVE_INFINITY
 
 /** Yours first, the one you do most on top; the rest A-Z. Two never-done
  *  rows compare Infinity - Infinity = NaN, which falls through to the name. */
-export function yoursFirst(rows: CatalogueExercise[]): CatalogueExercise[] {
+export function yoursFirst<T extends Listed>(rows: T[]): T[] {
   return [...rows].sort((a, b) => rankOf(a) - rankOf(b) || collator.compare(a.label, b.label))
 }
 
-function byMovement(rows: CatalogueExercise[]): Cluster[] {
-  const grouped = new Map<string, CatalogueExercise[]>()
+function byMovement<T extends Listed>(rows: T[]): Cluster<T>[] {
+  const grouped = new Map<string, T[]>()
   for (const row of rows) {
     const list = grouped.get(row.movement)
     if (list) list.push(row)
@@ -56,8 +66,8 @@ export function mine(catalogue: CatalogueExercise[]): Cluster[] {
 
 /** The full list: every movement once, under its section, A-Z. Sections come
  *  in the list's own order; a group the server did not name goes last. */
-export function sections(catalogue: CatalogueExercise[], groups: string[]): Section[] {
-  const grouped = new Map<string, CatalogueExercise[]>()
+export function sections<T extends Listed>(catalogue: T[], groups: string[]): Section<T>[] {
+  const grouped = new Map<string, T[]>()
   for (const row of catalogue) {
     const list = grouped.get(row.movement_group)
     if (list) list.push(row)

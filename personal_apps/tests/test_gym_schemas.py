@@ -35,6 +35,7 @@ def _minimal():
         'chip_class': None, 'chip_label': None,
         'about': {'picture': None, 'movement': None, 'variants': []},
         'equipment_labels': {'barbell': 'Langhantel'},
+        'on_list': True, 'running': None, 'routines': [],
     }
 
 

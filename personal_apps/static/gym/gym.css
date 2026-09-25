@@ -1673,6 +1673,8 @@ a.row:active, a.row__main:active { transform: scale(0.99); }
 button.pic { cursor: zoom-in; }
 .pic--live { inline-size: 72px; block-size: 72px; }
 .pic--queue { inline-size: 34px; block-size: 34px; border-radius: 9px; }
+/* Übungen's rows, yours and the rest (M6). */
+.pic--list { inline-size: 52px; block-size: 52px; }
 .pic--none { display: grid; place-items: center; background: var(--raised); color: var(--dim); }
 .pic--none .icon { inline-size: 45%; block-size: 45%; }
 .live__title { display: flex; align-items: center; gap: var(--sp-3); margin-top: 4px; }
@@ -2313,25 +2315,6 @@ button.pic { cursor: zoom-in; }
   display: block; margin-top: 2px;
   font-size: var(--t-meta); color: var(--dim); line-height: 1.45;
 }
-
-/* Übungen with nothing in it. Reachable only since exercises became per user:
-   before that the catalogue always held someone's lifts, so this state existed
-   in the template and had never once rendered. */
-.uebungen-blank {
-  margin: var(--sp-5) var(--sp-4);
-  padding: var(--sp-5) var(--sp-4);
-  background: var(--chassis); border-radius: var(--r-panel); box-shadow: var(--lift);
-  text-align: center;
-}
-.uebungen-blank__title {
-  margin: 0 0 var(--sp-2); font-family: var(--font-display);
-  font-size: var(--t-lg); font-weight: var(--w-bold); color: var(--ink);
-}
-.uebungen-blank__body {
-  margin: 0 auto var(--sp-4); max-inline-size: 34ch;
-  color: var(--dim); font-size: var(--t-sm); line-height: 1.55;
-}
-.uebungen-blank .btn { inline-size: auto; margin-inline: auto; }
 
 .flashes { margin: var(--sp-3) var(--sp-4) 0; display: flex; flex-direction: column; gap: var(--sp-2); }
 .flash {
@@ -3671,9 +3654,6 @@ button.partner__hit:active { background: var(--raised); }
   gap: var(--sp-1) var(--sp-3);
   padding: var(--sp-5) var(--sp-4) 0;
 }
-/* The hit count beside Übungen's h1, which borrows this head. Verlauf's own
-   count became the hits line (M3). */
-.verlauf__count { font-size: var(--t-sm); color: var(--unlit); font-variant-numeric: tabular-nums; }
 /* The whole history in a sentence under the page name: Statistik's lede,
    demoted from a 30px headline -- where no decision hangs on a number, the
    number is prose (D11). */
@@ -4070,8 +4050,10 @@ a.mindex__mo:active { background: var(--raised); }
      columns the ranking reads across instead of down, so #1 lands mid-page
      while #4 sits at the top. The comment claimed this gate; the gate did not
      exist. */
-  #uebungen-list:not(.is-flat) { columns: 2; column-gap: var(--sp-6); }
+  #uebungen-list:not(.is-flat), .uebungen-nie { columns: 2; column-gap: var(--sp-6); }
   .group-sec { break-inside: avoid; display: inline-block; inline-size: 100%; }
+  /* "Noch nichts für Beine" lands on the band, not under the sticky bar. */
+  .uebungen-nie .group-sec { scroll-margin-top: var(--topbar-h); }
   /* An author `display` beats the UA `[hidden]{display:none}` on a tie, and
      this file has now hit that five times. Without it the flat sorts painted
      ten "hidden" band headers -- 680px of dead index above the ranking, six
@@ -4103,19 +4085,75 @@ a.mindex__mo:active { background: var(--raised); }
 /* group bands, the same device Verlauf uses for months -- one list language.
    A <button> is not block-level, so it needs an explicit width to span the
    column: 100% would resolve against BODY and overshoot both margins. */
-/* The band is inside an <h2> so the catalogue has a document outline. The
-   heading is a wrapper only -- all the type comes from the .label spans
-   inside the button, so the UA heading styles have to go. */
+/* The band is inside an <h3>, under its part's <h2>, so the catalogue has a
+   document outline. The heading is a wrapper only -- all the type comes from
+   the .label spans inside the button, so the UA heading styles have to go. */
 .group__h { margin: 0; font-size: inherit; font-weight: inherit; }
-/* A muscle group you own nothing in: named, not foldable, and reading as an
-   absence rather than as an error. */
-.group--empty { color: var(--unlit); }
-.group--empty .label { color: inherit; }
-.group__none {
-  margin: var(--sp-3) var(--sp-4) 0;
-  font-size: var(--t-meta); color: var(--unlit);
+
+/* M6 (D13-A): yours, then the rest of the list. The parts are named in the
+   page's display face, a step under the h1 and a step over the uppercase
+   bands. */
+.ueb-part { margin-top: var(--sp-8); }
+.ueb-part__h {
+  display: flex; align-items: baseline; flex-wrap: wrap; gap: var(--sp-2);
+  margin: 0 var(--sp-4);
+  font-family: var(--font-display); font-size: 1.25rem; font-weight: var(--w-max);
+  letter-spacing: -0.02em; color: var(--ink);
 }
-.group__none[hidden] { display: none; }
+.ueb-part__n {
+  font-size: var(--t-sm); font-weight: var(--w-semi); letter-spacing: 0;
+  color: var(--unlit); font-variant-numeric: tabular-nums;
+}
+.ueb-part__lead {
+  margin: var(--sp-1) var(--sp-4) 0; max-inline-size: 60ch;
+  font-size: var(--t-meta); line-height: 1.45; color: var(--dim);
+}
+/* The rest of the list starts a new part, not a new band: a rule across the
+   column and more air than between two bands. */
+.ueb-part--nie { margin-top: var(--sp-12); }
+.ueb-part--nie::before {
+  content: ''; display: block; margin: 0 var(--sp-4) var(--sp-6);
+  border-top: 2px solid var(--edge-hi);
+}
+
+/* "Noch nichts für …": the groups with nothing of yours in one line, each a
+   jump to its band in the rest (G-013). */
+.ueb-none {
+  margin: var(--sp-5) var(--sp-4) 0;
+  font-size: var(--t-meta); line-height: 1.6; color: var(--unlit);
+}
+.ueb-none a { color: var(--dim); font-weight: var(--w-semi); text-underline-offset: 3px; }
+
+/* Your rows keep one line of figures beside the name: .row wraps, and with a
+   tile in front the trail would drop under the name at 390px. */
+.uebungen-row.has-pic { flex-wrap: nowrap; column-gap: var(--sp-3); }
+.uebungen-row.has-pic .row__main { flex: 1 1 auto; }
+.uebungen-row.has-pic .row__trail { padding-top: 2px; }
+
+/* A movement never done: its drawing once, its name, and each variant its
+   own way into the exercise's page -- a whole row to aim at. */
+.nie-move {
+  display: flex; align-items: flex-start; gap: var(--sp-3);
+  margin: var(--sp-3) var(--sp-4) 0;
+}
+.nie-move + .nie-move { padding-top: var(--sp-3); border-top: 1px solid var(--edge); }
+.nie-move__body { flex: 1; min-inline-size: 0; }
+.nie-move__name {
+  display: block; padding-top: 3px;
+  font-size: var(--t-body); font-weight: var(--w-semi); color: var(--ink);
+}
+.nie-move__meta { display: block; margin-top: 2px; font-size: var(--t-meta); color: var(--unlit); }
+a.nie-move { color: inherit; text-decoration: none; min-block-size: var(--tap); }
+a.nie-move .nie-chev { align-self: center; }
+.nie-chev { flex: none; display: inline-grid; color: var(--unlit); }
+.nie-vars { list-style: none; margin: var(--sp-1) 0 0; padding: 0; }
+.nie-var {
+  display: flex; align-items: center; gap: var(--sp-2);
+  min-block-size: var(--tap);
+  font-size: var(--t-sm); font-weight: var(--w-med); color: var(--dim); text-decoration: none;
+}
+.nie-vars li + li .nie-var { border-top: 1px dashed var(--edge); }
+.nie-var .nie-chev { margin-inline-start: auto; }
 
 /* Two lines, not a hard one-line ellipsis. "Lat Pulldown (Single Arm, H…"
    rendered directly above "Lat Pulldown Kabelzug", and the clipped part was
@@ -4391,6 +4429,57 @@ a.mindex__mo:active { background: var(--raised); }
 @media (prefers-reduced-motion: reduce) {
   .exalt__sum .icon { transition: none; }
 }
+
+/* M6 screen 2 (G-041): the page of an exercise never done. The drawing
+   leads, then the two ways on, what will fill the page, and the movement's
+   other variants open -- the rack is taken, the Smith machine is free. */
+.exnew__about { margin-top: var(--sp-4); }
+.exnew__none {
+  margin: var(--sp-6) var(--sp-4) 0; max-inline-size: 60ch;
+  font-size: var(--t-sm); line-height: 1.5; color: var(--unlit);
+}
+.exnew__alt { margin: var(--sp-6) var(--sp-4) 0; border-bottom: 1px solid var(--edge); }
+.exnew__alt-h {
+  display: flex; align-items: center; min-block-size: var(--tap); margin: 0;
+  font-size: var(--t-sm); font-weight: var(--w-semi); color: var(--ink);
+}
+/* One column on a desktop too: nothing here is wide, and the drawing at
+   1080px was 810px tall. */
+@media (min-width: 900px) {
+  .exnew { max-inline-size: 560px; }
+}
+
+/* The two ways on, stacked full width: the workout first, the routine
+   second. On a page with history they sit under "Nächstes Ziel". */
+.exnew__acts { display: grid; gap: var(--sp-2); margin: var(--sp-5) var(--sp-4) 0; }
+.exnew__acts .btn { inline-size: 100%; }
+.exnew__acts .btn .icon { inline-size: 18px; block-size: 18px; }
+.exnew__note { margin: 2px 0 0; text-align: center; font-size: var(--t-meta); color: var(--unlit); }
+/* The add sheet's question, in its words and colour. */
+.exnew__note.is-armed { color: var(--stall-ink); font-weight: var(--w-semi); }
+
+/* "Zur Routine": one row per routine, a plus to add, "drin" where it is. */
+.rt__lead { margin: 0 0 var(--sp-2); font-size: var(--t-sm); color: var(--dim); }
+.rt__row .sheet-row__meta { color: var(--unlit); }
+.rt__row[aria-disabled="true"] { cursor: default; }
+.rt__row.is-in:active { background: none; }
+/* The add on its way, as .exadd__row.is-busy. */
+.rt__row.is-busy { opacity: 0.5; }
+.rt__plus {
+  flex: none; display: inline-grid; place-items: center;
+  inline-size: 32px; block-size: 32px; border-radius: 50%;
+  box-shadow: inset 0 0 0 1px var(--edge-hi); color: var(--dim);
+}
+.rt__in {
+  flex: none; display: inline-flex; align-items: center; gap: 4px;
+  font-size: var(--t-meta); font-weight: var(--w-semi); color: var(--done-ink);
+}
+.rt__said {
+  display: flex; align-items: center; gap: var(--sp-2);
+  margin: var(--sp-3) 0 0; min-block-size: 1.5em;
+  font-size: var(--t-sm); font-weight: var(--w-semi); color: var(--done-ink);
+}
+.rt__said.is-failed { color: var(--stall-ink); }
 
 /* position filter: real links, one scrollable row -- a lift can have run in
    more slots than fit across a phone */

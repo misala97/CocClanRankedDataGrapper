@@ -3,10 +3,12 @@ exercise, and their rest for all of them.
 
 Since the one exercise list (2026-09-23) nobody creates, renames or deletes
 an exercise here. The page lists the lifter's own exercises -- the ones they
-logged, keep in a routine or set up (exercises.touched_exercises) -- and the
-only writes are their step, rest, stack stops and bar, and "Deine Pause"."""
+logged, keep in a routine or set up (exercises.touched_exercises) -- and then
+the rest of the list, "Noch nie gemacht" (M6). The only writes are their
+step, rest, stack stops and bar, and "Deine Pause"."""
 
-from features.gym import stats
+from features.gym import art, stats
+from features.gym.library import BY_KEY, LIST_GROUPS, MOVEMENT_GROUP
 from features.gym.schemas import CataloguePayload, ExerciseMeta, RestOverview
 import datetime as dt
 
@@ -17,13 +19,13 @@ from extensions import (
     db,
 )
 from models import (
-    MUSCLE_GROUPS,
+    MUSCLE_GROUPS, SessionExercise, SessionSet,
 )
 from auth import (
     login_required,
 )
 from features.gym.exercises import (
-    exercise_or_404, rest_overview, save_setup,
+    exercise_or_404, library_exercises, rest_overview, save_setup,
     search_text, set_rest_for_all, setup as exercise_setup, setups as exercise_setups,
     touched_exercises,
 )
@@ -32,7 +34,7 @@ from features.gym.scope import (
 )
 from ..locking import lock_user
 from .helpers import (
-    EXERCISE_STATE_CHIP, NON_MUSCLE_GROUPS, _exercise_meta,
+    EXERCISE_STATE_CHIP, _exercise_meta, _page_active_session,
     _to_bar_weight, _to_increment, _to_rest_seconds, _to_stack_steps, _wants_json,
 )
 from .history import (
@@ -54,7 +56,8 @@ def gym_uebungen():
 
 def _catalogue_payload():
     """The caller's catalogue as a validated payload: the exercises they have
-    logged, kept in a routine or set up, each with their settings."""
+    logged, kept in a routine or set up, each with their settings -- and the
+    rest of the list."""
     now = dt.datetime.utcnow()
     user_id = current_user_id()
     exercises = touched_exercises(user_id)
@@ -69,6 +72,7 @@ def _catalogue_payload():
     rows_by_exercise = {}
     for row in performed:
         rows_by_exercise.setdefault(row.exercise_id, []).append(row)
+    lifted = _lifted_running()
 
     entries_by_id = {}
     for exercise in exercises:
@@ -114,42 +118,79 @@ def _catalogue_payload():
             # From the last record, whatever slot or workout set it: the same
             # count as the chip beside it and every other "ohne PR" (drought).
             'sessions_since_pr': stats.sessions_since_pr(rows),
+            'in_running': exercise.id in lifted,
         }
 
-    # Default/grouped view (spec 6.2's "nach Muskelgruppe"). The two flat
-    # sorts ("am längsten ohne PR", "zuletzt gemacht") are client-side
-    # re-orderings of these SAME rows in uebungen.html's own script, not a
-    # second server round trip -- every exercise's data attributes carry
-    # what that script needs (see the template).
-    # Seeded from MUSCLE_GROUPS, so a group with nothing in it still gets a
-    # band. group_exercises_by_muscle emits only non-empty groups, which made
-    # the catalogue structurally unable to say "you have no leg exercises" --
-    # the single strongest signal for the planning question, rendered as
-    # nothing at all. Same fix Start's muscle balance got in item 5, and
-    # Cardio/Sonstiges stay out for the same reason.
+    # Default/grouped view ("Nach Muskelgruppe"); the two flat sorts are the
+    # page's own re-orderings of these same rows, not a second round trip.
+    # Each band is a muscle group -- it says what the exercise trains -- and
+    # the bands come in the list's order, the add sheet's (G-013: Übungen ran
+    # Bizeps, Trizeps, Brust ... beside the sheet's Brust, Rücken ...). Every
+    # group of the list is here, an empty one too: group_exercises_by_muscle
+    # emits only filled ones, and "you have no leg exercises" is the
+    # strongest signal for the planning question. The page says it in one
+    # line ("Noch nichts für Beine") that links to that band of the rest of
+    # the list, not in a band apiece. Cardio and Sonstiges come only when
+    # filled, then anything else (NO_GROUP_LABEL and legacy values).
     filled = dict(stats.group_exercises_by_muscle(exercises, MUSCLE_GROUPS))
-    grouped = []
-    for group_name in MUSCLE_GROUPS:
-        if group_name in NON_MUSCLE_GROUPS and group_name not in filled:
-            continue
-        grouped.append((group_name,
-                        [entries_by_id[e.id] for e in filled.get(group_name, [])]))
-    for group_name, group_exercises in filled.items():
-        if group_name not in MUSCLE_GROUPS:      # NO_GROUP_LABEL and legacy values
-            grouped.append((group_name, [entries_by_id[e.id] for e in group_exercises]))
+    names = list(LIST_GROUPS)
+    names += [name for name in MUSCLE_GROUPS if name not in names and name in filled]
+    names += [name for name in filled if name not in names]
+    grouped = [(name, [entries_by_id[e.id] for e in filled.get(name, [])]) for name in names]
+
+    # The rest of the list (M6, D13-A): a new lifter could not browse it
+    # outside a workout (G-004), and an exercise never done was a dead end
+    # to reach (G-041). One query more, the add sheet's rows.
+    mine = set(entries_by_id)
+    library = [_library_entry(exercise) for exercise in library_exercises()
+               if exercise.id not in mine]
 
     payload = CataloguePayload.model_validate({
         'groups': [
             {'name': name,
              'entries': [{**entry, 'exercise': _exercise_meta(entry['exercise'],
-                                                              setups[entry['exercise'].id])}
+                                                              setups[entry['exercise'].id]),
+                          'picture': art.picture_url(entry['exercise'].library_key)}
                          for entry in entries]}
             for name, entries in grouped
         ],
         'open_by_default': len(exercises) <= UEBUNGEN_FOLD_ABOVE,
         'rest': rest_overview(user_id),
+        'library': library,
+        'list_groups': list(LIST_GROUPS),
     })
     return payload
+
+
+def _lifted_running():
+    """The exercises the running workout holds sets of that count (Q1), a
+    replaced-away original's too; none without a running workout. The rows
+    read finished workouts only (load_performed), so a first go at an
+    exercise, three sets in, said "Noch kein Satz". One query."""
+    session_ = _page_active_session()
+    if session_ is None:
+        return set()
+    return {exercise_id for (exercise_id,) in (
+        db.session.query(SessionExercise.exercise_id)
+        .join(SessionSet, SessionSet.session_exercise_id == SessionExercise.id)
+        .filter(SessionExercise.session_id == session_.id,
+                SessionSet.completed == True,  # noqa: E712
+                SessionSet.reps >= 1)
+        .distinct())}
+
+
+def _library_entry(exercise):
+    """One row of "Noch nie gemacht": the entry, the movement it is a
+    variant of, and the band it goes in -- its movement's, as in the add
+    sheet, so a movement's variants stay together."""
+    entry = BY_KEY[exercise.library_key]
+    return {
+        'id': exercise.id, 'name': exercise.name,
+        'movement': entry.movement, 'label': entry.label,
+        'movement_group': MOVEMENT_GROUP[entry.movement],
+        'search': search_text(exercise),
+        'picture': art.picture_url(exercise.library_key),
+    }
 
 
 

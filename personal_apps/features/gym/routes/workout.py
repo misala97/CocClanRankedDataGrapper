@@ -354,8 +354,23 @@ def gym_start():
     # the commit would release the lock (B4 review).
     _get_active_session()
     lock_user(current_user_id())
+    # "Workout damit beginnen" on an exercise's page (M6): a free workout
+    # that holds that exercise. Only one on the list -- nothing offers a
+    # retired row -- and never beside a routine.
+    exercise_id = request.form.get('exercise_id', type=int)
+    exercise = exercise_or_404(exercise_id) if exercise_id else None
+    if exercise is not None and (exercise.library_key not in BY_KEY
+                                 or request.form.get('template_id')):
+        abort(400)
     active_session = _get_active_session()
     if active_session:
+        if exercise is not None:
+            # A workout began elsewhere after the page was read. Entered, it
+            # would lack the exercise; appended to, it would get a lift nobody
+            # picked for it -- and a second tap would append it twice. Back to
+            # the page, which now offers "Zu „…“ hinzufügen", told why.
+            flash('Es läuft schon ein Workout — die Übung lässt sich dort hinzufügen.', 'error')
+            return redirect(url_for('gym.exercise_detail', exercise_id=exercise.id))
         return redirect(url_for('gym.session_detail', session_id=active_session.id))
 
     template_id = request.form.get('template_id', type=int)
@@ -386,6 +401,11 @@ def gym_start():
             session_exercise = SessionExercise(exercise_id=te.exercise_id, position=i)
             session_exercise.sets.extend(_seeded_sets(session_, te.exercise_id, i))
             session_.exercises.append(session_exercise)
+    elif exercise is not None:
+        # Seeded as a routine's rows are: the first set has its weight.
+        session_exercise = SessionExercise(exercise_id=exercise.id, position=1)
+        session_exercise.sets.extend(_seeded_sets(session_, exercise.id, 1))
+        session_.exercises.append(session_exercise)
 
     db.session.add(session_)
     db.session.commit()
@@ -1328,6 +1348,14 @@ def gym_add_session_exercise(session_id):
     session_ = owned_session(session_id)
     refusal = _refuse_structure_edit_if_finished(session_)
     if refusal is not None:
+        exercise_id = request.form.get('exercise_id', type=int)
+        if request.form.get('back') == 'exercise' and exercise_id and not _wants_json():
+            # "Zu „…“ hinzufügen" on an exercise's page (M6) read before the
+            # workout was finished elsewhere: back to that page, which now
+            # offers to begin one, told why -- the debrief it landed on did
+            # not have the exercise and said nothing.
+            flash('Das Workout ist schon beendet — nichts hinzugefügt.', 'error')
+            return redirect(url_for('gym.exercise_detail', exercise_id=exercise_id))
         return refusal
     # Before anything is created: taking the lock ends the transaction.
     lock_sessions([session_id])

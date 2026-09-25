@@ -18,7 +18,7 @@ DAY = dt.timedelta(days=1)
 FIELDS = {
     'exercise', 'table', 'goal', 'weights', 'pr_e1rm', 'trend', 'stairs', 'position_pills',
     'selected_position', 'state', 'sessions_since_pr', 'chip_class', 'chip_label', 'about',
-    'equipment_labels',
+    'equipment_labels', 'on_list', 'running', 'routines',
 }
 
 #: (slot, weight) per workout: first and third by turns, three each, and

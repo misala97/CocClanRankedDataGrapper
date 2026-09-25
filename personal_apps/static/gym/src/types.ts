@@ -181,4 +181,34 @@ export interface ExerciseDetailPayload {
   /** Unread since the settings sheet stopped repeating the list's facts
    *  (V3); kept so this stays a true mirror of the schema. */
   equipment_labels: Record<string, string>
+  /** On today's list. A retired row is offered no way on (M6). */
+  on_list: boolean
+  running: RunningWorkout | null
+  /** The lifter's routines, A-Z. */
+  routines: RoutineChoice[]
+}
+
+/** The workout running when the page was read (M6): "Zu „<name>“
+ *  hinzufügen" instead of beginning one. */
+export interface RunningWorkout {
+  session_id: number
+  /** null for a workout begun without one. */
+  name: string | null
+  /** Its visible rows of this exercise, as the add sheet counts them. */
+  count: number
+  /** Its sets of this exercise that count (done, one rep or more), on every
+   *  row of it, a replaced original's too: lifted today, not yet on the
+   *  page, which reads finished workouts -- and shows them so. */
+  logged: number
+}
+
+/** A routine the exercise can go into ("Zur Routine"). */
+export interface RoutineChoice {
+  id: number
+  name: string
+  /** Its rows: "7 Übungen". */
+  count: number
+  /** It holds this exercise already: "drin", on a row that stays a button
+   *  (aria-disabled), so the row just tapped keeps the focus. */
+  has: boolean
 }
