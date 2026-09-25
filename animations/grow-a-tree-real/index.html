@@ -1,0 +1,149 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>How to Grow an Oak</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,500;1,500&family=Figtree:wght@500;600&display=swap">
+<style>
+  /* A deliberate single dark theme: the film plays in a darkened room whatever the viewer's setting. */
+  :root {
+    color-scheme: dark;
+    --room: #0d0e0b;
+    --room-edge: #151612;
+    --text: #e9e6dc;
+    --muted: #9c9a8e;
+    --sun: #e8b563;
+    --sun-ink: #1d1a12;
+    --line: rgba(233, 230, 220, 0.22);
+    --focus: #f3d19a;
+  }
+  [hidden] { display: none !important; }
+  html, body { height: 100%; }
+  body {
+    margin: 0;
+    color: var(--text);
+    background: radial-gradient(ellipse at 50% 42%, var(--room-edge), var(--room) 70%) var(--room);
+    font-family: Figtree, "Segoe UI", "Helvetica Neue", Arial, sans-serif;
+  }
+  .room {
+    box-sizing: border-box;
+    min-height: 100%;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 18px;
+    padding-inline: 16px;
+    padding-block: 20px;
+  }
+  .frame, .bar {
+    width: min(100%, 1280px, calc((100vh - 150px) * 16 / 9));
+    width: min(100%, 1280px, calc((100dvh - 150px) * 16 / 9));
+    max-width: 100%;
+  }
+  .frame { position: relative; aspect-ratio: 16 / 9; container-type: inline-size; }
+  #stage {
+    display: block;
+    width: 100%;
+    height: 100%;
+    background: #000;
+    box-shadow: 0 30px 80px -30px rgba(0, 0, 0, 0.9);
+    cursor: pointer;
+  }
+  .play {
+    position: absolute;
+    left: 50%;
+    top: 50%;
+    transform: translate(-50%, -50%);
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    padding: 14px 26px 14px 20px;
+    padding: clamp(8px, 1.1cqw, 14px) clamp(16px, 2cqw, 26px) clamp(8px, 1.1cqw, 14px) clamp(12px, 1.6cqw, 20px);
+    border: 0;
+    border-radius: 999px;
+    background: var(--sun);
+    color: var(--sun-ink);
+    font: 600 clamp(15px, 1.6cqw, 19px)/1 Figtree, "Segoe UI", Arial, sans-serif;
+    letter-spacing: 0.02em;
+    cursor: pointer;
+    box-shadow: 0 10px 40px -8px rgba(232, 181, 99, 0.55);
+    transition: transform 160ms ease, box-shadow 160ms ease;
+  }
+  .play:hover { transform: translate(-50%, -50%) scale(1.04); box-shadow: 0 12px 48px -6px rgba(232, 181, 99, 0.7); }
+  .play::before {
+    content: "";
+    width: 0.8em;
+    height: 0.9em;
+    background: currentColor;
+    clip-path: polygon(8% 0, 100% 50%, 8% 100%);
+  }
+  .play .sub { font-weight: 500; opacity: 0.72; }
+  .notice {
+    position: absolute;
+    inset: 0;
+    display: grid;
+    place-items: center;
+    margin: 0;
+    padding: 24px;
+    text-align: center;
+    color: var(--text);
+    font-size: 16px;
+    line-height: 1.5;
+  }
+  .bar {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px 24px;
+    border-top: 1px solid var(--line);
+    padding-top: 14px;
+  }
+  .credit { margin: 0; display: grid; gap: 2px; }
+  .credit .name { font: italic 500 22px/1.1 "Cormorant Garamond", "Iowan Old Style", Georgia, serif; }
+  .credit .how { color: var(--muted); font-size: 13px; line-height: 1.45; max-width: 62ch; text-wrap: balance; }
+  .controls { display: flex; gap: 10px; }
+  .controls button {
+    padding: 9px 16px;
+    border: 1px solid var(--line);
+    border-radius: 999px;
+    background: transparent;
+    color: var(--text);
+    font: 600 13px/1 Figtree, "Segoe UI", Arial, sans-serif;
+    letter-spacing: 0.04em;
+    cursor: pointer;
+  }
+  .controls button:hover { border-color: var(--text); }
+  .controls button:disabled { opacity: 0.4; cursor: default; }
+  button:focus-visible, #stage:focus-visible { outline: 2px solid var(--focus); outline-offset: 3px; }
+  @media (prefers-reduced-motion: reduce) {
+    .play, .play:hover { transition: none; transform: translate(-50%, -50%); }
+  }
+</style>
+</head>
+<body>
+<main class="room">
+  <div class="frame">
+    <canvas id="stage" width="1280" height="720" role="img"
+      aria-label="Photoreal time-lapse. In a close-up of garden soil an acorn drops in, drops of water fall on it, the sun breaks through, and a seedling unfolds. The camera then pulls back as days race past and the seedling grows into a full oak in a meadow at golden hour."></canvas>
+    <button id="play" class="play" type="button"><span class="label">Play</span><span class="sub">10 s · sound on</span></button>
+    <p id="notice" class="notice" hidden>This film is rendered live with WebGL2, which this browser has turned off or doesn't support. Try a current version of Chrome, Edge, Firefox or Safari.</p>
+  </div>
+  <div class="bar">
+    <p class="credit">
+      <span class="name">How to grow an oak, in ten seconds</span>
+      <span class="how">Rendered live in your browser from plain JavaScript and WebGL2: sky, soil, 114,000 blades of grass, the oak and its leaves, and the score.</span>
+    </p>
+    <div class="controls">
+      <button id="again" type="button">Play</button>
+      <button id="sound" type="button" aria-pressed="true">Sound on</button>
+    </div>
+  </div>
+</main>
+<script src="grow-a-tree-real.js"></script>
+</body>
+</html>
