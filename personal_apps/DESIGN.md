@@ -35,7 +35,7 @@ typography:
     fontWeight: 400
   label:
     fontFamily: "Figtree, system-ui, -apple-system, Segoe UI, sans-serif"
-    fontSize: "0.75rem"
+    fontSize: "0.8125rem"
     fontWeight: 600
     letterSpacing: "0.11em"
   numeral:
@@ -182,8 +182,8 @@ anywhere in the system.
   Sentence case in the body face — never uppercase, never the display weight.
 - **Body** (400–600, 1rem / 16px): sentences. Read in glances, kept modest.
 - **Small / Meta** (0.875rem / 0.8125rem): dense rows, secondary meta.
-- **Label** (600, 0.75rem / 12px, +0.11em, uppercase): tiny panel captions
-  only — the single place uppercase is allowed.
+- **Label** (600, 0.8125rem / 13px, the floor for data (D11), +0.11em,
+  uppercase): panel captions only — the single place uppercase is allowed.
 
 ### Named Rules
 **The Sentence-Case Rule.** Exercise names are content, not labels: sentence
@@ -222,7 +222,8 @@ its shared primitives. Changing one changes every page — that is the point.
   weight, never red or orange.
 
 ### Chips / Tags (`.chip`, `.vtag`)
-- **Style:** full pills, 11–13px semibold, letterspaced uppercase.
+- **Style:** full pills, 13px bold (the floor for data, D11); `.chip`
+  letterspaced uppercase, `.vtag` sentence case.
 - **States:** filled chips (done rose, record gold) carry dark on-fill text;
   outline chips (live, stall, and the "Steigend" tendency) carry the hue as
   text — state reads by shape as well as colour: FILLED is a fact, OUTLINE is

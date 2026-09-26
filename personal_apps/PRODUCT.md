@@ -232,8 +232,11 @@ Rules that are not negotiable:
   the display weight. A roster of exercise names is not a label. This rule
   existed in the previous brief and was broken by the build; it is restated
   here because it is the most-violated rule in this project's history.
-- Uppercase is allowed only on tiny meta labels (≤12px), letterspaced, quiet,
-  and never on anything a user reads as content.
+- Uppercase is allowed only on small meta labels, letterspaced, quiet, and
+  never on anything a user reads as content.
+- Text that carries data is never under 13px (D11). Only navigation keeps the
+  two smaller steps: the tab bar's labels (11px) and the account footer's
+  links (12px).
 - Body copy stays modest — this app is read in glances, not paragraphs.
 
 ### 4.5 Surface and motion

@@ -191,8 +191,8 @@ html[data-theme="dark"] {
   --wd-dense:   100;
 
   /* ---- type: role sizes (fixed rem scale; numerals leap) ---- */
-  --t-micro: 0.6875rem;  /* 11px  tab labels, tiniest meta */
-  --t-label: 0.75rem;    /* 12px  uppercase panel labels */
+  --t-micro: 0.6875rem;  /* 11px  the tab bar only: navigation, never data (D11) */
+  --t-label: 0.75rem;    /* 12px  the account footer's links only (D11) */
   --t-meta:  0.8125rem;  /* 13px  secondary meta, chip text */
   --t-sm:    0.875rem;   /* 14px  dense body, table cells */
   --t-body:  1rem;       /* 16px  sentences */
@@ -258,8 +258,10 @@ html[data-theme="dark"] {
      1px border) -- so body.has-resume reserved 114px for 116px of fixed
      chrome, and the last 2px of every scrollable page sat under it. Two
      pixels of the logout link's tap padding, on three of four mobile routes.
-     If the content ever changes height, this number moves with it. */
-  --resume-h: 54px;
+     If the content ever changes height, this number moves with it -- as it
+     did in B12: the exercise line under the name went from 11 to 13px (D11's
+     floor for data), and the strip from 54 to 57px. */
+  --resume-h: 57px;
 }
 
 /* ============================================================================
@@ -350,7 +352,7 @@ h1, h2, h3 {
   font-weight: var(--w-max);
   letter-spacing: var(--track-name);
   line-height: 1.1;
-  /* No text-transform: 4.4 allows uppercase only on meta labels <=12px, and
+  /* No text-transform: 4.4 allows uppercase only on meta labels (13px, D11), and
      these hold page titles and exercise names. Uppercasing a seven-item
      exercise roster was the least readable thing in the previous build. */
 }
@@ -363,15 +365,17 @@ h3 { font-size: var(--t-name); font-weight: var(--w-bold); }
 /* Two jobs wear this class, and only one of them may be uppercase. A
    <span class="label"> is META -- a column head, a unit, a set index, something
    the eye skips past. A <label class="label"> is CONTENT: it is the sentence
-   the user has to read to know what to type. 4.4 allows uppercase "only on
-   tiny meta labels, never on anything a user reads as content", and
+   the user has to read to know what to type. 4.4 allows uppercase only on
+   small meta labels, "never on anything a user reads as content", and
    "NAME DER NEUEN ÜBUNG" at 11px with 0.11em tracking, wrapping mid-phrase, is
    squarely the second kind. The element tells us which is which, so the rule
-   can too -- see label.label below. */
+   can too -- see label.label below. Both are 13px: a set index, a unit or a
+   count is still data, and the floor for data is 13px (D11). The uppercase
+   is what keeps the META quiet. */
 .label {
   font-family: var(--font-mono);
   font-stretch: var(--wd-dense);
-  font-size: var(--t-label);
+  font-size: var(--t-meta);
   font-weight: var(--w-semi);
   letter-spacing: var(--track-label);
   text-transform: uppercase;
@@ -476,14 +480,14 @@ label.label {
 .set--done .load__val { color: var(--ink); }
 
 /* ============================================================================
-   CHIP + TAG  ·  the state model, compressed to a badge (colour + a word)
+   CHIP  ·  the state model, compressed to a badge (colour + a word)
    ============================================================================ */
 
 .chip {
   display: inline-flex; align-items: center; gap: 0.35em;
   font-family: var(--font-mono);
   font-stretch: var(--wd-dense);
-  font-size: var(--t-micro);
+  font-size: var(--t-meta);
   font-weight: var(--w-bold);
   letter-spacing: 0.08em;
   text-transform: uppercase;
@@ -505,21 +509,6 @@ label.label {
 }
 .deload-bar__pick.is-active { border-color: var(--edge-hi); color: var(--ink); font-weight: var(--w-bold); }
 
-/* tag: quiet metadata (position, set count), never a state */
-.tag {
-  font-family: var(--font-mono);
-  font-stretch: var(--wd-dense);
-  font-size: var(--t-micro);
-  font-weight: var(--w-semi);
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-  padding: 0.22em 0.6em;
-  border-radius: var(--r-chip);
-  background: var(--raised);
-  border: 1px solid transparent;
-  color: var(--dim);
-}
-
 /* ============================================================================
    BUTTONS  ·  live (real press depth) / ghost / stall (destructive)
    ============================================================================ */
@@ -533,7 +522,7 @@ label.label {
   font-style: normal;
   font-size: var(--t-body);
   font-weight: var(--w-bold);
-  /* No uppercase: 4.4 allows it only on meta labels <=12px. A shouted
+  /* No uppercase: 4.4 allows it only on meta labels (13px, D11). A shouted
      "WORKOUT STARTEN" is the previous system's voice, and a control is read as
      an instruction, not as a label. Weight and fill carry the emphasis. */
   letter-spacing: -0.01em;
@@ -769,7 +758,7 @@ body.is-focus .tabbar, body.is-focus .nav-footer, body.is-focus .topbar { displa
   position: fixed; inset-inline: 0; z-index: var(--z-resume);
   transform: translateZ(0);   /* own compositing layer -- see the note below */
   bottom: calc(var(--tabbar-h) + env(safe-area-inset-bottom, 0px));
-  min-block-size: var(--resume-h);   /* fixed, not content-derived: body.has-resume below reserves exactly this much */
+  min-block-size: var(--resume-h);   /* its content's height at the default text size, measured (see --resume-h), and what body.has-resume below reserves; a larger text size grows the strip past it */
   display: flex; align-items: center; gap: var(--sp-3);
   padding: var(--sp-2) var(--sp-4);
   background: linear-gradient(var(--wash-live), var(--wash-live)), var(--chassis);
@@ -794,7 +783,7 @@ body.is-focus .tabbar, body.is-focus .nav-footer, body.is-focus .topbar { displa
   color: var(--ink); white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
 }
 .resume__meta {
-  font-family: var(--font-body); font-size: var(--t-micro); color: var(--dim);
+  font-family: var(--font-body); font-size: var(--t-meta); color: var(--dim);
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis;   /* keeps .resume at exactly --resume-h even for a long exercise name */
 }
 /* Two clocks share this slot and they mean opposite things: one counts up and
@@ -826,11 +815,11 @@ body.is-focus .tabbar, body.is-focus .nav-footer, body.is-focus .topbar { displa
 /* No opacity on either prefix. "Pause" at 0.85 measured 3.88:1 against --live
    and failed AA -- the same trade the confirm's old in-button clock made and lost, for the same
    reason: --on-live on --live is 4.79:1, which has 0.29 of headroom and no
-   more. These labels are already secondary by size (11px against a 22px
+   more. These labels are already secondary by size (13px against a 22px
    numeral) and by case; they do not also need to be faded. */
 .resume__clock::before {
   content: "Läuft";
-  font-family: var(--font-body); font-size: var(--t-micro);
+  font-family: var(--font-body); font-size: var(--t-meta);
   font-weight: var(--w-semi); letter-spacing: var(--track-label);
   text-transform: uppercase;
 }
@@ -861,7 +850,7 @@ body.is-focus .tabbar, body.is-focus .nav-footer, body.is-focus .topbar { displa
 
 /* Mobile only: when the resume strip is actually rendered above the fixed tab
    bar, the base `body` padding-bottom (which only clears the tab bar itself)
-   isn't enough -- the strip sits on top of the last ~52px of scrollable
+   isn't enough -- the strip sits on top of the last ~57px of scrollable
    content. _base.html adds this class to <body> exactly when _nav.html is
    about to render .resume (same gym_active_session + endpoint condition), so
    the reserved space always matches whether the strip is actually there. */
@@ -875,7 +864,7 @@ body.is-focus .tabbar, body.is-focus .nav-footer, body.is-focus .topbar { displa
    bar is exactly three routes), de-emphasised via .label, but still a full
    44px tap strip. Desktop already has its own logout link in .topbar. */
 .nav-footer { display: flex; justify-content: center; }
-.nav-footer a { display: inline-flex; align-items: center; justify-content: center; min-block-size: 44px; padding-inline: var(--sp-4); }
+.nav-footer a { display: inline-flex; align-items: center; justify-content: center; min-block-size: 44px; padding-inline: var(--sp-4); font-size: var(--t-label); }
 
 /* _nav.html is included ahead of a page's own content -- by _base.html
    before {% block content %}, and by the three templates Tasks 7/8/12
@@ -1035,7 +1024,7 @@ body.is-focus .tabbar, body.is-focus .nav-footer, body.is-focus .topbar { displa
 .table th {
   text-align: left; padding: var(--sp-2);
   font-family: var(--font-mono); font-stretch: var(--wd-dense);
-  font-size: var(--t-label); font-weight: var(--w-bold);
+  font-size: var(--t-meta); font-weight: var(--w-bold);
   letter-spacing: var(--track-label); text-transform: uppercase; color: var(--dim);
   border-bottom: 1px solid var(--edge);
   white-space: nowrap;
@@ -1246,8 +1235,7 @@ a.row:active, a.row__main:active { transform: scale(0.99); }
   flex: 1; min-inline-size: 0;
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
 }
-.exercise-card.collapsed .card-title-area .chip,
-.exercise-card.collapsed .card-title-area .tag { flex: none; }
+.exercise-card.collapsed .card-title-area .chip { flex: none; }
 /* .exercise-card__head's flex-start (below) is for the expanded card, where
    a wrapped multi-line name should top-align with the tools column rather
    than center against a much shorter block. Collapsed rows are guaranteed
@@ -1644,7 +1632,7 @@ a.row:active, a.row__main:active { transform: scale(0.99); }
 /* Deload is a label, never a hue (4.2). It sits in the header so a session you
    flagged is never something you have to go looking for. */
 .session-top__deload {
-  flex: none; font-size: var(--t-micro); font-weight: var(--w-bold);
+  flex: none; font-size: var(--t-meta); font-weight: var(--w-bold);
   letter-spacing: 0.06em; text-transform: uppercase;
   padding: 4px 9px; border-radius: var(--r-chip);
   background: var(--raised); color: var(--dim);
@@ -1792,7 +1780,7 @@ button.pic { cursor: zoom-in; }
   font-size: var(--t-meta); color: var(--dim); line-height: 1.45;
 }
 .live__record-lbl {
-  display: block; font-size: var(--t-micro); font-weight: var(--w-bold);
+  display: block; font-size: var(--t-meta); font-weight: var(--w-bold);
   letter-spacing: var(--track-label); text-transform: uppercase; color: var(--record-ink);
 }
 
@@ -1833,7 +1821,7 @@ button.pic { cursor: zoom-in; }
 }
 @keyframes takeover-slab { from { opacity: 0; transform: scale(.86) translateY(14px); } }
 .record-takeover__kind {
-  font-size: var(--t-label); font-weight: var(--w-max);
+  font-size: var(--t-meta); font-weight: var(--w-max);
   letter-spacing: var(--track-label); text-transform: uppercase;
 }
 .record-takeover__name {
@@ -1877,7 +1865,7 @@ button.pic { cursor: zoom-in; }
   font-size: var(--t-meta); color: var(--dim); line-height: 1.45;
 }
 .live__stall-lbl {
-  display: block; font-size: var(--t-micro); font-weight: var(--w-bold);
+  display: block; font-size: var(--t-meta); font-weight: var(--w-bold);
   letter-spacing: var(--track-label); text-transform: uppercase; color: var(--stall-ink);
 }
 
@@ -1908,7 +1896,7 @@ button.pic { cursor: zoom-in; }
   font-size: var(--t-meta); color: var(--dim); line-height: 1.45;
 }
 .live__seed-lbl {
-  display: block; font-size: var(--t-micro); font-weight: var(--w-bold);
+  display: block; font-size: var(--t-meta); font-weight: var(--w-bold);
   letter-spacing: var(--track-label); text-transform: uppercase; color: var(--dim);
 }
 /* D11 on the live card, as for the rail caption: the three note labels are
@@ -2450,7 +2438,7 @@ button.pic { cursor: zoom-in; }
 }
 .note-save__label {
   display: block; margin-bottom: var(--sp-1);
-  font-size: var(--t-micro); font-weight: var(--w-bold);
+  font-size: var(--t-meta); font-weight: var(--w-bold);
   letter-spacing: var(--track-label); text-transform: uppercase; color: var(--dim);
 }
 /* One line per distinct reason when several writes were lost. */
@@ -2598,12 +2586,18 @@ button.pic { cursor: zoom-in; }
 /* The number cells are narrow, with a narrow gutter inside, so a one-sided
    exercise's "kg je Seite" fits beside them at 390px -- the add row's
    "Anhängen" too (G-057). "102,5" still fits. */
-.sset, .sset__hint { --sset-ord: 1.5rem; }
+.sset, .sset__hint { --sset-ord: 1.5rem; --sset-gap: var(--sp-2); }
 .sset {
   display: grid;
   grid-template-columns: var(--sset-ord) 4.5rem auto auto 4.5rem 1fr;
-  align-items: center; column-gap: var(--sp-2);
+  align-items: center; column-gap: var(--sset-gap);
   padding-block: var(--sp-1);
+}
+/* Under 390px the gutters give way first. With "kg je Seite" at 13px (D11)
+   the add row needs 358px at full gutters, a 390 phone's whole sheet: at 375
+   "Anhängen" ran 15px past the row, at 360 past the screen. */
+@media (max-width: 389px) {
+  .sset, .sset__hint { --sset-gap: var(--sp-1); }
 }
 .sset .label { text-align: start; }
 /* Done or still open, in the card chips' own colours (G-059): the open
@@ -2629,7 +2623,7 @@ button.pic { cursor: zoom-in; }
 }
 .sset__unit { font-size: var(--t-meta); color: var(--unlit); }
 /* "kg" over "je Seite": on one line the row ran past a phone's width. */
-.sset__unit--side { font-size: var(--t-micro); line-height: 1.15; text-align: center; white-space: nowrap; }
+.sset__unit--side { font-size: var(--t-meta); line-height: 1.15; text-align: center; white-space: nowrap; }
 .sset__acts { display: flex; justify-content: flex-end; align-items: center; gap: var(--sp-1); }
 /* Why a row's button is off, the "Sicher?" with its "Ja", or that the row
    saved itself. Empty, it takes no room; it stays in the tree so a screen
@@ -2637,7 +2631,7 @@ button.pic { cursor: zoom-in; }
    numbers, past the ordinal column. */
 .sset__hint {
   display: flex; flex-wrap: wrap; align-items: center; gap: var(--sp-1) var(--sp-2);
-  margin: 0 0 var(--sp-1); padding-inline-start: calc(var(--sset-ord) + var(--sp-2));
+  margin: 0 0 var(--sp-1); padding-inline-start: calc(var(--sset-ord) + var(--sset-gap));
   font-size: var(--t-meta); font-weight: var(--w-semi); color: var(--live-ink);
 }
 .sset__hint:empty { margin: 0; }
@@ -2776,7 +2770,7 @@ summary.sheet-row::-webkit-details-marker { display: none; }
   flex: 1 1 0; min-inline-size: min-content; padding-inline: var(--sp-1); justify-content: center;
   flex-direction: column; line-height: 1.1; font-variant-numeric: tabular-nums;
 }
-.pills--fit .pill small { font-size: var(--t-micro); font-weight: var(--w-semi); margin-block-start: 2px; }
+.pills--fit .pill small { font-size: var(--t-meta); font-weight: var(--w-semi); margin-block-start: 2px; }
 /* The live kg stepper's look, for a setting you nudge. */
 .nudge { margin-block-start: var(--sp-3); }
 /* The routine's plan (D2 P1): sets, reps from, reps to -- three nudges in
@@ -2877,10 +2871,10 @@ summary.sheet-row::-webkit-details-marker { display: none; }
    Workout?" before it shows a raw number. The gold block appears only on a day
    that earned one and there is deliberately no placeholder in its place.
 
-   Class names avoid .flare* and .tag*, which are live Athletik rules with their
-   own borders, gradients, container-type and uppercase treatment. Re-declaring
-   only some of their properties is exactly how the session screen's .sets
-   inherited a stale flex-direction, so these carry names of their own.
+   Class names avoid .flare, an older rule with its own border, gradient and
+   container-type. Re-declaring only some of a rule's properties is exactly how
+   the session screen's .sets inherited a stale flex-direction, so these carry
+   names of their own.
    ============================================================================ */
 
 .finished { padding-bottom: var(--sp-8); }
@@ -2946,7 +2940,7 @@ summary.sheet-row::-webkit-details-marker { display: none; }
   font-variant-numeric: tabular-nums;
 }
 .exadd__in {
-  margin-inline-start: 6px; font-size: var(--t-micro); font-weight: var(--w-bold);
+  margin-inline-start: 6px; font-size: var(--t-meta); font-weight: var(--w-bold);
   letter-spacing: var(--track-label); text-transform: uppercase; color: var(--done-ink);
 }
 /* "Nochmal hinzufügen?" asks in the attention hue, like every other question
@@ -3183,7 +3177,7 @@ summary.sheet-row::-webkit-details-marker { display: none; }
 .sec__head h2 { margin: 0; font-size: inherit; font-weight: inherit; }
 .vtag {
   flex: none; margin-top: 1px;
-  font-family: var(--font-body); font-size: var(--t-micro); font-weight: var(--w-bold);
+  font-family: var(--font-body); font-size: var(--t-meta); font-weight: var(--w-bold);
   letter-spacing: 0.04em; text-transform: none;
   padding: 4px 9px; border-radius: var(--r-chip); border: 0;
 }
@@ -4297,10 +4291,12 @@ a.nie-move .nie-chev { align-self: center; }
 /* Two lines, not a hard one-line ellipsis. "Lat Pulldown (Single Arm, H…"
    rendered directly above "Lat Pulldown Kabelzug", and the clipped part was
    the only thing telling them apart -- on the page whose whole content is
-   names. Verlauf already solved this the same way. */
+   names. Verlauf already solved this the same way. Three lines since B12: the
+   trend tag beside the name went to 13px (D11's floor for data) and took the
+   width a second line had, so at 375 "Rudern (Maschine)" lost its "(Maschine)". */
 .uebungen-row .nameline__n {
   white-space: normal; overflow-wrap: anywhere;
-  display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden;
+  display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 3; overflow: hidden;
 }
 
 /* The sheet's unilateral checkbox. It was a <span class="label">, which is the
@@ -4337,10 +4333,10 @@ a.nie-move .nie-chev { align-self: center; }
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
 }
 .vol--none { color: var(--unlit); }
-.e1rm { font-size: var(--t-micro); color: var(--unlit); font-variant-numeric: tabular-nums; }
+.e1rm { font-size: var(--t-meta); color: var(--unlit); font-variant-numeric: tabular-nums; }
 /* Was .e1rm, which stopped holding an e1RM when the row started leading with
    the working weight -- a class name and its content had diverged. */
-.lastline { font-size: var(--t-micro); color: var(--unlit); font-variant-numeric: tabular-nums; }
+.lastline { font-size: var(--t-meta); color: var(--unlit); font-variant-numeric: tabular-nums; }
 
 /* ============================================================================
    ÜBUNGS-DETAIL  ·  the single-exercise instrument (Puls)
@@ -4528,7 +4524,6 @@ a.nie-move .nie-chev { align-self: center; }
 /* Every workout, one link row each (their straight dividers: .row + .row). */
 .exlog { margin-top: var(--sp-3); }
 .exlog .row__meta { font-variant-numeric: tabular-nums; }
-.exlog .e1rm { font-size: var(--t-meta); }
 .exlog__more { gap: var(--sp-1); margin-top: var(--sp-1); }
 .exlog__more .icon { inline-size: 14px; block-size: 14px; }
 .exnote { margin: var(--sp-2) 0 0; max-inline-size: 60ch; font-size: var(--t-meta); line-height: 1.5; color: var(--unlit); text-wrap: pretty; }
@@ -4666,7 +4661,7 @@ a.nie-move .nie-chev { align-self: center; }
   60%  { transform: scale(1.18); }
   100% { transform: scale(1); filter: brightness(1); }
 }
-.key { display: inline-flex; align-items: center; gap: 6px; font-size: var(--t-micro); color: var(--unlit); }
+.key { display: inline-flex; align-items: center; gap: 6px; font-size: var(--t-meta); color: var(--unlit); }
 .key__dot { inline-size: 9px; block-size: 9px; border-radius: 50%; flex: none; }
 
 .dateline { display: flex; align-items: center; gap: var(--sp-2); min-inline-size: 0; }
