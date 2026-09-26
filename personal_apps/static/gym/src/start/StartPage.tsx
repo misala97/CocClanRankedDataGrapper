@@ -162,10 +162,12 @@ function FirstRun({
     const minutes = Math.floor(
       (instant(last.finished_at).getTime() - instant(last.started_at).getTime()) / 60000)
     // Mid-sentence only the adverbs go lower case: "zuletzt gestern", but
-    // "zuletzt vor 3 Tagen" -- a whole-string toLowerCase wrote "tagen".
+    // "zuletzt vor 3 Tagen" -- a whole-string toLowerCase wrote "tagen". A
+    // workout under a minute says no duration (G-024).
     receipt = workouts > 1
       ? `${workouts} Workouts · zuletzt ${when.replace(/^(Heute|Gestern)/, (word) => word.toLowerCase())}`
-      : `${when.charAt(0).toUpperCase()}${when.slice(1)} · ${last.exercises} ${last.exercises === 1 ? 'Übung' : 'Übungen'} · ${minutes < 1 ? '< 1' : minutes} min`
+      : `${when.charAt(0).toUpperCase()}${when.slice(1)} · ${last.exercises} ${last.exercises === 1 ? 'Übung' : 'Übungen'}`
+        + (minutes >= 1 ? ` · ${minutes} min` : '')
   }
 
   const dot = (n: number, isDone: boolean) => (
@@ -283,6 +285,17 @@ function FirstRun({
   )
 }
 
+/** "Nicht jetzt" on the push prompt: this device only (G-016). */
+const PUSH_LATER_KEY = 'gym.start.push-later'
+
+function pushLaterOnThisDevice(): boolean {
+  try {
+    return localStorage.getItem(PUSH_LATER_KEY) !== null
+  } catch {
+    return false
+  }
+}
+
 export function StartPage({ payload: initial }: { payload: HeutePayload }) {
   // Back closes an open sheet, not the page (G-066).
   useSheetHistory()
@@ -294,6 +307,7 @@ export function StartPage({ payload: initial }: { payload: HeutePayload }) {
   // the page re-renders from it -- the row changing is the feedback.
   const [payload, setPayload] = useState(initial)
   const [saveError, setSaveError] = useState<string | null>(null)
+  const [pushLater, setPushLater] = useState(pushLaterOnThisDevice)
 
   const saveRoutine = async (url: string, fields: Record<string, string>) => {
     try {
@@ -368,7 +382,13 @@ export function StartPage({ payload: initial }: { payload: HeutePayload }) {
   const restLeft = useRestCountdown(payload.active_session_rest_ends_at)
   useReloadWhenStale()
   const lead = payload.routines[0]
-  const rest = payload.routines.slice(canStart ? 1 : 0)
+  // "Am längsten her" names the routine to do next. With every routine done
+  // today there is none (G-017): the lead is sorted first because it was
+  // done longest ago, and heading "Heute schon gemacht" with the big
+  // Starten contradicted itself -- a plain list then. Never-done routines
+  // sort last, so a lead done today means every done one was.
+  const heroLead = canStart && lead !== undefined && lead.days_ago !== 0
+  const rest = payload.routines.slice(heroLead ? 1 : 0)
   // The checklist is what to do next, and while a workout runs the answer is
   // the running card. Nothing on an account's first run has data yet, so the
   // reading sections wait for the first finished workout instead of
@@ -398,12 +418,17 @@ export function StartPage({ payload: initial }: { payload: HeutePayload }) {
                 : payload.consistency.days_since_last === 1
                   ? <>Zuletzt <b>gestern</b></>
                   : <>Zuletzt vor <b>{payload.consistency.days_since_last}</b> Tagen</>}
-              {' · '}
               {/* The window is said: a rate over the last four weeks read as a
                   lifetime average, and after a break it disagreed with the
-                  "Zuletzt vor 20 Tagen" right beside it. */}
-              <b>{kg1(payload.consistency.per_week)}</b> Workouts pro Woche
-              {` (letzte ${Math.round(payload.consistency.window_days / 7)} Wochen)`}
+                  "Zuletzt vor 20 Tagen" right beside it. Whole weeks, and no
+                  rate at all under two weeks of history (G-012). */}
+              {payload.consistency.per_week !== null && payload.consistency.window_days !== null && (
+                <>
+                  {' · '}
+                  <b>{kg1(payload.consistency.per_week)}</b> Workouts pro Woche
+                  {` (letzte ${payload.consistency.window_days / 7} Wochen)`}
+                </>
+              )}
             </>
           ) : 'Noch keine Workouts protokolliert'}
         </p>
@@ -430,28 +455,6 @@ export function StartPage({ payload: initial }: { payload: HeutePayload }) {
               Weiter
             </a>
           </div>
-        </section>
-      )}
-
-      {/* Enabling rest-timer notifications lived only in the options sheet
-          during a live workout -- a menu that does not exist until you are
-          mid-set, which is neither where you look nor when you would think of
-          it. Shown once on a device without a subscription, gone for good
-          after the tap. BELOW the running card: a one-time setup prompt must
-          not outrank the workout that is happening right now. */}
-      {pushSupported && subscribed === false && !showChecklist && (
-        <section className="sec notify-prompt" id="notify-start">
-          <button type="button" className="notify-prompt__btn"
-            onClick={() => { void enablePush(payload.vapid_public_key) }}>
-            <Icon name="timer" />
-            <span>
-              <b>Pausen-Benachrichtigung aktivieren</b>
-              <small>Auf diesem Gerät. Installiere die App zuerst über „Zum Home-Bildschirm“.</small>
-            </span>
-          </button>
-          {pushError !== null && (
-            <p className="flash flash--error" role="alert">{pushError}</p>
-          )}
         </section>
       )}
 
@@ -488,11 +491,11 @@ export function StartPage({ payload: initial }: { payload: HeutePayload }) {
             <>
               <div className="sec__head">
                 <h2 className="sec__kick" id="sec-routinen">
-                  {canStart ? 'Am längsten her' : 'Routinen'}
+                  {heroLead ? 'Am längsten her' : canStart ? 'Deine Routinen' : 'Routinen'}
                 </h2>
               </div>
 
-              {canStart && lead !== undefined ? (
+              {heroLead ? (
                 <div className="lead">
                   <div className="lead__top">
                     <span className="lead__main stack">
@@ -518,7 +521,7 @@ export function StartPage({ payload: initial }: { payload: HeutePayload }) {
                     </button>
                   </form>
                 </div>
-              ) : (
+              ) : !canStart && (
                 <p className="start__blocked">
                   Ein Workout läuft schon. Beende es, um ein neues zu starten.
                 </p>
@@ -563,6 +566,36 @@ export function StartPage({ payload: initial }: { payload: HeutePayload }) {
               <Icon name="plus" />
               Freies Workout starten
             </button>
+          )}
+        </section>
+      )}
+
+      {/* Enabling rest-timer notifications lived only in the options sheet
+          during a live workout -- a menu that does not exist until you are
+          mid-set, which is neither where you look nor when you would think of
+          it. Shown on a device without a subscription, gone for good after
+          the tap. Below the running card and the routines (G-016): a setup
+          prompt must not outrank the workout happening now, nor push "what
+          do I train today" below the fold. "Nicht jetzt" hides it on this
+          device; a private window just asks again. */}
+      {pushSupported && subscribed === false && !showChecklist && !pushLater && (
+        <section className="sec notify-prompt" id="notify-start">
+          <button type="button" className="notify-prompt__btn"
+            onClick={() => { void enablePush(payload.vapid_public_key) }}>
+            <Icon name="timer" />
+            <span>
+              <b>Pausen-Benachrichtigung aktivieren</b>
+              <small>Auf diesem Gerät. Installiere die App zuerst über „Zum Home-Bildschirm“.</small>
+            </span>
+          </button>
+          <button type="button" className="notify-prompt__later" onClick={() => {
+            try { localStorage.setItem(PUSH_LATER_KEY, '1') } catch { /* private mode */ }
+            setPushLater(true)
+          }}>
+            Nicht jetzt
+          </button>
+          {pushError !== null && (
+            <p className="flash flash--error" role="alert">{pushError}</p>
           )}
         </section>
       )}

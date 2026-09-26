@@ -1,0 +1,17 @@
+{% extends 'gym/_base.html' %}
+
+{# A gym address that leads nowhere (G-081): a workout deleted since, an old
+   tab, the back button. It showed Werkzeug's English "Not Found". Rendered
+   with the 404 status by routes/__init__.py:_gym_not_found, which says what
+   is gone and where to go instead. The one empty state (.void, G-003): a
+   heading, one line, one way on. #}
+
+{% block title %}Nicht gefunden · Gym Tracker{% endblock %}
+
+{% block content %}
+<section class="void" aria-labelledby="void-h">
+  <h1 class="void__h" id="void-h">{{ heading }}</h1>
+  <p class="void__line">{{ line }}</p>
+  <a class="btn btn--live void__go" href="{{ way_href }}">{{ way_label }}</a>
+</section>
+{% endblock %}

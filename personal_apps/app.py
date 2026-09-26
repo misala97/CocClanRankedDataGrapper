@@ -146,7 +146,9 @@ app.jinja_env.globals['csp_nonce'] = csp_nonce
 
 # Pages whose every script is a file of this app or carries the nonce -- so a
 # script injected into one runs nowhere. The other features still use inline
-# scripts without one, and keep the rest of the headers only.
+# scripts without one, and keep the rest of the headers only. A page of one
+# of them that has no blueprint -- the gym's 404 for an address no route
+# matched -- asks for the policy with g.strict_scripts.
 _STRICT_SCRIPT_BLUEPRINTS = {'gym', 'auth'}
 
 
@@ -163,7 +165,8 @@ def _security_headers(response):
     response.headers.setdefault('Referrer-Policy', 'same-origin')
     response.headers.setdefault('X-Frame-Options', 'DENY')
     policy = "frame-ancestors 'none'"
-    if response.mimetype == 'text/html' and request.blueprint in _STRICT_SCRIPT_BLUEPRINTS:
+    strict = request.blueprint in _STRICT_SCRIPT_BLUEPRINTS or g.get('strict_scripts', False)
+    if response.mimetype == 'text/html' and strict:
         policy = (f"script-src 'self' 'nonce-{csp_nonce()}'; object-src 'none'; "
                   f"base-uri 'self'; {policy}")
     response.headers.setdefault('Content-Security-Policy', policy)

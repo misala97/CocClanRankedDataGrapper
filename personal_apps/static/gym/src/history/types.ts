@@ -90,6 +90,9 @@ export interface HistoryPayload {
   biggest_session_id: number | null
   gap_threshold: number
   weekday_short: string[]
+  /** The lifter's running workout, if any: an empty Verlauf's way on goes
+   *  back into it rather than offering to start one (G-003). */
+  running_session_id: number | null
   /** Each listed exercise's search text by name: the add sheet's, aliases
    *  and all -- once per exercise, not per row. */
   exercise_search: Record<string, string>

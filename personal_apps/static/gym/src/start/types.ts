@@ -2,9 +2,11 @@
 
 export interface Consistency {
   sessions: number
-  per_week: number
+  /** null under two weeks of history (G-012); `window_days` is then null
+   *  too, else the whole weeks the rate was taken over. */
+  per_week: number | null
   days_since_last: number | null
-  window_days: number
+  window_days: number | null
 }
 
 export interface RoutineMemory {

@@ -24,7 +24,7 @@ from features.gym.scope import (
     current_user_id, my_sessions,
 )
 from .helpers import (
-    MONTH_NAMES, WEEKDAY_SHORT, InvalidInput,
+    MONTH_NAMES, WEEKDAY_SHORT, InvalidInput, _page_active_session,
 )
 from .history import (
     done_sets, load_performed,
@@ -208,6 +208,7 @@ def gym_verlauf():
         'gap_threshold': VERLAUF_GAP_DAYS,
         'weekday_short': list(WEEKDAY_SHORT),
         'exercise_search': exercise_search,
+        'running_session_id': running.id if (running := _page_active_session()) else None,
     })
     return render_template('gym/verlauf.html',
                            payload_json=payload.model_dump(mode='json'))

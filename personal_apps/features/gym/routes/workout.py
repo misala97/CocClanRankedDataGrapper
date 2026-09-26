@@ -14,6 +14,7 @@ from flask import abort, current_app, flash, jsonify, redirect, render_template,
 from sqlalchemy import and_, or_
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import joinedload, selectinload
+from werkzeug.exceptions import NotFound
 
 from extensions import db
 from models import (
@@ -1345,17 +1346,24 @@ def session_detail(session_id):
 @gym_bp.route('/gym/session/<int:session_id>/exercises/add', methods=['POST'])
 @login_required
 def gym_add_session_exercise(session_id):
-    session_ = owned_session(session_id)
+    # "Zu „…“ hinzufügen" on an exercise's page (M6), read before the workout
+    # was finished, discarded or deleted elsewhere: back to that page, which
+    # now offers to begin one, told why -- the debrief it landed on did not
+    # have the exercise and said nothing, and a workout gone was a 404.
+    back_to = (request.form.get('exercise_id', type=int)
+               if request.form.get('back') == 'exercise' and not _wants_json() else None)
+    try:
+        session_ = owned_session(session_id)
+    except NotFound:
+        if not back_to:
+            raise
+        flash('Das Workout gibt es nicht mehr — nichts hinzugefügt.', 'error')
+        return redirect(url_for('gym.exercise_detail', exercise_id=back_to))
     refusal = _refuse_structure_edit_if_finished(session_)
     if refusal is not None:
-        exercise_id = request.form.get('exercise_id', type=int)
-        if request.form.get('back') == 'exercise' and exercise_id and not _wants_json():
-            # "Zu „…“ hinzufügen" on an exercise's page (M6) read before the
-            # workout was finished elsewhere: back to that page, which now
-            # offers to begin one, told why -- the debrief it landed on did
-            # not have the exercise and said nothing.
+        if back_to:
             flash('Das Workout ist schon beendet — nichts hinzugefügt.', 'error')
-            return redirect(url_for('gym.exercise_detail', exercise_id=exercise_id))
+            return redirect(url_for('gym.exercise_detail', exercise_id=back_to))
         return refusal
     # Before anything is created: taking the lock ends the transaction.
     lock_sessions([session_id])
@@ -2201,9 +2209,10 @@ def gym_discard_session(session_id):
     does: the other side trains on alone.
     """
     if _was_discarded(session_id):
-        return redirect(url_for('gym.gym_heute'))
+        return _discarded_to_start()
     # Nobody came back to it: settled first, like a finish -- filed at its
-    # last set, or gone already when nothing in it counts.
+    # last set, or gone already when nothing in it counts. The settle says
+    # so itself, and why; a second message would only repeat it.
     if _settle_if_abandoned(owned_session(session_id)) == 'discarded':
         return redirect(url_for('gym.gym_heute'))
     # A double submit, or a discard racing a finish or a tick: the second
@@ -2211,7 +2220,7 @@ def gym_discard_session(session_id):
     lock_sessions([session_id])
     session_ = db.session.get(WorkoutSession, session_id)
     if session_ is None:
-        return redirect(url_for('gym.gym_heute'))
+        return _discarded_to_start()
     if session_.finished_at is not None:
         return redirect(url_for('gym.session_detail', session_id=session_id))
     # counts(), the one rule: the finish sheet offers "verwerfen" off the same
@@ -2222,6 +2231,16 @@ def gym_discard_session(session_id):
         flash('Das Workout hat schon Sätze — beende es statt es zu verwerfen.', 'error')
         return redirect(url_for('gym.session_detail', session_id=session_id))
     _discard_session(session_)
+    return _discarded_to_start()
+
+
+def _discarded_to_start():
+    """Start, saying the workout is gone (G-116): the tap used to land there
+    without a word. No undo -- only a workout with nothing logged is thrown
+    away (D5), so there is nothing to bring back. Here, not in
+    _discard_session: a workout nobody came back to is settled through that
+    too, and _settle_if_abandoned says that in its own words."""
+    flash('Workout verworfen.', 'success')
     return redirect(url_for('gym.gym_heute'))
 
 

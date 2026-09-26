@@ -110,7 +110,7 @@
    it today, for `is-focus` (no tab bar, one way out). It is the template's call
    rather than a route check, because the active and the finished workout share
    one endpoint and only the active one is a focus mode. #}
-<body class="{% block body_class %}{% endblock %}{% if gym_active_session and request.endpoint not in ('gym.session_detail', 'gym.gym_heute') %} has-resume{% endif %}">
+<body class="{% block body_class %}{% endblock %}{% if gym_active_session and (not_found or request.endpoint not in ('gym.session_detail', 'gym.gym_heute')) %} has-resume{% endif %}">
 
 {# Skip link: the tab bar / top bar puts several nav links before the content
    on every page, so a keyboard or screen-reader user had to walk the whole

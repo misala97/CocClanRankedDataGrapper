@@ -10,9 +10,13 @@ private helpers from `features.gym.routes`, and keeping that path working is
 what let the 2912-line routes.py split into this package without touching a
 single caller.
 """
+import re
 from urllib.parse import urlsplit, urlunsplit
 
-from flask import abort, current_app, flash, g, jsonify, redirect, request, url_for
+from flask import (
+    abort, current_app, flash, g, jsonify, make_response, redirect, render_template, request,
+    url_for,
+)
 
 from extensions import db
 from ..scope import current_user_id
@@ -129,6 +133,60 @@ def _refuse_invalid_input(error):
     if came_from.netloc == request.host and came_from.path.startswith('/gym'):
         return redirect(urlunsplit(('', '', came_from.path, came_from.query, '')))
     return redirect(url_for('gym.gym_heute'))
+
+
+# What a gym address that leads nowhere was, by where it pointed, and the way
+# on from there. Matched from the start of the path, first match wins; the
+# last entry is every other /gym address.
+_NOT_FOUND = tuple((re.compile(pattern), *said) for pattern, *said in (
+    # "Beenden" or "Verwerfen" on a phone that still showed a workout the
+    # other one threw away: Start, not Verlauf, where it never shows up. A
+    # 404 all the same -- someone else's workout answers exactly so.
+    (r'/gym/session/\d+/(finish|discard)$', 'Dieses Workout gibt es nicht mehr.',
+     'Es wurde gelöscht oder verworfen.', '/gym', 'Zum Start'),
+    (r'/gym/session/', 'Dieses Workout gibt es nicht mehr.',
+     'Es wurde gelöscht oder verworfen.', '/gym/verlauf', 'Zum Verlauf'),
+    (r'/gym/exercises/', 'Diese Übung gibt es nicht.',
+     'Die Adresse führt zu keiner Übung.', '/gym/uebungen', 'Zu den Übungen'),
+    # Also an invite answered already: Back from the workout it was accepted
+    # into lands on its confirm page again.
+    (r'/gym/shared/', 'Diese Einladung gilt nicht mehr.',
+     'Angenommen, abgelehnt oder das Workout ist vorbei.', '/gym', 'Zum Start'),
+    (r'/gym', 'Diese Seite gibt es nicht.',
+     'Die Adresse führt zu keiner Seite des Gym Trackers.', '/gym', 'Zum Start'),
+))
+
+
+@gym_bp.app_errorhandler(404)
+def _gym_not_found(error):
+    """A gym address that leads nowhere (G-081): a workout deleted since, an
+    old tab, the back button. It showed Werkzeug's English "Not Found".
+
+    A page load gets a gym page that says what is gone and the way on; an
+    island's read gets {"error": ...} -- api.ts reads any 404 as gone.
+    App-wide, not the blueprint's own: an address no gym route matches never
+    reaches the blueprint's handlers. Every address outside /gym keeps
+    Flask's answer. The live screen's 409 (scope._missing) is not a 404 and
+    never comes here.
+    """
+    if not (request.path == '/gym' or request.path.startswith('/gym/')):
+        return error
+    db.session.rollback()
+    if helpers._wants_json():
+        return jsonify({'error': 'Gibt es nicht (mehr).'}), 404
+    heading, line, href, label = next(
+        entry[1:] for entry in _NOT_FOUND if entry[0].match(request.path))
+    # An address no gym route matched has no blueprint: app.py's strict
+    # script policy keys on it, and the blueprint's handlers and hooks never
+    # run. So the policy is asked for here, no-store set here, and the nav's
+    # running workout passed rather than left to the context processors.
+    # not_found: the nav keeps its resume strip on a session address too.
+    g.strict_scripts = True
+    response = make_response(render_template(
+        'gym/not_found.html', heading=heading, line=line, way_href=href, way_label=label,
+        not_found=True, gym_active_session=helpers._page_active_session(),
+        gym_live_exercise_name=workout._live_exercise_name), 404)
+    return _pages_are_never_stored(response)
 
 
 __all__ = ['gym_bp']

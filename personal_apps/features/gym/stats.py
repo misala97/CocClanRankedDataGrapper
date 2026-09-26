@@ -51,6 +51,10 @@ STAGNATION_THRESHOLD = 4
 # Rolling window for "how am I doing lately" figures: balance, consistency.
 ROLLING_WINDOW_DAYS = 28
 
+# History a weekly rate needs (G-012): one workout minutes into an account read
+# "0,2 Workouts pro Woche (letzte 4 Wochen)" -- four weeks nobody had trained in.
+RATE_MIN_DAYS = 14
+
 # How many ISO weeks of tonnage to plot, including the current partial one.
 TONNAGE_WEEKS = 8
 
@@ -1071,11 +1075,18 @@ def muscle_group_volume(rows, catalogue_groups, now, days=ROLLING_WINDOW_DAYS):
         bucket['volume'] += row_volume(row)
 
     buckets = sorted(totals.values(), key=lambda bucket: (-bucket['sets'], bucket['group']))
-    peak = buckets[0]['sets'] if buckets else 0
+    # Exercises without a group are shown but judged against nothing (G-018):
+    # not a muscle to balance, so the bucket is never "zu wenig" and sets no
+    # peak for the groups -- its one stray set was the only warning on Start.
+    peak = max((bucket['sets'] for bucket in buckets if bucket['group'] != NO_GROUP_LABEL),
+               default=0)
     for bucket in buckets:
         bucket['volume'] = round(bucket['volume'], 1)
-        bucket['share'] = (bucket['sets'] / peak) if peak else 0.0
-        bucket['under_trained'] = bucket['sets'] == 0 or bucket['sets'] < peak * UNDER_TRAINED_RATIO
+        # Capped: an ungrouped bucket above the peak draws a full bar.
+        bucket['share'] = (min(bucket['sets'] / peak, 1.0) if peak
+                           else 1.0 if bucket['sets'] else 0.0)
+        bucket['under_trained'] = bucket['group'] != NO_GROUP_LABEL and (
+            bucket['sets'] == 0 or bucket['sets'] < peak * UNDER_TRAINED_RATIO)
     return buckets
 
 
@@ -1124,15 +1135,29 @@ def weekly_tonnage(rows, now, weeks=TONNAGE_WEEKS):
 
 def consistency(finished_started_at, now, days=ROLLING_WINDOW_DAYS):
     """Training rate over the window, plus how long it has been since the last
-    session. `finished_started_at` is a list of datetimes."""
-    cutoff = now - dt.timedelta(days=days)
-    recent = [moment for moment in finished_started_at if moment >= cutoff]
+    session. `finished_started_at` is a list of datetimes.
+
+    While the history is shorter than `days`, the window shrinks to the whole
+    weeks since the first workout (G-012): a new account's rate is not spread
+    over weeks before it existed, and "letzte 2 Wochen" says the window used.
+    Under RATE_MIN_DAYS of history there is no rate (per_week and window_days
+    None): a few days are not a weekly habit yet.
+    """
     latest = max(finished_started_at) if finished_started_at else None
+    first = min(finished_started_at) if finished_started_at else None
+    span = calendar_days_between(first, now) if first else 0
+    window = min(days, span // 7 * 7)
+    days_since_last = calendar_days_between(latest, now) if latest else None
+    if window < RATE_MIN_DAYS:
+        return {'sessions': len(finished_started_at), 'per_week': None,
+                'days_since_last': days_since_last, 'window_days': None}
+    cutoff = now - dt.timedelta(days=window)
+    recent = [moment for moment in finished_started_at if moment >= cutoff]
     return {
         'sessions': len(recent),
-        'per_week': len(recent) / (days / 7.0),
-        'days_since_last': calendar_days_between(latest, now) if latest else None,
-        'window_days': days,
+        'per_week': len(recent) / (window / 7.0),
+        'days_since_last': days_since_last,
+        'window_days': window,
     }
 
 

@@ -85,6 +85,14 @@ describe('FinishedPage', () => {
     expect(screen.queryByText(/Automatisch beendet/)).not.toBeInTheDocument()
   })
 
+  it('says no duration for a workout under a minute (G-024)', () => {
+    // Imported workouts end where they start; "unter 1 Minute" beside the
+    // tonnage read as a fact.
+    mount({ session: { ...base.session, finished_at: '2026-08-09T16:00:40' } })
+    expect(screen.getByText('So 09.08.2026')).toBeInTheDocument()
+    expect(screen.queryByText(/Minute/)).not.toBeInTheDocument()
+  })
+
   it('says when the app ended the workout itself (D5)', () => {
     // Its end is the last set, and the duration stops there.
     mount({ session: { ...base.session, auto_finished: true } })
@@ -753,28 +761,128 @@ describe('FinishedPage', () => {
     })
 })
 
-it("leaves a deleted workout from an open sheet without the sheet's entry (B7 review)", async () => {
-  // The delete lands when its undo window closes, sheet open or not: the
-  // entry left behind was a dead step back from Verlauf.
-  history.replaceState({ page: 'debrief' }, '')
-  const states: unknown[] = []
-  const replace = vi.fn(() => { states.push(history.state) })
-  vi.stubGlobal('location', { ...window.location, replace, assign: vi.fn() })
-  vi.stubGlobal('fetch', vi.fn(async () => ({
-    ok: true, redirected: false, url: '/gym/session/1/delete',
-    json: async () => ({ deleted: true }),
-  } as unknown as Response)))
-  try {
+describe('deleting the workout (G-044)', () => {
+  // The offer left pending is test-setup.ts's to drop: a reset of the store
+  // here, first, nulled its timer before that clearTimeout could read it.
+  afterEach(() => { vi.unstubAllGlobals() })
+
+  it('takes the workout off the page at once, every action with it', async () => {
+    // It stayed for the whole undo window, every action live under "Workout
+    // gelöscht." -- and a sheet opened in the window left its entry behind
+    // (B7 review): now there is nothing left to open.
+    const fetch = vi.fn()
+    vi.stubGlobal('fetch', fetch)
     const user = userEvent.setup()
     mount()
     await user.click(screen.getByRole('button', { name: 'Workout löschen' }))
-    await user.click(screen.getByRole('button', { name: /Sätze & Notizen/ }))
+    expect(screen.getByRole('heading', { level: 1 })).toHaveTextContent('Push Day')
+    expect(screen.getByRole('heading', { level: 1 })).toHaveClass('finished__name--gone')
+    expect(screen.getByText('Gelöscht. Gleich geht es weiter zum Verlauf.')).toBeInTheDocument()
+    expect(screen.queryByText('Bankdrücken')).not.toBeInTheDocument()
+    // The toast's own controls are all that is left.
+    expect(screen.getAllByRole('button').filter((b) => b.closest('.undo-toast') === null))
+      .toHaveLength(0)
+    expect(screen.getByRole('button', { name: 'Rückgängig' })).toBeInTheDocument()
+    expect(screen.queryAllByRole('link')).toHaveLength(0)
+    expect(document.querySelectorAll('dialog')).toHaveLength(0)
+    expect(fetch).not.toHaveBeenCalled()
+  })
+
+  it('brings it back whole on Rückgängig, nothing sent', async () => {
+    const fetch = vi.fn()
+    vi.stubGlobal('fetch', fetch)
+    const user = userEvent.setup()
+    mount()
+    await user.click(screen.getByRole('button', { name: 'Workout löschen' }))
+    await user.click(screen.getByRole('button', { name: 'Rückgängig' }))
+    expect(screen.getByRole('button', { name: 'Workout löschen' })).toBeInTheDocument()
+    expect(screen.getAllByText('Bankdrücken').length).toBeGreaterThan(0)
+    expect(screen.getByRole('heading', { level: 1 })).not.toHaveClass('finished__name--gone')
+    expect(fetch).not.toHaveBeenCalled()
+  })
+
+  it('brings it back with the reason when the delete fails', async () => {
+    const replace = vi.fn()
+    vi.stubGlobal('location', { ...window.location, replace, assign: vi.fn() })
+    vi.stubGlobal('fetch', vi.fn(async () => { throw new TypeError('offline') }))
+    const user = userEvent.setup()
+    mount()
+    await user.click(screen.getByRole('button', { name: 'Workout löschen' }))
     await act(async () => { useUndo.getState().commitNow() })
-    await waitFor(() => expect(replace).toHaveBeenCalledWith('/gym/verlauf'))
-    expect(states).toEqual([{ page: 'debrief' }])
-  } finally {
+    expect(await screen.findByRole('alert')).toHaveTextContent('Verbindung fehlgeschlagen')
+    // The focus comes back with the page, as after Rückgängig.
+    expect(screen.getByRole('button', { name: 'Workout löschen' })).toHaveFocus()
+    expect(screen.getAllByText('Bankdrücken').length).toBeGreaterThan(0)
+    expect(replace).not.toHaveBeenCalled()
+  })
+
+  it('takes the focus with it: onto the name, back onto "Workout löschen" after Rückgängig', async () => {
+    // The button the focus was on goes with the page, the toast's with the
+    // toast: a keyboard or screen-reader user was left on <body>.
+    vi.stubGlobal('fetch', vi.fn())
+    const user = userEvent.setup()
+    const { rerender } = mount()
+    // Opening the debrief moves nothing: no scroll to its foot.
+    expect(document.body).toHaveFocus()
+    await user.click(screen.getByRole('button', { name: 'Workout löschen' }))
+    const name = screen.getByRole('heading', { level: 1 })
+    expect(name).toHaveFocus()
+    // The strike is only drawn; the line under the name says it.
+    expect(name).toHaveAccessibleDescription('Gelöscht. Gleich geht es weiter zum Verlauf.')
+    // A render inside the window leaves the focus where the lifter put it.
+    const undo = screen.getByRole('button', { name: 'Rückgängig' })
+    undo.focus()
+    rerender(<FinishedPage payload={{ ...base }} />)
+    expect(undo).toHaveFocus()
+    await user.click(undo)
+    expect(screen.getByRole('button', { name: 'Workout löschen' })).toHaveFocus()
+  })
+})
+
+describe('the ways back to Verlauf (G-043)', () => {
+  const cameFrom = (address: string) =>
+    Object.defineProperty(document, 'referrer', { value: address, configurable: true })
+  afterEach(() => {
+    Reflect.deleteProperty(document, 'referrer')
     vi.unstubAllGlobals()
-  }
+  })
+
+  it('goes back to Verlauf as it was left, its search and filter with it', () => {
+    // A search, a hit opened, the arrow: the search was gone -- and an
+    // installed app has no Back button of its own.
+    cameFrom(`${window.location.origin}/gym/verlauf?q=bank&rekorde`)
+    mount()
+    const ways = screen.getAllByRole('link', { name: 'Zurück zum Verlauf' })
+    expect(ways).toHaveLength(2)
+    for (const way of ways) expect(way).toHaveAttribute('href', '/gym/verlauf?q=bank&rekorde')
+  })
+
+  it('goes to a plain Verlauf from anywhere else', () => {
+    for (const elsewhere of [`${window.location.origin}/gym/session/5`,
+      'https://elsewhere.example/gym/verlauf?q=bank', '']) {
+      cameFrom(elsewhere)
+      const { unmount } = mount()
+      for (const way of screen.getAllByRole('link', { name: 'Zurück zum Verlauf' })) {
+        expect(way).toHaveAttribute('href', '/gym/verlauf')
+      }
+      unmount()
+    }
+  })
+
+  it('leaves a deleted workout for Verlauf as it was left', async () => {
+    cameFrom(`${window.location.origin}/gym/verlauf?q=bank`)
+    const replace = vi.fn()
+    vi.stubGlobal('location', { ...window.location, replace, assign: vi.fn() })
+    vi.stubGlobal('fetch', vi.fn(async () => ({
+      ok: true, redirected: false, url: '/gym/session/1/delete',
+      json: async () => ({ deleted: true }),
+    } as unknown as Response)))
+    const user = userEvent.setup()
+    mount()
+    await user.click(screen.getByRole('button', { name: 'Workout löschen' }))
+    await act(async () => { useUndo.getState().commitNow() })
+    expect(replace).toHaveBeenCalledWith('/gym/verlauf?q=bank')
+  })
 })
 
 describe('saving without a reload', () => {

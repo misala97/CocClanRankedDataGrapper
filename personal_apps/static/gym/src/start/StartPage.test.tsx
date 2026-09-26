@@ -1,6 +1,6 @@
 import { act, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { StartPage } from './StartPage'
 import type { HeutePayload, RoutineMemory, Stall } from './types'
 import { usePush, useSheets } from '../session/stores'
@@ -93,6 +93,70 @@ describe('StartPage', () => {
     const routines = screen.getByRole('region', { name: /Am längsten her|Routinen/ })
     expect(within(routines).getByText('Push')).toBeInTheDocument()
     expect(screen.getByRole('button', { name: /Starten/ })).toBeInTheDocument()
+  })
+
+  it('lists the routines plainly once each was done today (G-017)', () => {
+    // "Am längsten her" over "Heute schon gemacht" with the big Starten
+    // contradicted itself. A never-done routine sorts last and changes
+    // nothing: the lead done today means every done one was.
+    mount({ routines: [
+      routine({ days_ago: 0 }),
+      routine({ template_id: 2, name: 'Pull', days_ago: 0 }),
+      routine({ template_id: 3, name: 'Beine', last_done: null, days_ago: null }),
+    ] })
+    expect(screen.getByRole('heading', { name: 'Deine Routinen' })).toBeInTheDocument()
+    expect(screen.queryByRole('heading', { name: 'Am längsten her' })).not.toBeInTheDocument()
+    expect(document.querySelector('.lead')).toBeNull()
+    const routines = screen.getByRole('region', { name: 'Deine Routinen' })
+    expect([...routines.querySelectorAll('.row__name')].map((n) => n.textContent))
+      .toEqual(['Push', 'Pull', 'Beine'])
+    expect(within(routines).getAllByRole('button', { name: 'Starten' })).toHaveLength(3)
+  })
+
+  it('keeps the lead card while the lead was done before today (G-017)', () => {
+    mount({ routines: [routine({ days_ago: 1 }), routine({ template_id: 2, name: 'Pull', days_ago: 0 })] })
+    expect(screen.getByRole('heading', { name: 'Am längsten her' })).toBeInTheDocument()
+    expect(document.querySelector('.lead .lead__name')).toHaveTextContent('Push')
+  })
+
+  describe('the push prompt (G-016)', () => {
+    const LATER = 'gym.start.push-later'
+    beforeEach(() => {
+      localStorage.removeItem(LATER)
+      Object.defineProperty(navigator, 'serviceWorker', {
+        configurable: true,
+        value: { getRegistration: async () => ({ pushManager: { getSubscription: async () => null } }) },
+      })
+      vi.stubGlobal('PushManager', function PushManager() {})
+    })
+    afterEach(() => {
+      Reflect.deleteProperty(navigator, 'serviceWorker')
+      vi.unstubAllGlobals()
+      localStorage.removeItem(LATER)
+    })
+
+    it('asks below the routines, not above them', async () => {
+      // It took the top slot on every visit and pushed "what do I train
+      // today" below the fold.
+      mount()
+      const prompt = (await screen.findByText('Pausen-Benachrichtigung aktivieren')).closest('section')!
+      const routines = screen.getByRole('region', { name: 'Am längsten her' })
+      expect(routines.compareDocumentPosition(prompt) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+    })
+
+    it('stays away on this device after "Nicht jetzt"', async () => {
+      const user = userEvent.setup()
+      const { unmount } = mount()
+      await user.click(await screen.findByRole('button', { name: 'Nicht jetzt' }))
+      expect(screen.queryByText('Pausen-Benachrichtigung aktivieren')).not.toBeInTheDocument()
+      expect(localStorage.getItem(LATER)).not.toBeNull()
+      unmount()
+      usePush.setState(usePush.getInitialState(), true)
+      mount()
+      // The device answered "not subscribed" -- the prompt's own condition.
+      await waitFor(() => expect(usePush.getState().subscribed).toBe(false))
+      expect(screen.queryByText('Pausen-Benachrichtigung aktivieren')).not.toBeInTheDocument()
+    })
   })
 
   describe('the lead briefing', () => {
@@ -290,6 +354,19 @@ describe('StartPage', () => {
     mount()
     expect(screen.getByText(/Zuletzt vor/)).toHaveTextContent(
       'Zuletzt vor 2 Tagen · 2,5 Workouts pro Woche')
+  })
+
+  it('says the whole weeks the rate was taken over (G-012)', () => {
+    mount({ consistency: { sessions: 3, per_week: 1.5, days_since_last: 2, window_days: 14 } })
+    expect(screen.getByText(/Zuletzt vor/)).toHaveTextContent(
+      'Zuletzt vor 2 Tagen · 1,5 Workouts pro Woche (letzte 2 Wochen)')
+  })
+
+  it('says no rate under two weeks of history (G-012)', () => {
+    // One workout minutes into an account read "0,2 Workouts pro Woche
+    // (letzte 4 Wochen)" -- four weeks nobody had trained in.
+    mount({ consistency: { sessions: 1, per_week: null, days_since_last: 0, window_days: null } })
+    expect(document.querySelector('.start__pulse')).toHaveTextContent(/^Zuletzt heute$/)
   })
 
   it('says heute and gestern rather than counting days', () => {
@@ -490,6 +567,13 @@ describe('the first-run checklist', () => {
     expect(screen.getByRole('button', { name: /Freies Workout starten/ })).toBeInTheDocument()
     expect(screen.getByRole('heading', { name: 'Tonnage pro Woche 8 Wochen' })).toBeInTheDocument()
     expect(screen.getByRole('heading', { name: 'Fortschritt' })).toBeInTheDocument()
+  })
+
+  it('says no duration for a first workout under a minute (G-024)', () => {
+    mount({ ...once, onboarding: { ...once.onboarding!,
+      last: { ...once.onboarding!.last!, finished_at: '2026-08-10T16:00:30' } } })
+    const receipt = step(/Erstes Workout/).querySelector('.onb__d')!
+    expect(receipt).toHaveTextContent(/^Heute · 5 Übungen$/)
   })
 
   it('counts workouts once there is more than one', () => {

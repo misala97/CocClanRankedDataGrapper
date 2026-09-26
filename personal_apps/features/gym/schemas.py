@@ -822,6 +822,10 @@ class HistoryPayload(_Model):
     # Stated rather than taken from strftime('%a'), which follows the server's
     # locale and not the UI's.
     weekday_short: list[str]
+    # The lifter's running workout, if any: an empty Verlauf's way on goes
+    # back into it rather than offering "Workout starten" (G-003), which
+    # gym_start would have answered with that workout anyway.
+    running_session_id: int | None
     # Each listed exercise's search text by name -- the add sheet's, aliases
     # and all (exercises.search_text): once per exercise, not per row.
     exercise_search: dict[str, str]
@@ -838,9 +842,11 @@ class HistoryPayload(_Model):
 
 class Consistency(_Model):
     sessions: int
-    per_week: float
+    #: None under stats.RATE_MIN_DAYS of history (G-012); window_days is then
+    #: None too, else the whole weeks the rate was taken over.
+    per_week: float | None
     days_since_last: int | None
-    window_days: int
+    window_days: int | None
 
 
 class RoutineMemory(_Model):

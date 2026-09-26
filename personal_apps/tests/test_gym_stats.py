@@ -518,6 +518,35 @@ def test_muscle_group_volume_lists_untrained_catalogue_groups_at_zero():
     assert by_group['Bizeps']['under_trained'] is True
 
 
+def test_the_ungrouped_bucket_is_never_zu_wenig():
+    # One set of an exercise without a group was Start's only warning (G-018).
+    rows = [
+        perf([(80.0, 8)] * 8, muscle_group='Brust', started_at=NOW - dt.timedelta(days=3)),
+        perf([(20.0, 10)], muscle_group=None, started_at=NOW - dt.timedelta(days=3)),
+    ]
+    by_group = {bucket['group']: bucket
+                for bucket in stats.muscle_group_volume(rows, ['Brust'], NOW)}
+
+    assert by_group[stats.NO_GROUP_LABEL]['sets'] == 1
+    assert by_group[stats.NO_GROUP_LABEL]['under_trained'] is False
+    assert by_group['Brust']['under_trained'] is False
+
+
+def test_the_ungrouped_bucket_sets_no_peak_for_the_groups():
+    rows = [
+        perf([(20.0, 10)] * 20, muscle_group=None, started_at=NOW - dt.timedelta(days=3)),
+        perf([(80.0, 8)] * 3, muscle_group='Brust', started_at=NOW - dt.timedelta(days=3)),
+    ]
+    by_group = {bucket['group']: bucket
+                for bucket in stats.muscle_group_volume(rows, ['Brust', 'Waden'], NOW)}
+
+    # Measured against Brust's 3, not the stray 20.
+    assert by_group['Brust']['under_trained'] is False
+    assert by_group['Brust']['share'] == 1.0
+    assert by_group[stats.NO_GROUP_LABEL]['share'] == 1.0   # capped
+    assert by_group['Waden']['under_trained'] is True        # zero sets
+
+
 def test_muscle_group_volume_ignores_work_outside_the_window():
     rows = [perf([(80.0, 8)], muscle_group='Brust', started_at=NOW - dt.timedelta(days=40))]
     result = stats.muscle_group_volume(rows, ['Brust'], NOW)
@@ -607,8 +636,38 @@ def test_consistency_with_no_history_does_not_divide_by_zero():
     result = stats.consistency([], NOW)
 
     assert result['sessions'] == 0
-    assert result['per_week'] == 0.0
+    assert result['per_week'] is None
+    assert result['window_days'] is None
     assert result['days_since_last'] is None
+
+
+def test_consistency_says_no_rate_under_two_weeks_of_history():
+    # One workout minutes into an account read "0,2 Workouts pro Woche
+    # (letzte 4 Wochen)" (G-012).
+    result = stats.consistency([NOW - dt.timedelta(days=n) for n in (2, 13)], NOW)
+
+    assert result['per_week'] is None
+    assert result['window_days'] is None
+    assert result['days_since_last'] == 2
+    assert stats.consistency([NOW - dt.timedelta(minutes=30)], NOW)['per_week'] is None
+
+
+def test_consistency_takes_the_whole_weeks_since_the_first_workout():
+    # 20 days of history: two whole weeks, the two workouts in them.
+    result = stats.consistency([NOW - dt.timedelta(days=n) for n in (1, 3, 20)], NOW)
+    assert result['window_days'] == 14
+    assert result['sessions'] == 2
+    assert result['per_week'] == 1.0
+
+    # 21 days: three weeks, all three workouts.
+    result = stats.consistency([NOW - dt.timedelta(days=n) for n in (1, 3, 21)], NOW)
+    assert result['window_days'] == 21
+    assert result['per_week'] == 1.0
+
+    # Past four weeks the window stays four weeks.
+    result = stats.consistency([NOW - dt.timedelta(days=n) for n in (1, 3, 200)], NOW)
+    assert result['window_days'] == 28
+    assert result['per_week'] == 0.5
 
 
 def test_routine_memory_sorts_longest_ago_first_and_unused_last():

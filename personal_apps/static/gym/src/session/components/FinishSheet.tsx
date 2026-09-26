@@ -60,8 +60,10 @@ export function FinishSheet({
               {de(volume)}
               <small>kg bewegt</small>
             </span>
+            {/* Under a minute there is no duration worth saying (G-024). */}
             <span className="finish-sum__meta">
-              {`${setsDone} von ${setsTotal} Sätzen erledigt · ${minutes < 1 ? '< 1' : minutes} min`}
+              {`${setsDone} von ${setsTotal} Sätzen erledigt`
+                + (minutes >= 1 ? ` · ${minutes} min` : '')}
             </span>
             {open > 0 && (
               <p className="finish-sum__open">

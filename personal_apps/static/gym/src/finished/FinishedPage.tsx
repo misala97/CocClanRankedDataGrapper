@@ -1,5 +1,5 @@
 import {
-  Fragment, useId, useLayoutEffect, useRef, useState, type CSSProperties, type FormEvent,
+  Fragment, useEffect, useId, useLayoutEffect, useRef, useState, type CSSProperties, type FormEvent,
   type ReactNode,
 } from 'react'
 import { CsrfField } from '../csrf'
@@ -33,10 +33,27 @@ const sentenceEnd = (date: string) => (date.endsWith('.') ? date : `${date}.`)
 /** The comparison's sign: "+2", "−3" with a true minus, "±0". */
 const signedPct = (pct: number) => (pct > 0 ? `+${pct}` : pct < 0 ? `−${-pct}` : '±0')
 
-/** Floor-to-minutes alone prints "0 Minuten" for any real duration under a
- *  minute, and the wrong plural between 60 and 119 seconds. */
+/** " · 42 Minuten", the plural right between 60 and 119 seconds -- or
+ *  nothing under a minute, which is no duration worth saying (G-024):
+ *  imported workouts end where they start. */
 const minutes = (count: number) =>
-  count < 1 ? 'unter 1 Minute' : `${count} ${count === 1 ? 'Minute' : 'Minuten'}`
+  count < 1 ? '' : ` · ${count} ${count === 1 ? 'Minute' : 'Minuten'}`
+
+/** Verlauf as the lifter left it, its search and filter in the address
+ *  (G-043): the page they came from when that was Verlauf, else a plain one.
+ *  An installed app has no Back button; this page's own ways back are the
+ *  only ones. The app's Referrer-Policy (same-origin) keeps the address. */
+function verlaufAddress(): string {
+  try {
+    const from = new URL(document.referrer)
+    if (from.origin === window.location.origin && from.pathname === '/gym/verlauf') {
+      return `${from.pathname}${from.search}`
+    }
+  } catch {
+    // No referrer: the address was typed, or the page opened in a new tab.
+  }
+  return '/gym/verlauf'
+}
 
 /** 185 -> "3:05". */
 const clock = (seconds: number) =>
@@ -223,6 +240,22 @@ export function FinishedPage({ payload: initial }: { payload: FinishedPayload })
   const offerUndo = useUndo((s) => s.offer)
   // Sets hidden while their delete waits out the undo window.
   const [hiddenSetIds, setHiddenSetIds] = useState<number[]>([])
+  // The whole workout, while its delete waits out the window and goes out.
+  const [deleting, setDeleting] = useState(false)
+  const goneHeading = useRef<HTMLHeadingElement>(null)
+  const goneLine = useId()
+  const deleteButton = useRef<HTMLButtonElement>(null)
+  // Focus follows the delete: onto the name that says it is gone -- the
+  // button it was on went with the page -- and back onto "Workout löschen"
+  // when Rückgängig or a failure brings the page back, the toast's button
+  // gone in turn. Once per change: a re-render mid-window moves nothing.
+  const wasDeleting = useRef(false)
+  useEffect(() => {
+    if (deleting) goneHeading.current?.focus()
+    else if (wasDeleting.current) deleteButton.current?.focus()
+    wasDeleting.current = deleting
+  }, [deleting])
+  const verlauf = verlaufAddress()
 
   /** A set logged by mistake -- the double tap, the wrong exercise -- used to
    *  be permanent once the workout finished: this sheet could only retype
@@ -290,10 +323,35 @@ export function FinishedPage({ payload: initial }: { payload: FinishedPayload })
     && payload.exercises.every((entry) => entry.record !== null)
   const planned = payload.exercises.some((entry) => entry.next_sets !== null)
 
+  if (deleting) {
+    // The workout goes at once (G-044): it stayed on screen for the whole
+    // undo window, every action still live under "Workout gelöscht.". Its
+    // name is left, struck, beside the toast's Rückgängig; the page moves
+    // on to Verlauf when the delete lands, and comes back whole on
+    // Rückgängig or a failed delete. The strike is only drawn: the line
+    // under the name says it, and describes the heading focus lands on.
+    return (
+      <>
+        <header className="session-top">
+          <span className="session-top__name stack">
+            <h1 className="finished__name finished__name--gone" tabIndex={-1}
+              ref={goneHeading} aria-describedby={goneLine}>
+              {session.name ?? 'Workout'}
+            </h1>
+            <span className="finished__when" id={goneLine}>
+              Gelöscht. Gleich geht es weiter zum Verlauf.
+            </span>
+          </span>
+        </header>
+        <UndoToast />
+      </>
+    )
+  }
+
   return (
     <>
       <header className="session-top">
-        <a href="/gym/verlauf" className="session-top__back" aria-label="Zurück zum Verlauf">
+        <a href={verlauf} className="session-top__back" aria-label="Zurück zum Verlauf">
           <Icon name="back" />
         </a>
         {/* An <h1>, the page's title: the workout's name. The date is printed
@@ -302,7 +360,7 @@ export function FinishedPage({ payload: initial }: { payload: FinishedPayload })
         <span className="session-top__name stack">
           <h1 className="finished__name" style={{ viewTransitionName: 'session' }}>{session.name ?? 'Workout'}</h1>
           <span className="finished__when">
-            {`${weekday} ${shortDate(session.started_at)} · ${minutes(elapsed)}`}
+            {`${weekday} ${shortDate(session.started_at)}${minutes(elapsed)}`}
           </span>
           {/* The app ended it (D5): the duration stops at the last set, and
               this says why nobody tapped "Beenden". */}
@@ -486,7 +544,7 @@ export function FinishedPage({ payload: initial }: { payload: FinishedPayload })
       <div className="outs">
         {payload.just_finished
           ? <a href="/gym" className="btn btn--live">Zum Start</a>
-          : <a href="/gym/verlauf" className="btn btn--live">Zurück zum Verlauf</a>}
+          : <a href={verlauf} className="btn btn--live">Zurück zum Verlauf</a>}
       </div>
 
       {/* Deleting a workout is a rare correction, not the way out of this
@@ -525,19 +583,25 @@ export function FinishedPage({ payload: initial }: { payload: FinishedPayload })
             the background (G-062), since the page is still there when the
             lifter comes back. Replaced, not pushed: Back would land on a
             workout that no longer exists. */}
-        <button type="button" className="quiet-acts__btn quiet-acts__btn--danger"
-          onClick={() => useUndo.getState().offer({
-            label: 'Workout gelöscht.',
-            commit: (keepalive) => {
-              postForm<{ deleted: boolean }>(
-                `/gym/session/${session.id}/delete`, {}, { keepalive })
-                .then(() => { leavePage(() => { window.location.replace('/gym/verlauf') }) })
-                .catch((error) => setSaveError(error instanceof MutationFailed
-                  ? error.germanMessage
-                  : 'Löschen fehlgeschlagen.'))
-            },
-            undo: () => {},
-          })}>
+        <button type="button" className="quiet-acts__btn quiet-acts__btn--danger" ref={deleteButton}
+          onClick={() => {
+            setDeleting(true)
+            offerUndo({
+              label: 'Workout gelöscht.',
+              commit: (keepalive) => {
+                postForm<{ deleted: boolean }>(
+                  `/gym/session/${session.id}/delete`, {}, { keepalive })
+                  .then(() => { leavePage(() => { window.location.replace(verlauf) }) })
+                  .catch((error: unknown) => {
+                    setDeleting(false)
+                    setSaveError(error instanceof MutationFailed
+                      ? error.germanMessage
+                      : 'Löschen fehlgeschlagen.')
+                  })
+              },
+              undo: () => setDeleting(false),
+            })
+          }}>
           Workout löschen
         </button>
       </div>

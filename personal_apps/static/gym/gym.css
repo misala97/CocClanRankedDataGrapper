@@ -53,6 +53,9 @@
    ============================================================================ */
 
 :root {
+  /* Native controls, scrollbars and form widgets follow the theme: a white
+     native checkbox glared on the dark screens (G-113). */
+  color-scheme: light;
   /* ---- colour: the token contract (PRODUCT.md 4.3) ---- */
   --ground:    #F3EAF7;   /* the committed colour, not a tinted neutral */
   --chassis:   #FFFFFF;
@@ -100,6 +103,7 @@
 
 @media (prefers-color-scheme: dark) {
   :root {
+    color-scheme: dark;
     --ground:    #241132;
     --chassis:   #371B49;
     --raised:    #1B0B26;
@@ -144,6 +148,7 @@
 
 /* An explicit choice wins over the system, in both directions. */
 html[data-theme="light"] {
+  color-scheme: light;
   --ground:#F3EAF7; --chassis:#FFFFFF; --raised:#EEE5F3;
   --edge:#DACAE3; --edge-hi:#C2ABCF;
   --ink:#291238; --dim:#634674; --unlit:#6C537E;
@@ -158,6 +163,7 @@ html[data-theme="light"] {
   --art-plate:#EEE5F3; --art-dim:none;
 }
 html[data-theme="dark"] {
+  color-scheme: dark;
   --ground:#241132; --chassis:#371B49; --raised:#1B0B26;
   --edge:#472B5A; --edge-hi:#634077;
   --ink:#F8F1FB; --dim:#C5ACD2; --unlit:#9E86AD;
@@ -221,6 +227,11 @@ html[data-theme="dark"] {
   /* ---- targets: the floor, and the primary confirm ---- */
   --tap: 44px;
   --tap-primary: 64px;
+
+  /* ---- focus: the one ring (G-113), see :focus-visible below. Each
+     control says only where it sits (outline-offset); its shape is the
+     control's own. ---- */
+  --focus-ring: 2px solid var(--ink);
 
   --edge-lit:   inset 0 1px 0 rgba(255, 255, 255, 0.05);
   --edge-drop:  var(--lift);
@@ -293,9 +304,25 @@ svg { display: block; }
    moment they took focus, and the ring traced that new shape instead of the
    one the user was looking at. */
 :where(a, button, input, select, textarea, summary, [tabindex]):focus-visible {
-  outline: 2px solid var(--ink);
+  outline: var(--focus-ring);
   outline-offset: 2px;
 }
+/* Native controls in the app's own ink (G-113; color-scheme on :root does
+   the rest). The search fields' clear button was a blue "×" in both themes:
+   an ink cross here, and only once there is something to clear -- Chromium
+   kept its room in an empty field, and beside Verlauf's toggle that room cut
+   "Übung…" to "Übung..". A tap still clears the field and fires input. The
+   cross is drawn at 16 px in a 24 px box: the smallest target WCAG 2.2
+   allows (2.5.8). */
+input[type="search"]::-webkit-search-decoration { -webkit-appearance: none; }
+input[type="search"]::-webkit-search-cancel-button {
+  -webkit-appearance: none; appearance: none;
+  inline-size: 24px; block-size: 24px; margin-inline-start: var(--sp-2);
+  background-color: var(--dim); cursor: pointer;
+  -webkit-mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2.5' stroke-linecap='round'%3E%3Cpath d='M6 6l12 12M18 6 6 18'/%3E%3C/svg%3E") center / 16px 16px no-repeat;
+  mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2.5' stroke-linecap='round'%3E%3Cpath d='M6 6l12 12M18 6 6 18'/%3E%3C/svg%3E") center / 16px 16px no-repeat;
+}
+input[type="search"]:placeholder-shown::-webkit-search-cancel-button { display: none; }
 /* On mobile, <body> is a column flex container (below) -- and per the flex
    spec, an item with an auto cross-axis margin (margin-inline: auto, here
    for desktop centering) is exempt from the default stretch-to-fill sizing.
@@ -1041,6 +1068,19 @@ body.is-focus .tabbar, body.is-focus .nav-footer, body.is-focus .topbar { displa
   max-inline-size: 52ch; margin-inline: auto; text-wrap: pretty;
 }
 .empty .label { display: block; margin-bottom: var(--sp-2); color: var(--unlit); }
+/* The one empty state for a page with nothing to show (G-003): a heading,
+   one line, one way on. Verlauf before its first workout, and the gym 404
+   page (G-081). The way on is the screen's one live control. */
+.void {
+  margin: var(--sp-10) auto 0; padding-inline: var(--sp-4);
+  max-inline-size: 36rem; text-align: center;
+}
+.void__h { font-size: var(--t-name); font-weight: var(--w-bold); text-wrap: balance; }
+.void__line {
+  margin-top: var(--sp-2); font-size: var(--t-sm); line-height: 1.5; color: var(--dim);
+  text-wrap: pretty;
+}
+.void__go { margin-top: var(--sp-5); min-block-size: var(--tap-primary); }
 /* Over rows a search found only a typo away (NearMisses.tsx): Übungen,
    Verlauf and the add sheet. A plain line, not an empty state -- the rows
    are right under it. */
@@ -1092,7 +1132,24 @@ body.is-focus .tabbar, body.is-focus .nav-footer, body.is-focus .topbar { displa
   gap: var(--sp-2) var(--sp-3);
   min-block-size: var(--tap);
 }
-.row + .row { margin-top: var(--sp-3); padding-top: var(--sp-3); border-top: 1px solid var(--edge); }
+/* The divider is a hairline of its own, not the row's border-top (G-111): a
+   row rounded for its tap wash (a.row) or its highlight (the queue's, the
+   partner sheet's) bent a shared border-top into a curve at both ends. The
+   extra 1px is the border's room, kept. */
+.row + .row { position: relative; margin-top: var(--sp-3); padding-top: calc(var(--sp-3) + 1px); }
+.row + .row::before {
+  content: ""; position: absolute; inset-inline: 0; inset-block-start: 0;
+  block-size: 1px; background: var(--edge);
+}
+/* A row filled as a card of its own -- the queue's NOW row, the partner
+   sheet's current one, every queue row while reordering, a link row under
+   the pointer -- takes no divider above or below: its fill parts it from its
+   neighbours, and a straight hairline over a rounded fill stuck out past
+   both corners. */
+.queue__row.is-now::before, .queue__row.is-now + .row::before,
+.psheet__row.is-cur::before, .psheet__row.is-cur + .row::before,
+.queue.is-reordering .queue__row::before,
+a.row:hover::before, a.row:hover + .row::before { content: none; }
 /* An author `display` beats the UA sheet's `[hidden] { display: none }`, so a
    flex row ignores the attribute unless told otherwise. Verlauf's search sets
    `hidden` to filter, and without this it set it on rows that stayed fully
@@ -1909,7 +1966,7 @@ button.pic { cursor: zoom-in; }
 .set.is-waiting { outline: 1.5px dashed currentColor; outline-offset: -5px; }
 /* The dash is an outline too, and outranks the site-wide :where() ring: a
    keyboard landing on a waiting chip saw no focus at all (B6 review). */
-.set.is-waiting:focus-visible { outline: 2px solid var(--ink); outline-offset: 2px; }
+.set.is-waiting:focus-visible { outline: var(--focus-ring); outline-offset: 2px; }
 /* The tap itself, before the network answers. A chip is a submit button whose
    result arrives one round trip later, and on gym wifi that round trip is
    visible -- so the press has to be answered locally or the screen reads as
@@ -2314,6 +2371,12 @@ button.pic { cursor: zoom-in; }
 .notify-prompt__btn small {
   display: block; margin-top: 2px;
   font-size: var(--t-meta); color: var(--dim); line-height: 1.45;
+}
+/* "Nicht jetzt" (G-016): quiet, under the card's end, a full tap target. */
+.notify-prompt__later {
+  display: flex; align-items: center; margin-inline-start: auto;
+  min-block-size: var(--tap); padding-inline: var(--sp-3);
+  font-size: var(--t-sm); font-weight: var(--w-semi); color: var(--dim);
 }
 
 .flashes { margin: var(--sp-3) var(--sp-4) 0; display: flex; flex-direction: column; gap: var(--sp-2); }
@@ -2765,6 +2828,8 @@ summary.sheet-row::-webkit-details-marker { display: none; }
   font-family: var(--font-display); font-size: var(--t-name); font-weight: var(--w-bold);
   letter-spacing: var(--track-name); line-height: 1.2; text-wrap: balance;
 }
+/* Deleted, the window still open (G-044): the name struck, nothing else. */
+.finished__name--gone { text-decoration: line-through; color: var(--dim); }
 .finished .session-top { align-items: flex-start; }
 .finished .session-top__back { margin-top: -6px; }
 /* Deload is a label, not a state (4.2): .vtag--deload's outline, at the 13px
@@ -3235,14 +3300,8 @@ summary.sheet-row::-webkit-details-marker { display: none; }
 }
 .sec__kick-n { font-size: var(--t-sm); font-weight: var(--w-semi); color: var(--unlit); }
 
-/* A list of link rows. A link row is rounded for its tap wash, which bent a
-   shared border-top into a curve at both ends: a straight hairline instead. */
+/* A list of link rows (their straight dividers: .row + .row). */
 .rlist { margin-top: var(--sp-2); }
-.rlist > .row + .row { position: relative; border-top: 0; padding-top: calc(var(--sp-3) + 1px); }
-.rlist > .row + .row::before {
-  content: ""; position: absolute; inset-inline: 0; inset-block-start: 0;
-  block-size: 1px; background: var(--edge);
-}
 .rlist .row__meta { color: var(--dim); }
 .rlist__more { gap: var(--sp-1); margin-top: var(--sp-1); }
 .rlist__more .icon { inline-size: 14px; block-size: 14px; }
@@ -3553,7 +3612,7 @@ button.partner__hit:active { background: var(--raised); }
   transition: background var(--dur-1) var(--ease);
 }
 .mit:active { background: var(--raised); }
-.mit:focus-visible { outline: 2px solid var(--ink); outline-offset: -2px; }
+.mit:focus-visible { outline: var(--focus-ring); outline-offset: -2px; }
 .mit .partner__tile { inline-size: 28px; block-size: 28px; font-size: var(--t-meta); }
 /* the name is the one part that can run long: one line, ellipsised -- the
    sheet says it in full */
@@ -3700,7 +3759,7 @@ button.partner__hit:active { background: var(--raised); }
   -webkit-tap-highlight-color: transparent;
 }
 a.mindex__mo:active { background: var(--raised); }
-.mindex__mo:focus-visible { outline: 2px solid var(--ink); outline-offset: 2px; }
+.mindex__mo:focus-visible { outline: var(--focus-ring); outline-offset: 2px; }
 /* A fixed plot, so every bar stands on the same baseline and the count can
    ride on the tallest one. */
 .mindex__plot {
@@ -3756,11 +3815,9 @@ a.mindex__mo:active { background: var(--raised); }
 
 /* ---- search and the one filter ---- */
 .verlauf__find { display: flex; gap: var(--sp-2); margin: var(--sp-4) var(--sp-4) 0; }
-.verlauf__find .searchbar { flex: 1; min-inline-size: 0; margin: 0; padding-inline: var(--sp-3); gap: var(--sp-2); }
-/* Chromium keeps the clear button's room even while the field is empty, and
-   next to the toggle that room cut "Übung…" to "Übung..": it only needs to
-   exist once there is something to clear. */
-.verlauf__find .searchbar__input:placeholder-shown::-webkit-search-cancel-button { display: none; }
+.verlauf__find .searchbar {
+  flex: 1; min-inline-size: 0; margin: 0; --sb-pad: var(--sp-3); --sb-gap: var(--sp-2);
+}
 /* A toggle, as tall as the field beside it. Pressed it fills with the record
    hue and the dot becomes a tick: the state reads by shape as well as colour. */
 .verlauf__only {
@@ -3771,7 +3828,7 @@ a.mindex__mo:active { background: var(--raised); }
 }
 .verlauf__only[aria-pressed="true"] { background: var(--record); color: var(--on-record); }
 .verlauf__only .icon { inline-size: 16px; block-size: 16px; stroke-width: 2.5; }
-.verlauf__only:focus-visible { outline: 2px solid var(--ink); outline-offset: 2px; }
+.verlauf__only:focus-visible { outline: var(--focus-ring); outline-offset: 2px; }
 /* The h1's count, moved: it only says something while search or the filter
    narrows the list, so it only shows then (aria-live, as before). */
 .verlauf__hits {
@@ -3789,31 +3846,40 @@ a.mindex__mo:active { background: var(--raised); }
   font-size: var(--t-sm); font-weight: var(--w-bold); color: var(--live-ink);
 }
 
+/* The input IS the pill, the magnifier drawn over its start: its focus ring
+   then traces the pill (G-021). Beside the icon, the input's ring was a
+   rectangle that began after the magnifier, the query flush against it.
+   --sb-pad is the pill's inset, --sb-gap the room between icon and text. */
 .searchbar {
+  --sb-pad: var(--sp-4); --sb-gap: var(--sp-3);
+  position: relative;
   margin: var(--sp-4) var(--sp-4) 0;
-  display: flex; align-items: center; gap: var(--sp-3);
-  min-block-size: 52px; padding-inline: var(--sp-4);
+  display: flex; align-items: center;
+  min-block-size: 52px;
   border-radius: var(--r-control); background: var(--chassis); color: var(--unlit);
 }
-.searchbar svg { inline-size: 19px; block-size: 19px; flex: none; }
+.searchbar svg {
+  position: absolute; inset-inline-start: var(--sb-pad); inset-block-start: 50%;
+  translate: 0 -50%; inline-size: 19px; block-size: 19px; pointer-events: none;
+}
 /* The input has to fill the pill it is drawn inside. At its intrinsic height
    the real hit area was 295x24 in a 358x52 control -- two thirds of the field
    was dead, on the one control this page calls permanent furniture. */
 .searchbar__input {
   flex: 1; min-inline-size: 0; align-self: stretch; min-block-size: var(--tap);
-  border: 0; background: none;
+  padding-inline: calc(var(--sb-pad) + 19px + var(--sb-gap)) var(--sb-pad);
+  border: 0; border-radius: inherit; background: none;
   font-size: var(--t-body); color: var(--ink);
 }
 .searchbar__input::placeholder { color: var(--unlit); }
-/* The ring goes on the INPUT, not on its wrapper. As :focus-within on the
-   pill it also fired on pointer focus and stayed lit for the whole typing
-   session, and an automated pass reading the focused element's own outline
-   saw none at all. --ink, because focus is orthogonal to the five-state model
-   and never borrows a semantic hue (see the note at the top of this file). */
+/* The ring is the INPUT's own, and the input is the whole pill (the icon
+   sits on it): drawn by :focus-within on a wrapper, a pass reading the
+   focused element's own outline saw none. A text field matches
+   :focus-visible on any focus, a tap included -- it takes keys -- so the
+   ring shows while typing, as a field's should. Inside the pill's edge, in
+   its radius. */
 .searchbar__input:focus { outline: none; }
-.searchbar__input:focus-visible {
-  outline: 2px solid var(--ink); outline-offset: -2px; border-radius: var(--r-control);
-}
+.searchbar__input:focus-visible { outline: var(--focus-ring); outline-offset: -2px; }
 
 /* ---- export mode ---- */
 .export {
@@ -3952,7 +4018,7 @@ a.mindex__mo:active { background: var(--raised); }
 .pick input:checked + .pick__box {
   background: var(--done); box-shadow: none; color: var(--on-done);
 }
-.pick input:focus-visible + .pick__box { outline: 2px solid var(--ink); outline-offset: 2px; }
+.pick input:focus-visible + .pick__box { outline: var(--focus-ring); outline-offset: 2px; }
 
 /* Three lines need three levels, or they fight. The roster is the least
    important thing in the row -- it says which workout this was, which the name
@@ -3998,7 +4064,7 @@ a.mindex__mo:active { background: var(--raised); }
   min-block-size: var(--tap); padding-block: var(--sp-2); color: inherit; text-decoration: none;
   -webkit-tap-highlight-color: transparent;
 }
-.recs__item:focus-visible { outline: 2px solid var(--ink); outline-offset: 2px; border-radius: var(--r-inset); }
+.recs__item:focus-visible { outline: var(--focus-ring); outline-offset: 2px; border-radius: var(--r-inset); }
 .recs > li + li > .recs__item::before {
   content: ""; position: absolute; inset-inline: 0; inset-block-start: 0; block-size: 1px; background: var(--edge);
 }
@@ -4386,17 +4452,10 @@ a.nie-move .nie-chev { align-self: center; }
 .exread__l2 { color: var(--dim); }
 .exread__hint { font-size: var(--t-meta); color: var(--dim); }
 
-/* Every workout. The rows are links, and a link row is rounded for its tap
-   wash -- which bent the shared border-top into a curve at both ends. The
-   divider is a straight hairline of its own instead. */
+/* Every workout, one link row each (their straight dividers: .row + .row). */
 .exlog { margin-top: var(--sp-3); }
 .exlog .row__meta { font-variant-numeric: tabular-nums; }
 .exlog .e1rm { font-size: var(--t-meta); }
-.exlog > .row + .row { position: relative; border-top: 0; padding-top: calc(var(--sp-3) + 1px); }
-.exlog > .row + .row::before {
-  content: ""; position: absolute; inset-inline: 0; inset-block-start: 0;
-  block-size: 1px; background: var(--edge);
-}
 .exlog__more { gap: var(--sp-1); margin-top: var(--sp-1); }
 .exlog__more .icon { inline-size: 14px; block-size: 14px; }
 .exnote { margin: var(--sp-2) 0 0; max-inline-size: 60ch; font-size: var(--t-meta); line-height: 1.5; color: var(--unlit); text-wrap: pretty; }

@@ -49,8 +49,12 @@
 
    The clock was the strip's only unique contribution there, so it moved into
    the card (see heute.html). _base.html's has-resume condition mirrors this
-   one exactly; change both or neither. #}
-{% if gym_active_session and request.endpoint not in ('gym.session_detail', 'gym.gym_heute') %}
+   one exactly; change both or neither.
+
+   A 404 page keeps the strip whatever its endpoint (not_found): the address
+   of a workout deleted since is the session's own, and the one running is
+   then nowhere else on the page. #}
+{% if gym_active_session and (not_found or request.endpoint not in ('gym.session_detail', 'gym.gym_heute')) %}
 {# "Current exercise": the one the live screen has live, by the screen's own
    rule (workout._live_exercise_name) -- a copy of it here named another
    exercise than the screen for a partner (walkthrough G-143). #}

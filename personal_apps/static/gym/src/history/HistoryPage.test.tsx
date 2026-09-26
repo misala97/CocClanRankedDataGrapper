@@ -3,7 +3,7 @@ import userEvent from '@testing-library/user-event'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { HistoryPage, tonnes } from './HistoryPage'
 import type { HistoryEntry, HistoryIndexMonth, HistoryPayload, HistoryRecord } from './types'
-import { recordsInAddress, useHistoryUi, withRecords } from './store'
+import { queryInAddress, recordsInAddress, useHistoryUi, withQuery, withRecords } from './store'
 import { useSheets } from '../session/stores'
 
 beforeEach(() => {
@@ -22,7 +22,7 @@ const payload = (entries: HistoryEntry[]): HistoryPayload => ({
   months: [{ label: 'September 2026', slug: '2026-09', entries, volume: 4200, records: 0 }],
   total: entries.length, gap_threshold: 14,
   summary: null, weeks: null, index: [], biggest_session_id: null,
-  weekday_short: ['Mo', 'Di', 'Mi', 'Do', 'Fr', 'Sa', 'So'],
+  weekday_short: ['Mo', 'Di', 'Mi', 'Do', 'Fr', 'Sa', 'So'], running_session_id: null,
   exercise_search: {
     Bankdrücken: 'bankdrucken langhantel\nbench press\nflachbankdrucken', Dips: 'dips maschine',
   },
@@ -39,6 +39,12 @@ describe('HistoryPage', () => {
     render(<HistoryPage payload={payload([entry()])} />)
     expect(screen.getByText(/52 min$/)).toBeInTheDocument()
     expect(screen.queryByText(/automatisch beendet/)).not.toBeInTheDocument()
+  })
+
+  it('says no duration for a workout under a minute (G-024)', () => {
+    // Imported rows end where they start: "< 1 min" beside 7.8 t.
+    render(<HistoryPage payload={payload([entry({ finished_at: '2026-09-23T16:00:20' })])} />)
+    expect(document.querySelector('.row__meta')).toHaveTextContent(/^Mi · 23\.09\. · \d\d:00$/)
   })
 })
 
@@ -476,6 +482,70 @@ describe('the filter in the address', () => {
     expect(withRecords('?x=1', true)).toBe('?x=1&rekorde')
     expect(withRecords('?rekorde&x=1', false)).toBe('?x=1')
     expect(withRecords('?rekorde', false)).toBe('')
+    expect(withRecords('?q=bank', true)).toBe('?q=bank&rekorde')
+  })
+})
+
+describe('the search in the address (G-043)', () => {
+  it('reads it', () => {
+    expect(queryInAddress('?q=bank')).toBe('bank')
+    expect(queryInAddress('?rekorde&q=rudern%20t-bar')).toBe('rudern t-bar')
+    expect(queryInAddress('?rekorde')).toBe('')
+  })
+
+  it('writes it beside the filter, and drops it when blank', () => {
+    expect(withQuery('', 'bank')).toBe('?q=bank')
+    expect(withQuery('?rekorde', 'rudern t-bar')).toBe('?q=rudern%20t-bar&rekorde')
+    expect(withQuery('?q=bank&rekorde', '')).toBe('?rekorde')
+    expect(withQuery('?q=bank', '  ')).toBe('')
+  })
+
+  it('keeps what is typed in the address, the filter with it', async () => {
+    // Back, forward and a reload lost the search: it lived in memory only.
+    const user = userEvent.setup()
+    render(<HistoryPage payload={payload([entry()])} />)
+    await user.click(screen.getByRole('button', { name: /Nur Rekorde/ }))
+    await user.type(screen.getByRole('searchbox'), 'push')
+    expect(window.location.search).toBe('?q=push&rekorde')
+    await user.clear(screen.getByRole('searchbox'))
+    expect(window.location.search).toBe('?rekorde')
+  })
+
+  it('starts from the search the address holds', async () => {
+    window.history.replaceState(null, '', '/gym/verlauf?q=bank&rekorde')
+    vi.resetModules()
+    const fresh = await import('./store')
+    expect(fresh.useHistoryUi.getState().query).toBe('bank')
+    expect(fresh.useHistoryUi.getState().onlyRecords).toBe(true)
+  })
+})
+
+describe('an empty Verlauf (G-003)', () => {
+  const empty = (running: number | null): HistoryPayload => ({
+    ...payload([]), months: [], total: 0, running_session_id: running,
+  })
+
+  it('starts a workout from here, with a heading and one line', () => {
+    // A 17 px link sent the lifter to Start to begin one there.
+    render(<HistoryPage payload={empty(null)} />)
+    expect(screen.getByRole('heading', { name: 'Noch keine beendeten Workouts' }))
+      .toBeInTheDocument()
+    const form = screen.getByRole('button', { name: 'Workout starten' }).closest('form')!
+    expect(form).toHaveAttribute('action', '/gym/start')
+    expect(form).toHaveAttribute('method', 'post')
+    expect(form.querySelector('[name=csrf_token]')).not.toBeNull()
+    expect(form.querySelector('[name=template_id]')).toBeNull()
+    expect(screen.queryAllByRole('link')).toHaveLength(0)
+  })
+
+  it('goes back into the workout that is running instead', () => {
+    // gym_start answers with the running workout anyway: "Workout starten"
+    // would have said one thing and done another.
+    render(<HistoryPage payload={empty(58)} />)
+    expect(document.querySelector('.void__line'))
+      .toHaveTextContent('Dein erstes läuft gerade. Sobald es beendet ist, steht es hier.')
+    expect(screen.getByRole('link', { name: 'Weiter' })).toHaveAttribute('href', '/gym/session/58')
+    expect(screen.queryByRole('button', { name: 'Workout starten' })).not.toBeInTheDocument()
   })
 })
 

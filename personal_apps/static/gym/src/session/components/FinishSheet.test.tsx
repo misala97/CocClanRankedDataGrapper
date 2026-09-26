@@ -25,6 +25,19 @@ describe('FinishSheet', () => {
     expect(document.querySelector('.finish-sum__vol')?.firstChild?.textContent).toBe('1.234')
   })
 
+  it('says no duration under a minute (G-024)', () => {
+    // Naive UTC, as the payload carries it.
+    const ago = (seconds: number) => new Date(Date.now() - seconds * 1000).toISOString().slice(0, 19)
+    mount({ startedAt: ago(20) })
+    expect(document.querySelector('.finish-sum__meta')).toHaveTextContent(/^3 von 4 Sätzen erledigt$/)
+  })
+
+  it('says the minutes once there is one', () => {
+    const ago = (seconds: number) => new Date(Date.now() - seconds * 1000).toISOString().slice(0, 19)
+    mount({ startedAt: ago(5 * 60 + 10) })
+    expect(document.querySelector('.finish-sum__meta')).toHaveTextContent(/^3 von 4 Sätzen erledigt · 5 min$/)
+  })
+
   it('finishes a workout with sets in it, and offers no discard', async () => {
     const user = userEvent.setup()
     const props = mount()

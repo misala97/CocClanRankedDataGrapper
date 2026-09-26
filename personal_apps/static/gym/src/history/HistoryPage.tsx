@@ -4,6 +4,7 @@ import type {
 } from './types'
 import { useHistoryUi } from './store'
 import { Icon } from '../components/Icon'
+import { CsrfField } from '../csrf'
 import { instant, kg, kg1, localParts, roundTo, shortDate, signedKg1, volume as de } from '../format'
 import { apart, find, fold, isQuery, mentions } from '../search'
 import { NearMisses } from '../components/NearMisses'
@@ -223,11 +224,14 @@ function Row({ entry, weekdayShort, hit, biggest, onlyRecords, onPartner }: {
           onClick={morphFrom('session')}>
           <span className="row__name row__name--strong">{name}</span>
           {/* Weekday first: it is the one time dimension a training log is read
-              for, and the band above already states the month. Sub-minute
-              sessions printed "0 min" on 10 of 27 rows. A workout the app ended
-              itself says so: its end is its last set, not a "Beenden" (D5). */}
+              for, and the band above already states the month. A workout under
+              a minute has no duration worth saying (G-024): imported rows end
+              where they start, and "< 1 min" beside 7.8 t read as a fact. A
+              workout the app ended itself says so: its end is its last set,
+              not a "Beenden" (D5). */}
           <span className="row__meta">
-            {`${weekday} · ${pad(started.day)}.${pad(started.month)}. · ${pad(started.hour)}:${pad(started.minute)} · ${minutes < 1 ? '< 1' : minutes} min`
+            {`${weekday} · ${pad(started.day)}.${pad(started.month)}. · ${pad(started.hour)}:${pad(started.minute)}`
+              + (minutes >= 1 ? ` · ${minutes} min` : '')
               + (entry.auto_finished ? ' · automatisch beendet' : '')}
           </span>
           {/* The roster is clipped on essentially every row. While a search
@@ -498,10 +502,28 @@ export function HistoryPage({ payload }: { payload: HistoryPayload }) {
           </div>
         </>
       ) : (
-        <p className="empty">
-          Noch keine abgeschlossenen Workouts.<br />
-          <a href="/gym">Auf Start ein Workout beginnen</a>
-        </p>
+        // The one empty state (G-003; the gym 404 page is the other): a
+        // heading, one line, one way on -- straight into a workout, where a
+        // 17 px link sent the lifter to Start to begin one. Back into the
+        // running one if there is one: gym_start answers with it anyway.
+        <section className="void" aria-labelledby="void-h">
+          <h2 className="void__h" id="void-h">Noch keine beendeten Workouts</h2>
+          {payload.running_session_id !== null ? (
+            <>
+              <p className="void__line">Dein erstes läuft gerade. Sobald es beendet ist, steht es hier.</p>
+              <a className="btn btn--live void__go"
+                href={`/gym/session/${payload.running_session_id}`}>Weiter</a>
+            </>
+          ) : (
+            <>
+              <p className="void__line">Jedes beendete Workout steht hier, das neueste oben.</p>
+              <form method="post" action="/gym/start">
+                <CsrfField />
+                <button type="submit" className="btn btn--live void__go">Workout starten</button>
+              </form>
+            </>
+          )}
+        </section>
       )}
       <PartnerSheet target={partnerShown} dated />
     </>
