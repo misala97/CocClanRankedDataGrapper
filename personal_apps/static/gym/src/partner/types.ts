@@ -80,7 +80,5 @@ export interface PartnerRef {
 /** What the live screen polls. */
 export interface SyncPayload {
   version: number
-  /** Inert since I5 (a page from before it stops polling on false). */
-  shared: boolean
   partner_links: PartnerLink[]
 }

@@ -75,7 +75,11 @@ def _settle_an_abandoned_workout_first():
     if (request.method == 'GET' and request.path.startswith('/gym')
             and current_user_id() is not None):
         # Kept for the page and the nav (helpers._page_active_session).
-        g.gym_active_session = helpers._get_active_session()
+        active = helpers._get_active_session()
+        # A partner nobody came back to ends the link here as well.
+        if active is not None:
+            active = helpers._end_stale_partner_links(active)
+        g.gym_active_session = active
 
 
 @gym_bp.before_request
@@ -149,9 +153,9 @@ _NOT_FOUND = tuple((re.compile(pattern), *said) for pattern, *said in (
     (r'/gym/exercises/', 'Diese Übung gibt es nicht.',
      'Die Adresse führt zu keiner Übung.', '/gym/uebungen', 'Zu den Übungen'),
     # Also an invite answered already: Back from the workout it was accepted
-    # into lands on its confirm page again.
+    # into lands on its confirm page again. Or taken back by the leader.
     (r'/gym/shared/', 'Diese Einladung gilt nicht mehr.',
-     'Angenommen, abgelehnt oder das Workout ist vorbei.', '/gym', 'Zum Start'),
+     'Angenommen, abgelehnt, zurückgezogen oder das Workout ist vorbei.', '/gym', 'Zum Start'),
     (r'/gym', 'Diese Seite gibt es nicht.',
      'Die Adresse führt zu keiner Seite des Gym Trackers.', '/gym', 'Zum Start'),
 ))

@@ -188,11 +188,6 @@ export interface Partner {
   username: string
 }
 
-export interface PartnerStatus {
-  username: string
-  accepted: boolean
-}
-
 /** One tick per set in the whole workout, in order. Sets belonging to a
  *  skipped exercise are omitted entirely, so this is shorter than the sum of
  *  every exercise's sets. */
@@ -268,8 +263,6 @@ export interface SessionDetailPayload {
   deload_default_pct: number
 
   partners: Partner[]
-  /** Inert since I5 (partner_links replaced it); nothing here reads it. */
-  partner_status: PartnerStatus[]
   /** The training partners' lines (D14). Only the page and detail.json send
    *  them, and only the page's are read: usePartnerSync takes them as its
    *  first answer and keeps its own from sync.json after that. */

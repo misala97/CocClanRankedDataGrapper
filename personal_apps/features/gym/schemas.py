@@ -454,13 +454,6 @@ class VariantRef(_Model):
     per_side: bool
 
 
-class PartnerStatus(_Model):
-    """Inert since I5 (partner_links replaced it): kept one deploy for a page
-    open across it, whose sheet still reads it off every answer."""
-    username: str
-    accepted: bool
-
-
 class Partner(_Model):
     id: int
     username: str
@@ -549,8 +542,6 @@ class SyncPayload(_Model):
     """What the live screen polls: the follower's structure version, and
     every page's partner lines."""
     version: int
-    #: Inert since I5: a page open across the deploy stops polling on False.
-    shared: bool
     partner_links: list[PartnerLink]
 
 
@@ -630,7 +621,6 @@ class SessionDetailPayload(_Model):
     deload_default_pct: int
 
     partners: list[Partner]
-    partner_status: list[PartnerStatus]
     #: None in a write's answer, which leaves it out: the line keeps what the
     #: page and sync.json sent (session/usePartnerSync.ts).
     partner_links: list[PartnerLink] | None

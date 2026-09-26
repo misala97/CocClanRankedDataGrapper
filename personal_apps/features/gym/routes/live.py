@@ -5,11 +5,11 @@ A leaf module: it imports no other routes module. The live screen
 the one rule, and partner_view is imported BY workout -- so the rule lives
 here, where both can import it. Moved verbatim from workout.py (I5).
 """
-import datetime as dt
-
 from sqlalchemy.orm import joinedload, selectinload
 
 from models import SessionExercise
+
+from ..sharing import started_row
 
 
 def _load_rows(session_):
@@ -65,15 +65,9 @@ def _live_context(session_, keep_started=False):
         # lift they never touched. Alone, or leading, the rule below is left
         # as it was: there the drag is the lifter's own instruction, and
         # pulling another exercise above a started one is how you step away
-        # from a busy machine. Most recently logged wins if there are two.
-        started = [
-            se for se in visible_exercises
-            if not se.skipped
-            and any(s.completed for s in se.sets)
-            and not all(s.completed for s in se.sets)]
-        if started:
-            live_se = max(started, key=lambda se: max(
-                (s.completed_at or dt.datetime.min) for s in se.sets if s.completed))
+        # from a busy machine. Most recently logged wins if there are two
+        # (sharing.started_row, which the link's end hands over).
+        live_se = started_row(visible_exercises)
     if live_se is None:
         for se in visible_exercises:
             done = sum(1 for s in se.sets if s.completed)

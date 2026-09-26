@@ -145,8 +145,6 @@ def _stabilise(payload):
     names = {p['username']: f'Partner {i}' for i, p in enumerate(payload['partners'], start=1)}
     payload['partners'] = [{'id': 1000 + i, 'username': f'Partner {i}'}
                            for i, _ in enumerate(payload['partners'], start=1)]
-    payload['partner_status'] = [{**s, 'username': names.get(s['username'], 'Partner')}
-                                 for s in payload['partner_status']]
     payload['partner_links'] = [{**link, 'username': names.get(link['username'], 'Partner')}
                                 for link in payload['partner_links'] or []]
     return payload

@@ -1,5 +1,6 @@
-"""Invites and shared sessions: inviting a partner, and the confirm /
-accept / decline flow they land in."""
+"""Invites and shared sessions: inviting a partner, the confirm / accept /
+decline flow they land in, and the ways out -- taking an invite back,
+training on alone."""
 
 from features.gym.schemas import SharedConfirmPayload
 from .. import push
@@ -28,6 +29,7 @@ from .helpers import (
     _username,
 )
 from .history import counts
+from .partner_view import _partner_of
 from ._blueprint import (
     gym_bp,
 )
@@ -349,5 +351,74 @@ def gym_shared_dismiss(shared_id):
     if shared.accepted_at is not None:
         abort(409)
     db.session.delete(shared)
+    db.session.commit()
+    return jsonify({'ok': True})
+
+
+@gym_bp.route('/gym/shared/<int:shared_id>/withdraw', methods=['POST'])
+@login_required
+def gym_shared_withdraw(shared_id):
+    """The leader takes back an invite nobody joined (D14 c): open, or
+    declined and not yet OK'd. The row goes, so the same person can be
+    asked again -- the unique key allows one row per workout and invitee.
+
+    404 for anything but an invite from the caller's own workout; 409 once
+    it was accepted -- somebody trains on it, and the leader ends that
+    instead (gym_shared_end). Under the invitee's lock, which their
+    "Mitmachen" and "Nein" take: a withdraw racing the accept either finds
+    it joined, or takes the invite away before the accept reads it (whose
+    page then says the invite is gone)."""
+    shared = db.session.get(SharedSession, shared_id)
+    if shared is None or shared.leader_user_id != current_user_id():
+        abort(404)
+    lock_user(shared.follower_user_id)
+    shared = db.session.get(SharedSession, shared_id)
+    if shared is None:
+        abort(404)
+    if shared.accepted_at is not None:
+        abort(409)
+    db.session.delete(shared)
+    db.session.commit()
+    return jsonify({'ok': True})
+
+
+@gym_bp.route('/gym/shared/<int:shared_id>/end', methods=['POST'])
+@login_required
+def gym_shared_end(shared_id):
+    """Training together ends, from either side (G-137, D14 c): the
+    follower's "Nicht mehr mitmachen", the leader's "Gemeinsames Training
+    beenden" (M5) -- one route, the words are the client's. Each trains on in
+    their own workout; the follower's order is theirs from here, starting
+    at the exercise they are at (sharing.end_link).
+
+    404 for anything but an accepted link the caller is one side of, both
+    workouts where the link says (partner_view._partner_of); 409 once the
+    link has ended or either workout is over. The page asks sync.json
+    again and shows what is so."""
+    me = current_user_id()
+    shared = db.session.get(SharedSession, shared_id)
+    if shared is None or shared.accepted_at is None:
+        abort(404)
+    partner, leads = _partner_of(shared, me)
+    if partner is None:
+        abort(404)
+    ids = [shared.leader_session_id, shared.follower_session_id]
+    # One's own workout nobody came back to is ended first -- which ends
+    # the link as well (409 below) -- and that commits, so before the lock.
+    mine = db.session.get(WorkoutSession, ids[0] if leads else ids[1])
+    if _settle_if_abandoned(mine) == 'discarded':
+        abort(404)
+    lock_sessions(ids)
+    # Read again under the lock: a discard on the other side takes the
+    # link with it, a finish or another end stamps it.
+    shared = db.session.get(SharedSession, shared_id)
+    if shared is None or _partner_of(shared, me)[0] is None:
+        abort(404)
+    leader = db.session.get(WorkoutSession, shared.leader_session_id)
+    follower = db.session.get(WorkoutSession, shared.follower_session_id)
+    if (shared.ended_at is not None or leader.finished_at is not None
+            or follower.finished_at is not None):
+        abort(409)
+    sharing.end_link(shared)
     db.session.commit()
     return jsonify({'ok': True})

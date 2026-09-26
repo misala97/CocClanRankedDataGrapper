@@ -24,6 +24,7 @@ import datetime as dt
 
 from flask import current_app
 from sqlalchemy.exc import IntegrityError, OperationalError
+from sqlalchemy.orm import aliased
 
 from extensions import db
 from models import PendingPush, SessionExercise, SharedSession, WorkoutSession
@@ -33,13 +34,59 @@ from .locking import lock_sessions
 from .seeding import _seeded_sets, missing_planned_sets, reseed_for_slot
 
 
-def active_links_led_by(session_id):
-    """Accepted, unfinished links where this session is the leader."""
+def _live_links():
+    """Accepted links not ended whose two workouts both still run. A finished
+    workout ends the sharing even where no stamp says so -- a link from before
+    finishing stamped it, or one written by hand (B11): its partner kept
+    following the leader's order, and the leader kept writing into a workout
+    that was over."""
+    leader = aliased(WorkoutSession)
+    follower = aliased(WorkoutSession)
     return (SharedSession.query
-            .filter(SharedSession.leader_session_id == session_id,
-                    SharedSession.accepted_at.isnot(None),
-                    SharedSession.ended_at.is_(None))
+            .join(leader, leader.id == SharedSession.leader_session_id)
+            .join(follower, follower.id == SharedSession.follower_session_id)
+            .filter(SharedSession.accepted_at.isnot(None),
+                    SharedSession.ended_at.is_(None),
+                    leader.finished_at.is_(None),
+                    follower.finished_at.is_(None)))
+
+
+def active_links_led_by(session_id):
+    """The live links (_live_links) where this session is the leader."""
+    return _live_links().filter(SharedSession.leader_session_id == session_id).all()
+
+
+def live_links_of(session_id):
+    """The live links (_live_links) this session takes part in, either side."""
+    return (_live_links()
+            .filter(db.or_(SharedSession.leader_session_id == session_id,
+                           SharedSession.follower_session_id == session_id))
             .all())
+
+
+def handover_session_ids(session_id):
+    """The workouts a finish of this one writes into besides its own: each
+    live follower's, whose order is handed over as the link ends (end_link).
+    Locked with the finisher's, in one lock_sessions call, before anything
+    changes; a link accepted after this read has nothing started to hand
+    over."""
+    return [link.follower_session_id for link in active_links_led_by(session_id)]
+
+
+def started_row(visible_exercises):
+    """The row a live follower's card holds (live._live_context's
+    keep_started): what they have started and not finished, the most recently
+    ticked if there are two, or None. Here, not in routes: the order handover
+    (end_link) picks the same row, and sharing cannot import routes."""
+    started = [
+        se for se in visible_exercises
+        if not se.skipped
+        and any(s.completed for s in se.sets)
+        and not all(s.completed for s in se.sets)]
+    if not started:
+        return None
+    return max(started, key=lambda se: max(
+        (s.completed_at or dt.datetime.min) for s in se.sets if s.completed))
 
 
 def remove_mirrors_of(session_exercise):
@@ -110,16 +157,15 @@ def remove_mirrors_of(session_exercise):
 
 
 def is_live_follower(session_id):
-    """Whether this session is the follower half of an accepted, unended link.
+    """Whether this session is the follower half of a live link (_live_links).
 
     While it is, its ORDER is the leader's: the follower's own reorder would be
     undone by the leader's next change, so the route refuses it rather than
     pretend. The same test gates the follower's page polling for changes.
     """
-    return SharedSession.query.filter(
-        SharedSession.follower_session_id == session_id,
-        SharedSession.accepted_at.isnot(None),
-        SharedSession.ended_at.is_(None)).first() is not None
+    return (_live_links()
+            .filter(SharedSession.follower_session_id == session_id)
+            .first()) is not None
 
 
 def _release_mirror(follower, row):
@@ -503,15 +549,110 @@ def propagate_structure(session_, skip_changed=None):
 
 
 def end_links_for(session_):
-    """Stamp every live link this session takes part in, on either side.
+    """End every link this session takes part in, on either side (end_link):
+    pending and declined invites too.
 
     Whoever finishes first ends the sharing; the other trains on alone, which
     is the whole point -- a workout must never be cut short by someone else's.
+    The caller holds the followers' workout locks (handover_session_ids).
+
+    Invites nobody joined are stamped in one statement that expects no row
+    count: the leader's "zurückziehen" deletes one under the invitee's lock
+    and their OK on a "no" under none, neither under this workout's, so one
+    may be gone by the time this writes -- and an update of a row gone was a
+    StaleDataError, a 500 for the finish (B11a review). A joined link is only
+    ever deleted with a workout, under the lock the caller holds.
     """
     links = (SharedSession.query
              .filter(SharedSession.ended_at.is_(None))
              .filter(db.or_(SharedSession.leader_session_id == session_.id,
                             SharedSession.follower_session_id == session_.id))
              .all())
+    unjoined = [shared.id for shared in links if shared.accepted_at is None]
+    if unjoined:
+        (SharedSession.query
+         .filter(SharedSession.id.in_(unjoined), SharedSession.ended_at.is_(None))
+         .update({'ended_at': dt.datetime.utcnow()}, synchronize_session=False))
     for shared in links:
-        shared.ended_at = dt.datetime.utcnow()
+        if shared.accepted_at is not None:
+            end_link(shared)
+
+
+def end_link(shared):
+    """End one joined link: the stamp, and the follower's order handed over
+    (_hand_order_over). Every end goes through here: a finish or a settle
+    (end_links_for), a leader's discard, "Nicht mehr mitmachen" and
+    "Gemeinsames Training beenden" (the end route), a partner nobody came
+    back to (helpers._end_stale_partner_links). The caller holds the
+    follower's workout lock and commits."""
+    shared.ended_at = dt.datetime.utcnow()
+    _hand_order_over(shared)
+
+
+def _hand_order_over(shared):
+    """The ex-follower's order becomes their own without the card moving.
+    Returns True if a row moved.
+
+    While the link was live their card held what they had started
+    (started_row), wherever the leader's order put it. Alone, the card is the
+    first open row -- so an open row the leader had put above it took the
+    card the moment the link ended, and the next "Satz geschafft" logged a
+    set on a lift they were not at. The started row moves up in front of the
+    first open row above it, as a drag there would: what is above stays,
+    each slot it passes moves down one, and a replaced original moves with
+    its substitute, as _close_position_gaps moves a slot. A row that moves
+    is re-seeded for its new slot from the follower's history
+    (reseed_for_slot leaves anything ticked, skipped or typed alone). The
+    slots keep their numbers, only who holds them changes.
+
+    No structure_version bump: the follower's page asks for the whole
+    workout again as it stops following, and a bump would tell them the
+    leader had changed the order."""
+    if shared.accepted_at is None or shared.follower_session_id is None:
+        return False
+    follower = db.session.get(WorkoutSession, shared.follower_session_id)
+    # The same guards as reconcile_follower: the one other cross-user write.
+    if (follower is None or follower.user_id != shared.follower_user_id
+            or follower.finished_at is not None):
+        return False
+    rows = sorted(follower.exercises, key=lambda se: (se.position, se.id))
+    by_id = {se.id: se for se in rows}
+    hidden_ids = {se.replaces_id for se in rows if se.replaces_id}
+    held = started_row([se for se in rows if se.id not in hidden_ids])
+    if held is None:
+        return False
+
+    def root_id(se):
+        while se.replaces_id and se.replaces_id in by_id:
+            se = by_id[se.replaces_id]
+        return se.id
+
+    slots = {}
+    for se in rows:
+        slots.setdefault(root_id(se), []).append(se)
+    order = list(slots.values())
+
+    def shown(members):
+        return next((se for se in members if se.id not in hidden_ids), members[0])
+
+    def is_open(members):
+        # The live rule's own test (live._live_context): not skipped, and
+        # not every set done -- a row without sets is open.
+        row = shown(members)
+        return not row.skipped and not (row.sets and all(s.completed for s in row.sets))
+
+    held_at = next(index for index, members in enumerate(order) if held in members)
+    first_open = next((index for index in range(held_at) if is_open(order[index])), None)
+    if first_open is None:
+        return False
+    numbers = [shown(members).position for members in order[first_open:held_at + 1]]
+    for members, number in zip([order[held_at], *order[first_open:held_at]], numbers):
+        for se in members:
+            if se.position == number:
+                continue
+            old_position = se.position
+            se.position = number
+            if se.id not in hidden_ids:
+                reseed_for_slot(follower, se, old_position, number,
+                                user_id=shared.follower_user_id)
+    return True

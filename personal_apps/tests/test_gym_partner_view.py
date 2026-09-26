@@ -404,9 +404,8 @@ def test_the_page_carries_the_lines_and_a_writes_answer_leaves_them_out(lifter):
     assert [l['id'] for l in whole['partner_links']] == [pair['link']]
 
     sync = you.get(f"/gym/session/{pair['leader']}/sync.json").get_json()
-    assert set(sync) == {'version', 'shared', 'partner_links'}
+    assert set(sync) == {'version', 'partner_links'}
     assert [l['id'] for l in sync['partner_links']] == [pair['link']]
-    assert sync['shared'] is True
 
 
 # --- The list ------------------------------------------------------------------

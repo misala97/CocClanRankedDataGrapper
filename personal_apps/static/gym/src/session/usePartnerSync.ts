@@ -68,7 +68,7 @@ export function usePartnerSync(sessionId: number, options: {
     queryKey: ['session-sync', sessionId] as const,
     queryFn: () => fetchSync(sessionId),
     initialData: (): SyncPayload => ({
-      version: knownVersion, shared: follower, partner_links: initial,
+      version: knownVersion, partner_links: initial,
     }),
     // The page's lines are as fresh as the page: the first question waits a
     // full interval, and a return to the tab asks at once only after one.

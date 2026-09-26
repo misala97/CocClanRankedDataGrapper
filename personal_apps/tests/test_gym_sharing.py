@@ -1961,7 +1961,6 @@ def test_the_sync_endpoint_reports_the_structure_version(joined_pair):
     assert response.status_code == 200
     body = json.loads(response.get_data(as_text=True))
     assert 'version' in body and isinstance(body['version'], int)
-    assert body['shared'] is True
 
 
 def test_the_sync_version_rises_when_the_leader_changes_structure(joined_pair):
@@ -2012,14 +2011,6 @@ def test_the_leader_cannot_read_the_followers_workout(joined_pair):
         assert response.status_code == 404 or (
             'pytest invite bench' not in response.get_data(as_text=True)), (
             f'{url} served the partner\'s workout to the leader')
-
-
-def test_a_solo_session_reports_that_it_is_not_shared(leader_with_partner):
-    import json
-    body = json.loads(_client_for(leader_with_partner['leader']).get(
-        f"/gym/session/{leader_with_partner['session']}/sync.json"
-    ).get_data(as_text=True))
-    assert body['shared'] is False
 
 
 # --- Final whole-branch review fixes ---------------------------------------

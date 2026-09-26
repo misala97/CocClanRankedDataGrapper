@@ -399,6 +399,16 @@ SHARED_ROUTES = [
     # test_gym_partner_view.py has who may use them then.
     ('GET',  '/gym/shared/{}/list.json', 'shared_id'),
     ('POST', '/gym/shared/{}/dismiss', 'shared_id'),
+    # Either side's end (B11) refuses a pending invite as well: nobody
+    # joined, so there is nothing to end -- test_gym_b11a.py has who ends
+    # a joined one.
+    ('POST', '/gym/shared/{}/end', 'shared_id'),
+]
+
+# The one route the leader may use on a pending invite: taking it back (B11,
+# test_gym_b11a.py). Nobody else may -- not a stranger, not the invitee.
+WITHDRAW_ROUTES = [
+    ('POST', '/gym/shared/{}/withdraw', 'shared_id'),
 ]
 
 
@@ -425,6 +435,25 @@ def test_the_leader_gets_404_on_their_own_invite(
             flask_session['user_id'] = two_users['owner_id']
         response = leader_client.open(url, method=method)
     assert response.status_code == 404, f'{method} {url} returned {response.status_code}'
+
+
+@pytest.mark.parametrize('method,url_template,id_key', WITHDRAW_ROUTES)
+def test_only_the_leader_takes_an_invite_back(
+        intruder_client, shared_invite, method, url_template, id_key):
+    from extensions import db
+    from models import SharedSession
+
+    url = url_template.format(shared_invite[id_key])
+    response = intruder_client.open(url, method=method)
+    assert response.status_code == 404, f'{method} {url} returned {response.status_code}'
+    flask_app.config['TESTING'] = True
+    with flask_app.test_client() as recipient_client:
+        with recipient_client.session_transaction() as flask_session:
+            flask_session['user_id'] = shared_invite['recipient_id']
+        response = recipient_client.open(url, method=method)
+    assert response.status_code == 404, f'{method} {url} returned {response.status_code}'
+    with flask_app.app_context():
+        assert db.session.get(SharedSession, shared_invite['shared_id']) is not None
 
 
 # The tables hold Flask's route strings with '<int:name>' replaced by '{}', so
@@ -454,7 +483,8 @@ def test_every_id_taking_gym_route_is_covered_by_a_table():
     suite quietly staying green."""
     covered = {
         (method, url_template)
-        for table in (SESSION_ROUTES, DESCENDANT_ROUTES, TEMPLATE_ROUTES, EXERCISE_ROUTES, SHARED_ROUTES)
+        for table in (SESSION_ROUTES, DESCENDANT_ROUTES, TEMPLATE_ROUTES, EXERCISE_ROUTES, SHARED_ROUTES,
+                      WITHDRAW_ROUTES)
         for method, url_template, _id_key in table
     }
 

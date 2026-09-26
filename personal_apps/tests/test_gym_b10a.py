@@ -159,7 +159,7 @@ def test_an_invite_that_no_longer_holds_says_so(lifter):
     assert response.status_code == 404
     html = response.get_data(as_text=True)
     assert 'Diese Einladung gilt nicht mehr.' in html
-    assert 'Angenommen, abgelehnt oder das Workout ist vorbei.' in html
+    assert 'Angenommen, abgelehnt, zurückgezogen oder das Workout ist vorbei.' in html
     assert _way_on(html, '/gym', 'Zum Start')
 
 

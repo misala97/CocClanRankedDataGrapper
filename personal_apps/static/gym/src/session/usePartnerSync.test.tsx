@@ -39,12 +39,12 @@ function link(over: Partial<PartnerLink> = {}): PartnerLink {
   }
 }
 
-interface Answer { version?: number; shared?: boolean; partner_links?: PartnerLink[] }
+interface Answer { version?: number; partner_links?: PartnerLink[] }
 
 /** fetch, routed: sync.json answers `answer()`, anything else `other`. */
 function server(answer: () => Answer, other: () => Response = () => new Response('{}')) {
   return vi.fn(async (url: string) => (String(url).endsWith('/sync.json')
-    ? new Response(JSON.stringify({ version: 1, shared: true, partner_links: [], ...answer() }))
+    ? new Response(JSON.stringify({ version: 1, partner_links: [], ...answer() }))
     : other()))
 }
 
@@ -190,7 +190,7 @@ describe('usePartnerSync: the lines', () => {
     ]
     const fetchMock = vi.fn(async (url: string) => {
       if (String(url).endsWith('/sync.json')) {
-        return new Response(JSON.stringify({ version: 1, shared: false, partner_links: now }))
+        return new Response(JSON.stringify({ version: 1, partner_links: now }))
       }
       if (String(url).includes('/8/')) throw new TypeError('offline')
       if (String(url).includes('/10/')) return new Response('{}', { status: 409 })
@@ -278,7 +278,7 @@ describe('usePartnerSync: the follower keeps up with the leader\'s plan', () => 
     // gating on the version alone polled forever after the leader finished.
     vi.useFakeTimers()
     const fetchMock = server(() => ({
-      version: 1, shared: false, partner_links: [link({ state: 'finished', viewer_leads: false })],
+      version: 1, partner_links: [link({ state: 'finished', viewer_leads: false })],
     }))
     vi.stubGlobal('fetch', fetchMock)
     const client = freshClient()
@@ -302,7 +302,7 @@ describe('usePartnerSync: the follower keeps up with the leader\'s plan', () => 
 
   it('stops following when the link ends under a leader still training', async () => {
     vi.useFakeTimers()
-    vi.stubGlobal('fetch', server(() => ({ version: 1, shared: false, partner_links: [] })))
+    vi.stubGlobal('fetch', server(() => ({ version: 1, partner_links: [] })))
     const client = freshClient()
     const invalidate = vi.spyOn(client, 'invalidateQueries')
     renderHook(() => usePartnerSync(SESSION, {

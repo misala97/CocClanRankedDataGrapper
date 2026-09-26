@@ -397,8 +397,14 @@ def _delete_session_and_links(session_, commit=True):
 def _discard_session(session_, commit=True):
     """Throw away a running workout of the caller's (_delete_session_and_links)
     and remember it (DISCARDED_SESSION_KEY): a screen of theirs still showing
-    it goes home, not to a 404."""
+    it goes home, not to a 404.
+
+    A leader's links end first, like at a finish: a follower still training
+    keeps the exercise they are at (sharing.end_link). Their workouts are
+    the caller's to lock (sharing.handover_session_ids)."""
     session_id = session_.id
+    for link in sharing.active_links_led_by(session_id):
+        sharing.end_link(link)
     _delete_session_and_links(session_, commit=commit)
     flask_session[DISCARDED_SESSION_KEY] = session_id
 
@@ -569,7 +575,9 @@ def _settle_if_abandoned(session_, as_of=None):
     if not _is_abandoned(session_, clock):
         return 'live'
     session_id = session_.id
-    lock_sessions([session_id])
+    # A partner's too, in the same call: the finish below hands a follower
+    # still training their order (sharing.end_link).
+    lock_sessions([session_id, *sharing.handover_session_ids(session_id)])
     session_ = db.session.get(WorkoutSession, session_id)
     if session_ is None:
         # Another request settled it first -- this one goes home as well.
@@ -590,6 +598,52 @@ def _settle_if_abandoned(session_, as_of=None):
                     auto=True)
     db.session.commit()
     return 'finished'
+
+
+def _end_stale_partner_links(session_):
+    """End a live link whose OTHER workout nobody came back to (B11, G-137):
+    three hours without a set, by the rule the caller's own is judged by
+    (_is_abandoned). Returns the caller's running workout: read again if
+    anything was locked, None if another request ended it meanwhile.
+
+    The partner who left without a word kept the caller following an order
+    nobody set any more, or kept writing their changes into a workout nobody
+    was at -- until one of the two finished. Only the link ends here, through
+    sharing.end_link like every end: the partner's workout is settled by the
+    partner's own next request, which knows their phone (the outbox hold) and
+    tells them (the flash). The hold is theirs to read, so a partner offline
+    for three hours with sets still on the phone looks gone from here.
+
+    For the caller's running workout only, on a page's first read (the
+    settle hook in routes/__init__.py): nothing is pending, and nothing is
+    locked yet."""
+    session_id = session_.id
+    stale = []
+    for link in sharing.live_links_of(session_id):
+        other_id = (link.follower_session_id if link.leader_session_id == session_id
+                    else link.leader_session_id)
+        other = db.session.get(WorkoutSession, other_id)
+        if other is not None and _is_abandoned(other):
+            stale.append((link.id, other_id))
+    if not stale:
+        return session_
+    lock_sessions([session_id, *(other_id for _, other_id in stale)])
+    for link_id, other_id in stale:
+        # Read again under the lock: the partner may have come back or
+        # finished, or the link ended, while this request waited.
+        link = db.session.get(SharedSession, link_id)
+        other = db.session.get(WorkoutSession, other_id)
+        if (link is None or link.ended_at is not None or other is None
+                or other.finished_at is not None or not _is_abandoned(other)):
+            continue
+        # The order is handed over either way, as at every end: a follower
+        # offline with sets still on the phone comes back to the exercise
+        # they were at, and for one who left, their finish files it as it
+        # stands (B11a review).
+        sharing.end_link(link)
+    db.session.commit()
+    session_ = db.session.get(WorkoutSession, session_id)
+    return session_ if session_ is not None and session_.finished_at is None else None
 
 
 def _was_discarded(session_id):

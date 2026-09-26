@@ -46,7 +46,8 @@ from .helpers import (
     NON_MUSCLE_GROUPS, ONBOARDING_WORKOUTS, WEEKDAY_SHORT, InvalidInput,
     _cancel_pending_push, _debrief_args, _discard_session, _finish_session,
     _get_active_session, _page_active_session, _refuse_live_write_if_finished,
-    _refuse_structure_edit_if_finished, _settle_if_abandoned, _to_bodyweight, _to_client_key, _to_int, _to_name, _to_note,
+    _is_abandoned, _refuse_structure_edit_if_finished, _settle_if_abandoned, _to_bodyweight,
+    _to_client_key, _to_int, _to_name, _to_note,
     _to_reps, _to_rest_seconds, _to_weight, _was_discarded, _write_time,
     _username, _wants_json, planned_set_count,
 )
@@ -297,17 +298,25 @@ def _heute_payload():
         }
 
     # Addressed to one person: an invite is only ever visible to its recipient.
-    pending_invites = [
-        {'shared_id': link.id,
-         'leader_name': _username(link.leader_user_id),
-         'session_name': (db.session.get(WorkoutSession, link.leader_session_id).name
-                          or 'Workout')}
-        for link in SharedSession.query.filter(
+    # Not one into a workout that is over, or that nobody came back to for
+    # three hours (_is_abandoned): the confirm page refuses both anyway
+    # (partners._invite_refusal), and the card stayed on Start until the
+    # leader's own next page ended the workout -- days, for a leader who
+    # never opened the app again (G-137). Nothing is written here: that end
+    # stamps the invite (sharing.end_links_for).
+    pending_invites = []
+    for link in SharedSession.query.filter(
             SharedSession.follower_user_id == current_user_id(),
             SharedSession.accepted_at.is_(None),
             SharedSession.declined_at.is_(None),
-            SharedSession.ended_at.is_(None)).all()
-    ]
+            SharedSession.ended_at.is_(None)).order_by(SharedSession.id).all():
+        leader_session = db.session.get(WorkoutSession, link.leader_session_id)
+        if (leader_session is None or leader_session.finished_at is not None
+                or _is_abandoned(leader_session)):
+            continue
+        pending_invites.append({'shared_id': link.id,
+                                'leader_name': _username(link.leader_user_id),
+                                'session_name': leader_session.name or 'Workout'})
 
     active_exercise = _live_exercise_name(active_session) if active_session else None
 
@@ -682,19 +691,6 @@ def _live_data(session_, catalogue=True, links=True):
                                              .filter(AppUser.id != current_user_id())
                                              .order_by(AppUser.username)
                                              .all())
-    # Inert since I5 (partner_links replaced it): a page open across the
-    # deploy still reads it off every answer. Drop it once I5 is deployed.
-    shared_out = (SharedSession.query
-                  .filter(SharedSession.leader_session_id == session_.id,
-                          SharedSession.declined_at.is_(None),
-                          SharedSession.ended_at.is_(None))
-                  .all())
-    partner_status = [
-        {'username': _username(link.follower_user_id),
-         'accepted': link.accepted_at is not None}
-        for link in shared_out
-    ]
-
     return dict(
         session=session_,
         live_se=live_se,
@@ -758,7 +754,6 @@ def _live_data(session_, catalogue=True, links=True):
         deload_pcts=stats.DELOAD_QUICK_PCTS,
         deload_default_pct=stats.DELOAD_DEFAULT_PCT,
         partners=partners,
-        partner_status=partner_status,
         # The training partners' lines (D14, M5). Left out of a write's
         # answer, like the catalogue: the page keeps what the page and
         # sync.json sent, so a write's answer and a poll's cannot overwrite
@@ -880,7 +875,6 @@ def _session_payload(session_, catalogue=True, links=True):
         'partners': [
             {'id': p.id, 'username': p.username} for p in data['partners']
         ],
-        'partner_status': data['partner_status'],
         'partner_links': data['partner_links'],
         'session_is_shared': data['session_is_shared'],
     })
@@ -2174,7 +2168,9 @@ def gym_finish_session(session_id):
         return redirect(url_for('gym.gym_heute'))
     # Two tabs, or a double submit: the second waits here and then sees the
     # first one's finish below. Read again: the other may have discarded it.
-    lock_sessions([session_id])
+    # A follower's workout too: the link's end hands them their order
+    # (sharing.end_link).
+    lock_sessions([session_id, *sharing.handover_session_ids(session_id)])
     session_ = db.session.get(WorkoutSession, session_id)
     if session_ is None:
         return redirect(url_for('gym.gym_heute'))
@@ -2216,8 +2212,9 @@ def gym_discard_session(session_id):
     if _settle_if_abandoned(owned_session(session_id)) == 'discarded':
         return redirect(url_for('gym.gym_heute'))
     # A double submit, or a discard racing a finish or a tick: the second
-    # waits here and reads what the first left (B4 re-review).
-    lock_sessions([session_id])
+    # waits here and reads what the first left (B4 re-review). A follower's
+    # workout too: the link's end hands them their order (_discard_session).
+    lock_sessions([session_id, *sharing.handover_session_ids(session_id)])
     session_ = db.session.get(WorkoutSession, session_id)
     if session_ is None:
         return _discarded_to_start()
@@ -2254,14 +2251,8 @@ def gym_session_sync(session_id):
     a partner's workout is read.
     """
     session_ = owned_session(session_id)
-    shared = SharedSession.query.filter(
-        SharedSession.ended_at.is_(None),
-        SharedSession.accepted_at.isnot(None),
-        db.or_(SharedSession.leader_session_id == session_.id,
-               SharedSession.follower_session_id == session_.id)).first()
     return jsonify(SyncPayload.model_validate({
         'version': session_.structure_version or 0,
-        'shared': shared is not None,
         'partner_links': partner_links(session_),
     }).model_dump(mode='json'))
 
