@@ -622,7 +622,7 @@ export function FinishedPage({ payload: initial }: { payload: FinishedPayload })
           and same route as the live page's Workout-options sheet;
           owned_session() has no finished-check, so the route already accepted
           this, only the UI was missing. */}
-      <Sheet id="sheet-meta" title="Workout">
+      <Sheet id="sheet-meta" title="Workout" draft>
         {saveError !== null && (
           <p className="flash flash--error" role="alert">{saveError}</p>
         )}
@@ -654,7 +654,7 @@ export function FinishedPage({ payload: initial }: { payload: FinishedPayload })
       {/* Corrections live in a sheet: a typo is rare, and the editor is a dense
           grid of number fields that has no business sitting under the debrief
           every time. */}
-      <Sheet id="sheet-correct" title="Sätze & Notizen">
+      <Sheet id="sheet-correct" title="Sätze & Notizen" draft>
         {saveError !== null && (
           <p className="flash flash--error" role="alert">{saveError}</p>
         )}

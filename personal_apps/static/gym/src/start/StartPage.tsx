@@ -198,7 +198,7 @@ function FirstRun({
                 <form method="post" action="/gym/start">
                   <CsrfField />
                   <button type="submit" className="lead__go">
-                    <Icon name="skip" />
+                    <Icon name="play" />
                     Workout starten
                   </button>
                 </form>
@@ -451,7 +451,7 @@ export function StartPage({ payload: initial }: { payload: HeutePayload }) {
               </span>
             </span>
             <a href={`/gym/session/${payload.active_session_id}`} className="lead__go">
-              <Icon name="skip" />
+              <Icon name="play" />
               Weiter
             </a>
           </div>
@@ -516,7 +516,7 @@ export function StartPage({ payload: initial }: { payload: HeutePayload }) {
                     <CsrfField />
                     <input type="hidden" name="template_id" value={lead.template_id} />
                     <button type="submit" className="lead__go">
-                      <Icon name="skip" />
+                      <Icon name="play" />
                       Starten
                     </button>
                   </form>

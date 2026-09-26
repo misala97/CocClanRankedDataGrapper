@@ -1,6 +1,6 @@
 import { Fragment, useEffect, useLayoutEffect, useRef, useState } from 'react'
 import type { SeedSource, SessionDetailPayload, VariantRef } from '../types'
-import { useOutbox, useSheets } from '../stores'
+import { useAnnouncer, useOutbox, useSheets } from '../stores'
 import { clearDraft, readDraft, saveDraft } from '../drafts'
 import { setName } from '../setName'
 import { useRestTick } from '../useRestTick'
@@ -74,6 +74,24 @@ interface Props {
   onShiftRest(seconds: number): void
   /** End the running rest now. */
   onSkipRest(): void
+  /** "Noch ein Satz" for the exercise just finished: plan one more set on
+   *  it at these numbers -- the live rule then brings the card back to it. */
+  onOneMore?(sessionExerciseId: number, weight: number, reps: number): void
+}
+
+/** The exercise whose last set the button just logged. */
+interface Finished {
+  id: number
+  name: string
+  weight: number
+  reps: number
+  /** When its last set was confirmed: a card that moves on more than
+   *  LINE_WAITS_MS later moved for something else. */
+  at: number
+  /** Taken away by a tap, its own too: the line keeps its box, empty, over
+   *  `over`. */
+  gone: boolean
+  over: number | null
 }
 
 /** How long "Satz geschafft" ignores a second tap after a set: the first
@@ -81,6 +99,11 @@ interface Props {
  *  logged it too. It used to wait for the server's answer instead, which
  *  offline never came (G-138). */
 export const CONFIRM_GUARD_MS = 600
+
+/** How long the card may take to move on after an exercise's last set for
+ *  "Noch ein Satz" to be offered: the answer comes well inside it, and a
+ *  later move was something else's doing. */
+export const LINE_WAITS_MS = 10_000
 
 /**
  * The one lifted panel for the exercise you are on.
@@ -93,7 +116,7 @@ export const CONFIRM_GUARD_MS = 600
  * state needed the control, not new machinery.
  */
 export function LivePanel({
-  payload, onConfirm, onToggleSet, onRestOver, onShiftRest, onSkipRest,
+  payload, onConfirm, onToggleSet, onRestOver, onShiftRest, onSkipRest, onOneMore,
 }: Props) {
   const openSheet = useSheets((s) => s.open)
   const sessionId = payload.session.id
@@ -213,6 +236,78 @@ export function LivePanel({
   // than as a flag, so the next exercise going live starts on the one line.
   const [sourceOpenFor, setSourceOpenFor] = useState<number | null>(null)
 
+  // The exercise whose last set this button just logged (G-107). The
+  // answer that moves the card on comes one round trip later, while the
+  // lifter is still re-racking, and "hier noch einen anhängen" went with
+  // it. Once the card has moved on, it keeps a line for that exercise --
+  // until the next tap anywhere: a tap on the new card is the lifter moving
+  // on. Not a hold on the card itself: "Satz geschafft" on autopilot at the
+  // next machine would have logged a set nobody did on the finished one.
+  const [finished, setFinished] = useState<Finished | null>(null)
+  // The card the line stands over: the one that took over from the finished
+  // exercise, while that exercise is still in the workout.
+  const standsOver = finished !== null && live !== null && finished.id !== live.id
+    && onOneMore !== undefined && payload.visible_exercises.some((se) => se.id === finished.id)
+    ? live.id : null
+  // A card still on the exercise a while after its last set did not move on
+  // for it: the last exercise done, the card stays, and an exercise added or
+  // brought back minutes later took it -- the line came out of nowhere,
+  // said, and its "Noch ein Satz" planned behind the new live row.
+  useEffect(() => {
+    if (finished === null || finished.gone || standsOver !== null) return
+    const left = LINE_WAITS_MS - (Date.now() - finished.at)
+    const timer = setTimeout(() => setFinished(null), Math.max(left, 0))
+    return () => clearTimeout(timer)
+  }, [finished, standsOver])
+  // Armed once the line is there, and counted from then: a tap aimed before
+  // it showed -- the confirm's own bounce, "+15" through a slow answer --
+  // has not seen it.
+  useEffect(() => {
+    if (finished === null || finished.gone || standsOver === null) return
+    const shown = Date.now()
+    const drop = (event: MouseEvent) => {
+      if (Date.now() - shown < CONFIRM_GUARD_MS) return
+      // Not its own tap (a real one re-renders between listeners, and the
+      // button would be gone before its onClick), and not a tap that only
+      // waves the record away: that one covered the line, unseen.
+      if (event.target instanceof Element
+        && event.target.closest('.live__again, .record-takeover') !== null) return
+      // The box stays, empty, until a set is logged here or the card
+      // changes: taken out under the tap, it moved everything below up, and
+      // the second half of a double tap on a stepper landed on what had
+      // moved there.
+      setFinished({ ...finished, gone: true, over: standsOver })
+    }
+    // Capture: a tap the page stops on its way (a sheet's own handlers)
+    // still counts.
+    document.addEventListener('click', drop, true)
+    return () => document.removeEventListener('click', drop, true)
+  }, [finished, standsOver])
+  const liveId = live?.id ?? null
+  useEffect(() => {
+    if (finished !== null && finished.gone && finished.over !== liveId) setFinished(null)
+  }, [finished, liveId])
+  // Said once when it appears: nothing else tells a screen reader the card
+  // has moved on, and the line is above where it was reading.
+  const announce = useAnnouncer((s) => s.announce)
+  const saidFor = useRef<Finished | null>(null)
+  useEffect(() => {
+    if (finished === null || finished.gone || standsOver === null || saidFor.current === finished) return
+    saidFor.current = finished
+    const next = payload.visible_exercises.find((se) => se.id === standsOver)
+    announce(`${finished.name}: alle Sätze erledigt.${next ? ` Weiter mit ${next.name}.` : ''}`)
+  }, [finished, standsOver, payload.visible_exercises, announce])
+  // "Noch ein Satz" taken from the keyboard leaves with its line: the focus
+  // goes to the card's name once the card is back on that exercise -- as
+  // the answer to the press, its next move, and never on a later visit.
+  const heading = useRef<HTMLHeadingElement>(null)
+  const refocus = useRef<number | null>(null)
+  useEffect(() => {
+    if (refocus.current === null) return
+    if (refocus.current === liveId) heading.current?.focus()
+    refocus.current = null
+  }, [liveId])
+
   // The last rest's end, while no set has been logged since (a new set
   // replaces it; reopening or deleting its set, or the finish, clears it):
   // the band counts down to it, then up from it (round 4).
@@ -316,11 +411,35 @@ export function LivePanel({
   const doubt = weight === null || reps === null
     ? null : unlikely({ weight, reps }, live.best, `kg${perSide}`)
   const asking = doubt !== null && askedAbout === `${weight}|${reps}`
+  // Only once the card has moved on: until then it says so itself.
+  const again = finished !== null && standsOver !== null
+    && (!finished.gone || finished.over === standsOver) ? finished : null
 
   return (
     <section className="live" data-se-id={live.id}>
       {celebration !== null && (
         <RecordTakeover celebration={celebration} onDismiss={dismiss} />
+      )}
+      {/* Above "Jetzt": what was just done, then what is now. */}
+      {/* Taken by a tap, it keeps its box: nothing in it to see, hear or
+          press. */}
+      {again !== null && (
+        <p className={again.gone ? 'live__again is-gone' : 'live__again'}
+          aria-hidden={again.gone || undefined}>
+          <span className="live__again-said">{`${again.name}: alle Sätze erledigt.`}</span>
+          <button type="button" className="live__again-go" disabled={again.gone}
+            aria-label={`Noch ein Satz ${again.name}`}
+            onClick={(event) => {
+              if (document.activeElement === event.currentTarget) refocus.current = again.id
+              onOneMore?.(again.id, again.weight, again.reps)
+              // Its box stays until the card comes back: the second half of
+              // a double tap lands where the first did.
+              setFinished({ ...again, gone: true, over: standsOver })
+            }}>
+            <Icon name="plus" />
+            Noch ein Satz
+          </button>
+        </p>
       )}
       <div className="live__head">
         <span className="live__kick">Jetzt</span>
@@ -343,7 +462,7 @@ export function LivePanel({
             </button>
           )
           : <PictureTile src={null} size="live" />}
-        <h2 className="live__name">{live.name}</h2>
+        <h2 className="live__name" ref={heading} tabIndex={-1}>{live.name}</h2>
       </div>
       {/* Today's twinge and note, where the lifter looks before the set
           (G-073): saved in the sheet, they showed nowhere else. */}
@@ -576,6 +695,16 @@ export function LivePanel({
             setAskedAbout(null)
             clearDraft(sessionId)
             onConfirm(weight, reps, nextSet?.id ?? null)
+            // An empty box above has done its part: this card is in use.
+            // Its going moves the card up under a double tap's second half,
+            // which lands on this button (its guard takes it) or the space
+            // below it.
+            setFinished((f) => (f !== null && f.gone ? null : f))
+            // The last open set (or one appended after them): the card is
+            // about to move on from this exercise.
+            if (live.sets.every((s) => s.completed || s.id === nextSet?.id)) {
+              setFinished({ id: live.id, name: live.name, weight, reps, at: now, gone: false, over: null })
+            }
           }
         }}>
         <span className="go__lbl">

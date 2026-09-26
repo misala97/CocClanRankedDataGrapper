@@ -1,11 +1,12 @@
 import { act, fireEvent, render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { flushSync } from 'react-dom'
+import { afterEach, beforeEach, describe, expect, it, type MockInstance, vi } from 'vitest'
 import { kg1 } from '../../format'
-import { BAND_ARMS_MS, CONFIRM_GUARD_MS, LivePanel } from './LivePanel'
+import { BAND_ARMS_MS, CONFIRM_GUARD_MS, LINE_WAITS_MS, LivePanel } from './LivePanel'
 import { Rail } from './Rail'
 import { SessionTotals } from './SessionTotals'
-import { useOutbox, useSheets } from '../stores'
+import { useAnnouncer, useOutbox, useSheets } from '../stores'
 import { payload } from '../types.test-d'
 import type { SeedSource, SessionDetailPayload } from '../types'
 
@@ -1102,5 +1103,321 @@ describe('LivePanel and a quarter-kilo weight (G-146)', () => {
     const later = live.sets.filter((s) => !s.completed)[1]!
     expect(screen.getByLabelText(new RegExp(`^Satz ${live.sets.indexOf(later) + 1}, geplant`)))
       .toHaveTextContent(`11,25 × ${later.reps}`)
+  })
+})
+
+describe('"Noch ein Satz" once the card has moved on (G-107)', () => {
+  // The live exercise down to its last open set with a second exercise still
+  // to do -- and the server's answer once that set is logged: the second one
+  // live. The answer took the offer to append one more away within a round
+  // trip, while the lifter was still re-racking.
+  const other = payload.visible_exercises.find((se) => se.id !== live.id)!
+  const withOther = (from: SessionDetailPayload): SessionDetailPayload => ({
+    ...from,
+    visible_exercises: from.visible_exercises.map((se) =>
+      (se.id === other.id ? { ...se, skipped: false } : se)),
+  })
+  const lastOpen = withOther(withLiveSets(
+    live.sets.map((s, i) => ({ ...s, completed: i < live.sets.length - 1 }))))
+  const movedOn: SessionDetailPayload = {
+    ...withOther(withLiveSets(live.sets.map((s) => ({ ...s, completed: true })))),
+    live_id: other.id,
+  }
+  const last = live.sets.at(-1)!
+  const offer = () => screen.queryByRole('button', { name: `Noch ein Satz ${live.name}` })
+  // The confirming tap's bounce is no tap on the line (CONFIRM_GUARD_MS):
+  // later() puts the clock past it, for a tap meant as one.
+  let now: MockInstance<() => number>
+  beforeEach(() => { now = vi.spyOn(Date, 'now').mockReturnValue(1_000_000) })
+  afterEach(() => { vi.restoreAllMocks() })
+  const later = () => now.mockReturnValue(1_000_000 + CONFIRM_GUARD_MS)
+
+  it('stays for the finished exercise, and plans one more at the numbers just logged', async () => {
+    const user = userEvent.setup()
+    const h = { ...handlers(), onOneMore: vi.fn() }
+    const view = render(<LivePanel payload={lastOpen} {...h} />)
+    await user.click(screen.getByRole('button', { name: 'Satz geschafft' }))
+    expect(h.onConfirm).toHaveBeenCalledWith(last.weight, last.reps, last.id)
+    // Until the answer moves the card on, the card says it itself.
+    expect(offer()).toBeNull()
+
+    view.rerender(<LivePanel payload={movedOn} {...h} />)
+    expect(screen.getByRole('heading', { level: 2, name: other.name })).toBeInTheDocument()
+    expect(screen.getByText(`${live.name}: alle Sätze erledigt.`)).toBeInTheDocument()
+    later()
+    await user.click(offer()!)
+    expect(h.onOneMore).toHaveBeenCalledWith(live.id, last.weight, last.reps)
+    expect(offer()).toBeNull()
+  })
+
+  it('goes with the next tap anywhere else, nothing planned', async () => {
+    // A tap on the new card is the lifter moving on -- and "Satz geschafft"
+    // there logs on the new exercise, never on the finished one.
+    const user = userEvent.setup()
+    const h = { ...handlers(), onOneMore: vi.fn() }
+    const view = render(<LivePanel payload={lastOpen} {...h} />)
+    await user.click(screen.getByRole('button', { name: 'Satz geschafft' }))
+    view.rerender(<LivePanel payload={movedOn} {...h} />)
+    expect(offer()).not.toBeNull()
+
+    later()
+    await user.click(screen.getByLabelText(`${other.name} — Optionen`))
+    expect(offer()).toBeNull()
+    expect(h.onOneMore).not.toHaveBeenCalled()
+  })
+
+  it('keeps its box, empty, until the card changes', async () => {
+    // Taken out under the tap, it moved the card up, and the second half of a
+    // double tap on a stepper landed on whatever had moved there.
+    const user = userEvent.setup()
+    const h = { ...handlers(), onOneMore: vi.fn() }
+    const view = render(<LivePanel payload={lastOpen} {...h} />)
+    await user.click(screen.getByRole('button', { name: 'Satz geschafft' }))
+    view.rerender(<LivePanel payload={movedOn} {...h} />)
+    later()
+    await user.click(screen.getByLabelText(`${other.name} — Optionen`))
+    const box = document.querySelector('.live__again')!
+    expect(box).toHaveClass('is-gone')
+    expect(box.querySelector('button')).toBeDisabled()
+
+    // The card back on the finished exercise ("Satz anhängen" in its sheet),
+    // then on to the other one again: the box went with the first change.
+    view.rerender(<LivePanel payload={lastOpen} {...h} />)
+    expect(document.querySelector('.live__again')).toBeNull()
+    view.rerender(<LivePanel payload={movedOn} {...h} />)
+    expect(document.querySelector('.live__again')).toBeNull()
+  })
+
+  it('keeps its box after its own tap too, until the card is back', async () => {
+    // "Noch ein Satz" double-tapped: the second half lands where the first
+    // did, on nothing, while the answer brings the card back.
+    const user = userEvent.setup()
+    const h = { ...handlers(), onOneMore: vi.fn() }
+    const view = render(<LivePanel payload={lastOpen} {...h} />)
+    await user.click(screen.getByRole('button', { name: 'Satz geschafft' }))
+    view.rerender(<LivePanel payload={movedOn} {...h} />)
+    later()
+    await user.click(offer()!)
+    const box = document.querySelector('.live__again')!
+    expect(box).toHaveClass('is-gone')
+    await user.click(box.querySelector('button')!)
+    expect(h.onOneMore).toHaveBeenCalledTimes(1)
+
+    view.rerender(<LivePanel payload={lastOpen} {...h} />)
+    expect(document.querySelector('.live__again')).toBeNull()
+  })
+
+  it('lets its empty box go with the next set logged on the card', async () => {
+    // The card is in use: the box has done its part, and below the button
+    // only the totals move up.
+    const user = userEvent.setup()
+    const h = { ...handlers(), onOneMore: vi.fn() }
+    // Two sets open on the next exercise: the first one logged does not
+    // finish it.
+    const twoLeft: SessionDetailPayload = { ...movedOn,
+      visible_exercises: movedOn.visible_exercises.map((se) => (se.id === other.id
+        ? { ...se, sets: [...se.sets, { ...se.sets[0]!, id: 104 }] } : se)) }
+    const view = render(<LivePanel payload={lastOpen} {...h} />)
+    await user.click(screen.getByRole('button', { name: 'Satz geschafft' }))
+    view.rerender(<LivePanel payload={twoLeft} {...h} />)
+    later()
+    await user.click(screen.getByLabelText(`${other.name} — Optionen`))
+    expect(document.querySelector('.live__again')).toHaveClass('is-gone')
+
+    await user.click(screen.getByRole('button', { name: 'Satz geschafft' }))
+    expect(h.onConfirm).toHaveBeenCalledTimes(2)
+    expect(document.querySelector('.live__again')).toBeNull()
+  })
+
+  it('takes no bounce of the tap that finished the exercise for a tap elsewhere', async () => {
+    // The answer can beat the thumb: the second half of the double tap lands
+    // on the new card, and neither logs there nor takes the line.
+    const user = userEvent.setup()
+    const h = { ...handlers(), onOneMore: vi.fn() }
+    const view = render(<LivePanel payload={lastOpen} {...h} />)
+    await user.click(screen.getByRole('button', { name: 'Satz geschafft' }))
+    view.rerender(<LivePanel payload={movedOn} {...h} />)
+    now.mockReturnValue(1_000_000 + CONFIRM_GUARD_MS - 1)
+    await user.click(document.getElementById('set-confirm')!)
+    expect(h.onConfirm).toHaveBeenCalledTimes(1)
+    expect(offer()).not.toBeNull()
+  })
+
+  it('is not taken by a tap made before the card moved on', async () => {
+    // A tap while the answer is on its way ("+15" on the rest) has not seen
+    // the line yet.
+    const user = userEvent.setup()
+    const h = { ...handlers(), onOneMore: vi.fn() }
+    const view = render(<LivePanel payload={lastOpen} {...h} />)
+    await user.click(screen.getByRole('button', { name: 'Satz geschafft' }))
+    later()
+    await user.click(screen.getByLabelText(`${live.name} — Optionen`))
+    view.rerender(<LivePanel payload={movedOn} {...h} />)
+    expect(offer()).not.toBeNull()
+  })
+
+  it('counts a tap from when the line shows, not from the set', async () => {
+    // A slow answer: the line comes up under a tap aimed at the card before
+    // it was there.
+    const user = userEvent.setup()
+    const h = { ...handlers(), onOneMore: vi.fn() }
+    const view = render(<LivePanel payload={lastOpen} {...h} />)
+    await user.click(screen.getByRole('button', { name: 'Satz geschafft' }))
+    now.mockReturnValue(1_000_900)
+    view.rerender(<LivePanel payload={movedOn} {...h} />)
+    now.mockReturnValue(1_000_900 + CONFIRM_GUARD_MS - 1)
+    await user.click(screen.getByLabelText(`${other.name} — Optionen`))
+    expect(offer()).not.toBeNull()
+
+    now.mockReturnValue(1_000_900 + CONFIRM_GUARD_MS)
+    await user.click(screen.getByLabelText(`${other.name} — Optionen`))
+    expect(offer()).toBeNull()
+  })
+
+  it('takes its own tap, however soon the page re-renders', async () => {
+    // A real tap re-renders the page between the document's listeners and
+    // React's (a microtask checkpoint jsdom does not make; flushSync stands
+    // in for it): counted as a tap elsewhere, its own tap would find the
+    // button taken before its onClick.
+    const user = userEvent.setup()
+    const h = { ...handlers(), onOneMore: vi.fn() }
+    const view = render(<LivePanel payload={lastOpen} {...h} />)
+    await user.click(screen.getByRole('button', { name: 'Satz geschafft' }))
+    view.rerender(<LivePanel payload={movedOn} {...h} />)
+    const checkpoint = () => flushSync(() => {})
+    document.addEventListener('click', checkpoint, true)
+    try {
+      later()
+      await user.click(offer()!)
+    } finally {
+      document.removeEventListener('click', checkpoint, true)
+    }
+    expect(h.onOneMore).toHaveBeenCalledWith(live.id, last.weight, last.reps)
+  })
+
+  it('says once what is done and where the card went', async () => {
+    const user = userEvent.setup()
+    const h = { ...handlers(), onOneMore: vi.fn() }
+    const view = render(<LivePanel payload={lastOpen} {...h} />)
+    await user.click(screen.getByRole('button', { name: 'Satz geschafft' }))
+    const said = useAnnouncer.getState().nonce
+    view.rerender(<LivePanel payload={movedOn} {...h} />)
+    expect(useAnnouncer.getState().message)
+      .toBe(`${live.name}: alle Sätze erledigt. Weiter mit ${other.name}.`)
+    expect(useAnnouncer.getState().nonce).toBe(said + 1)
+    // The next poll's answer is the same news.
+    view.rerender(<LivePanel payload={{ ...movedOn,
+      visible_exercises: [...movedOn.visible_exercises] }} {...h} />)
+    expect(useAnnouncer.getState().nonce).toBe(said + 1)
+  })
+
+  it('leaves the focus on the card\'s name when taken from the keyboard', async () => {
+    // Its button goes with the line; the focus would fall to the page.
+    const user = userEvent.setup()
+    const h = { ...handlers(), onOneMore: vi.fn() }
+    const view = render(<LivePanel payload={lastOpen} {...h} />)
+    await user.click(screen.getByRole('button', { name: 'Satz geschafft' }))
+    view.rerender(<LivePanel payload={movedOn} {...h} />)
+    later()
+    offer()!.focus()
+    await user.keyboard('{Enter}')
+    expect(h.onOneMore).toHaveBeenCalledTimes(1)
+    // The answer: one more set planned, and the card back on the exercise.
+    view.rerender(<LivePanel payload={lastOpen} {...h} />)
+    expect(screen.getByRole('heading', { level: 2, name: live.name })).toHaveFocus()
+  })
+
+  it('hands the focus on only as the answer, not on a later visit', async () => {
+    // The card moved somewhere else first (the order changed on another
+    // phone): reaching the exercise later is no answer to the press.
+    const user = userEvent.setup()
+    const h = { ...handlers(), onOneMore: vi.fn() }
+    const third = { ...other, id: 999, name: 'Seilzug' }
+    const view = render(<LivePanel payload={lastOpen} {...h} />)
+    await user.click(screen.getByRole('button', { name: 'Satz geschafft' }))
+    view.rerender(<LivePanel payload={movedOn} {...h} />)
+    later()
+    offer()!.focus()
+    await user.keyboard('{Enter}')
+    view.rerender(<LivePanel payload={{ ...movedOn, live_id: third.id,
+      visible_exercises: [...movedOn.visible_exercises, third] }} {...h} />)
+    view.rerender(<LivePanel payload={lastOpen} {...h} />)
+    expect(screen.getByRole('heading', { level: 2, name: live.name })).not.toHaveFocus()
+  })
+
+  it('stays through a tap that only waves a record away', async () => {
+    // The last set a record: the takeover covers the card as it moves on,
+    // and the tap that sends it off early has not seen the line yet.
+    vi.stubGlobal('matchMedia', vi.fn(() => ({ matches: true })))
+    try {
+      const user = userEvent.setup()
+      const h = { ...handlers(), onOneMore: vi.fn() }
+      const view = render(<LivePanel payload={lastOpen} {...h} />)
+      await user.click(screen.getByRole('button', { name: 'Satz geschafft' }))
+      view.rerender(<LivePanel payload={{ ...movedOn, record_set_ids: [last.id],
+        record_details: { [String(last.id)]: {
+          kind: 'e1rm', value: 120, previous: 110, previous_at: '2026-09-01T10:00:00Z' } } }} {...h} />)
+      later()
+      await user.click(document.querySelector('.record-takeover')!)
+      expect(document.querySelector('.record-takeover')).toBeNull()
+      expect(offer()).not.toBeNull()
+    } finally {
+      vi.unstubAllGlobals()
+    }
+  })
+
+  it('goes once the finished exercise is out of the workout', async () => {
+    // Taken out on another device: no tap here, and no row left to plan on.
+    const user = userEvent.setup()
+    const h = { ...handlers(), onOneMore: vi.fn() }
+    const view = render(<LivePanel payload={lastOpen} {...h} />)
+    await user.click(screen.getByRole('button', { name: 'Satz geschafft' }))
+    view.rerender(<LivePanel payload={movedOn} {...h} />)
+    expect(offer()).not.toBeNull()
+
+    view.rerender(<LivePanel payload={{ ...movedOn,
+      visible_exercises: movedOn.visible_exercises.filter((se) => se.id !== live.id) }} {...h} />)
+    expect(offer()).toBeNull()
+  })
+
+  it('says nothing after a set that leaves another open', async () => {
+    const user = userEvent.setup()
+    const h = { ...handlers(), onOneMore: vi.fn() }
+    const twoOpen = withOther(payload)
+    const view = render(<LivePanel payload={twoOpen} {...h} />)
+    await user.click(screen.getByRole('button', { name: 'Satz geschafft' }))
+    // Moved on some other way: a reorder, "Jetzt machen" on another row.
+    view.rerender(<LivePanel payload={{ ...twoOpen, live_id: other.id }} {...h} />)
+    expect(offer()).toBeNull()
+  })
+
+  describe('and a card that moves on late', () => {
+    // The last exercise done, the card stays on it; an exercise added or
+    // brought back minutes later takes the card -- no answer to that set.
+    beforeEach(() => { vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] }) })
+    const finish = () => {
+      const h = { ...handlers(), onOneMore: vi.fn() }
+      const view = render(<LivePanel payload={lastOpen} {...h} />)
+      fireEvent.click(screen.getByRole('button', { name: 'Satz geschafft' }))
+      return { h, view }
+    }
+    const wait = () => {
+      now.mockReturnValue(1_000_000 + LINE_WAITS_MS)
+      act(() => { vi.advanceTimersByTime(LINE_WAITS_MS) })
+    }
+
+    it('offers nothing once the wait is over', () => {
+      const { h, view } = finish()
+      wait()
+      view.rerender(<LivePanel payload={movedOn} {...h} />)
+      expect(document.querySelector('.live__again')).toBeNull()
+    })
+
+    it('keeps a line that came in time past it', () => {
+      const { h, view } = finish()
+      view.rerender(<LivePanel payload={movedOn} {...h} />)
+      wait()
+      expect(offer()).not.toBeNull()
+    })
   })
 })

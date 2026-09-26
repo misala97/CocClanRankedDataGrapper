@@ -3,6 +3,7 @@ import userEvent from '@testing-library/user-event'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { FinishedPage } from './FinishedPage'
 import type { FinishedExercise, FinishedPayload, SessionRecord } from './types'
+import { SHEET_OPEN_GUARD_MS } from '../components/useSheetDialog'
 import { useSheets } from '../session/stores'
 import { useUndo } from '../undo'
 
@@ -446,6 +447,27 @@ describe('FinishedPage', () => {
       const sheet = screen.getByRole('dialog')
       expect(within(sheet).queryByRole('checkbox')).not.toBeInTheDocument()
     })
+  })
+
+  it.each([
+    ['Workout', /Körpergewicht/, 'sheet-meta'],
+    ['Sätze & Notizen', /Sätze & Notizen/, 'sheet-correct'],
+  ])('keeps "%s" open through a tap on the backdrop: only its buttons save it', async (_, opener, id) => {
+    // Its fields are a draft until "Speichern": a tap above the sheet, to put
+    // the keyboard away, closed it and threw a typed note away without a word.
+    const now = vi.spyOn(Date, 'now').mockReturnValue(1_000_000)
+    try {
+      const user = userEvent.setup()
+      mount()
+      await user.click(screen.getByRole('button', { name: opener }))
+      const sheet = screen.getByRole('dialog')
+      sheet.getBoundingClientRect = () => DOMRect.fromRect({ x: 0, y: 400, width: 390, height: 444 })
+      now.mockReturnValue(1_000_000 + SHEET_OPEN_GUARD_MS)
+      await user.pointer({ keys: '[MouseLeft]', target: sheet, coords: { clientX: 200, clientY: 120 } })
+      expect(useSheets.getState().openId).toBe(id)
+    } finally {
+      now.mockRestore()
+    }
   })
 
   it('offers bodyweight and a session note, which only this screen can edit', async () => {

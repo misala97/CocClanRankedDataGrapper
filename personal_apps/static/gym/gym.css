@@ -1695,6 +1695,24 @@ a.row:active, a.row__main:active { transform: scale(0.99); }
    or the chip cascade below would be competing with its own container. */
 @keyframes live-seat { from { opacity: 0; transform: translateY(10px); } }
 .live.just-live { animation: live-seat var(--dur-3) var(--ease-out); }
+/* The exercise just finished, once the card has moved on (G-107): above
+   "Jetzt", quiet, until the next tap. Ink, not the NOW hue: it is not what
+   is happening now. */
+.live__again {
+  display: flex; flex-wrap: wrap; align-items: center; gap: 0 var(--sp-3);
+  margin: calc(var(--sp-2) * -1) 0 var(--sp-2);
+  font-size: var(--t-sm); color: var(--dim); line-height: 1.4;
+}
+.live__again-said { min-inline-size: 0; overflow-wrap: anywhere; }
+.live__again-go {
+  display: inline-flex; align-items: center; gap: var(--sp-1); min-block-size: var(--tap);
+  background: none; border: 0; padding: 0; font: inherit; font-weight: var(--w-semi);
+  color: var(--ink); cursor: pointer;
+}
+/* Taken by a tap, it keeps its box until the card changes: gone from under
+   the thumb, it moved the card up, and the second half of a double tap on a
+   stepper landed on whatever had moved there. */
+.live__again.is-gone { visibility: hidden; }
 .live__head { display: flex; align-items: flex-start; gap: var(--sp-2); }
 .live__kick {
   flex: 1; display: inline-flex; align-items: center; gap: 6px;
@@ -2202,15 +2220,21 @@ button.pic { cursor: zoom-in; }
 .queue__mark { color: var(--done-ink); display: inline-flex; }
 /* one line per exercise: the marker column and the load column both scan
    straight down, so the list reads as a table without being one */
-.queue__row { flex-wrap: nowrap; min-block-size: 46px; }
+.queue__row { flex-wrap: nowrap; min-block-size: 48px; }
 /* the drawing's column: the tick of a finished row centres in it */
 .queue__lead {
   inline-size: 34px; display: inline-flex; align-items: center; justify-content: center;
   font-size: var(--t-meta); font-weight: var(--w-bold); color: var(--unlit);
 }
 .queue__row.is-skipped .pic { opacity: .5; }
+/* A name wraps, never cut: on one line, "Schulterdrücken (Langhantel,
+   steh…" lost what it is done with, and two variants read the same
+   (G-118). Two lines were not enough at 200 % text either. The partner
+   sheet's list no longer cuts its names either. A word too long for the
+   column breaks where German breaks it, as the card's title does, not
+   wherever the column ends ("Bizepscur / ls"). */
 .queue__row .row__main { min-inline-size: 0; text-align: start; }
-.queue__row .row__name { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.queue__row .row__name, .psheet__row .row__name { hyphens: auto; }
 /* The card's twinge and note, on one line under the name (G-073). In the
    dim ink, not the meta line's unlit: that is 4.3:1 on the dark chassis. */
 .queue__meta { display: block; color: var(--dim); }
@@ -2244,10 +2268,27 @@ button.pic { cursor: zoom-in; }
    button over the row keeps the markup (one <button>, no nested interactives)
    and gives it the full 46. The lead and trail are inert spans, so sitting
    under the overlay costs them nothing; the drag handle is not, so it is
-   lifted back above it while reorder mode is on. */
-.queue__row { position: relative; }
-.queue__row .row__main::after { content: ""; position: absolute; inset: 0; }
+   lifted back above it while reorder mode is on. "Übung hinzufügen" below
+   the list is a row of its own and gets the same (G-008): it was its 24px
+   name. The floor is 48 now (G-063). */
+.queue__row, .queue__add { position: relative; }
+.queue__row .row__main::after, .queue__add .row__main::after {
+  content: ""; position: absolute; inset: 0; border-radius: var(--r-inset);
+}
+/* Down to the next row's divider: the gap above it belonged to no row, and a
+   thumb landing just over a divider got nothing (G-063). Not below the NOW
+   row, whose press and ring stay on its fill. */
+.queue__row:not(.is-now):has(+ .row) .row__main::after { inset-block-end: calc(var(--sp-3) * -1); }
+/* One line like the rows above it: at 200 % text the "+" was left alone on
+   a line of its own over the words. */
+.queue__add { flex-wrap: nowrap; min-block-size: 48px; }
 .queue.is-reordering .drag-handle { position: relative; z-index: 1; }
+/* The ring goes round what a press takes, the whole row, not round the
+   name: a square box inside the row read as a smaller control of its own. */
+.queue__row .row__main:focus-visible, .queue__add .row__main:focus-visible { outline: none; }
+.queue__row .row__main:focus-visible::after, .queue__add .row__main:focus-visible::after {
+  outline: var(--focus-ring); outline-offset: -2px;
+}
 /* A press has to answer across the whole row now, not just under the name. */
 .queue__row .row__main:active .row__name { color: var(--live-ink); }
 .queue__row:has(.row__main:active) { background: var(--raised); }
@@ -2620,6 +2661,26 @@ button.pic { cursor: zoom-in; }
   font-size: var(--t-sm); font-weight: var(--w-semi); color: var(--dim);
 }
 .sheet__body { padding: 0 var(--sp-4) calc(var(--sp-4) + env(safe-area-inset-bottom, 0px)); }
+/* A tall sheet's close at the bottom (SheetFoot), under the thumb: its
+   backdrop is a strip at the top, as far off as the head's close (G-108).
+   Sticky as the head is, so it is there before the sheet is scrolled to its
+   end; the safe area is its padding then, not the body's. */
+.sheet__foot {
+  position: sticky; inset-block-end: 0; z-index: 1;
+  background: var(--chassis); border-top: 1px solid var(--edge);
+  padding: var(--sp-3) var(--sp-4) calc(var(--sp-3) + env(safe-area-inset-bottom, 0px));
+}
+.sheet__body:has(+ .sheet__foot) { padding-block-end: var(--sp-4); }
+.sheet__done { min-block-size: 48px; }
+/* A draft in the sheet ([data-draft]) is kept only by its own button: no
+   close at the bottom to throw it away, and the body's safe area back. */
+.sheet:has([data-draft]) .sheet__foot { display: none; }
+.sheet:has([data-draft]) .sheet__body { padding-block-end: calc(var(--sp-4) + env(safe-area-inset-bottom, 0px)); }
+/* The sticky head and foot lie over the sheet's own scroll box: a control
+   the keyboard moves to is scrolled clear of them, not under them. In rem,
+   so it grows with the text as they do. */
+.sheet { scroll-padding-block-start: 5rem; }
+.sheet:has(.sheet__foot) { scroll-padding-block-end: calc(5.5rem + env(safe-area-inset-bottom, 0px)); }
 .sheet__pick:active { background: var(--raised); }
 .sheet__group + .sheet__group { border-top: 1px solid var(--edge); }
 .sheet__note { font-size: var(--t-meta); color: var(--unlit); line-height: 1.5; padding-block: var(--sp-2); }
@@ -2706,11 +2767,13 @@ summary.sheet-row::-webkit-details-marker { display: none; }
   box-shadow: inset 0 0 0 2px var(--live); color: var(--live-ink);
   font-size: var(--t-meta); line-height: 1.45;
 }
-/* Five values and "Andere" across one line, each a full tap target: no
-   wrapping, so the marked value never lands on a second row. */
-.pills--fit { flex-wrap: nowrap; padding-bottom: 0; }
+/* Five values and "Andere" across one line, each a full tap target. When
+   they no longer fit -- 200 % text -- the row wraps instead: squeezed to
+   what was left, each chip ran its label into the next one's ("1:302:00")
+   and clipped the marked one (G-089). No chip is narrower than it says. */
+.pills--fit { padding-bottom: 0; }
 .pills--fit .pill {
-  flex: 1 1 0; min-inline-size: 0; padding-inline: 0; justify-content: center;
+  flex: 1 1 0; min-inline-size: min-content; padding-inline: var(--sp-1); justify-content: center;
   flex-direction: column; line-height: 1.1; font-variant-numeric: tabular-nums;
 }
 .pills--fit .pill small { font-size: var(--t-micro); font-weight: var(--w-semi); margin-block-start: 2px; }
@@ -2878,8 +2941,6 @@ summary.sheet-row::-webkit-details-marker { display: none; }
 .exadd__cluster .exadd__row { min-block-size: 52px; }
 .exadd > .exadd__cluster:first-child { margin-block-start: var(--sp-2); }
 .exadd__row.is-busy { opacity: 0.5; }
-/* A search hit you have never done: listed, but quieter than yours. */
-.exadd__row--other .sheet-row__name { font-weight: var(--w-med); color: var(--dim); }
 .exadd__n {
   flex: none; font-size: var(--t-body); font-weight: var(--w-bold); color: var(--ink);
   font-variant-numeric: tabular-nums;
@@ -3574,7 +3635,7 @@ button.partner__hit:active { background: var(--raised); }
 .psheet__list { margin-block-end: var(--sp-2); }
 .psheet__row { flex-wrap: nowrap; min-block-size: 52px; position: relative; }
 .psheet__row .row__main { flex: 1 1 auto; min-inline-size: 0; }
-.psheet__row .row__name { font-size: var(--t-sm); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.psheet__row .row__name { font-size: var(--t-sm); }
 .psheet__row .row__meta {
   display: block; margin-block-start: 1px; color: var(--dim); font-variant-numeric: tabular-nums;
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis;

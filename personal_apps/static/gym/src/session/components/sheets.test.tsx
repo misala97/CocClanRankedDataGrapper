@@ -228,7 +228,9 @@ describe('AddExerciseSheet', () => {
     expect(screen.getAllByText('meistens')).toHaveLength(1)
   })
 
-  it('finds exact exercises, yours first and the rest quieter', async () => {
+  it('finds exact exercises, yours first, each a row that adds (G-007)', async () => {
+    // Bare grey names left it open that a tap adds: a hit reads as a row of
+    // the movement's own list, when last or never, and its "+".
     const user = userEvent.setup()
     const { container } = render(<AddExerciseSheet {...lived} />)
     open('sheet-add-exercise')
@@ -237,8 +239,10 @@ describe('AddExerciseSheet', () => {
     const rows = Array.from(container.querySelectorAll('.exadd__row'))
     expect(names(container)).toEqual(['Scottcurls (Maschine)', 'Scottcurls (Maschine, Scheiben)',
       'Scottcurls (SZ-Stange)', 'Bizepscurls (Kurzhantel)'])
-    expect(rows[0]).not.toHaveClass('exadd__row--other')
-    expect(rows[2]).toHaveClass('exadd__row--other')
+    expect(rows.filter((row) => row.querySelector('.exadd__plus') !== null)).toHaveLength(4)
+    expect(within(rows[0] as HTMLElement).getByText('Gestern · 12 Workouts')).toBeInTheDocument()
+    expect(within(rows[1] as HTMLElement).getByText('vor 5 Wochen · 9 Workouts')).toBeInTheDocument()
+    expect(within(rows[2] as HTMLElement).getByText('Noch nie gemacht')).toBeInTheDocument()
   })
 
   it('on a first run says the top fills up, and shows the whole list', () => {

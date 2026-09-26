@@ -92,7 +92,9 @@ describe('StartPage', () => {
     // Scoped: the sheet's template <select> carries the same name as an option.
     const routines = screen.getByRole('region', { name: /Am längsten her|Routinen/ })
     expect(within(routines).getByText('Push')).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: /Starten/ })).toBeInTheDocument()
+    const go = screen.getByRole('button', { name: /Starten/ })
+    // Play, not skip-forward: skip means skip only (G-110).
+    expect(go.querySelector('.icon-play')).not.toBeNull()
   })
 
   it('lists the routines plainly once each was done today (G-017)', () => {
@@ -229,6 +231,12 @@ describe('StartPage', () => {
       expect(screen.getByRole('heading', { name: 'Läuft gerade' })).toBeInTheDocument()
       expect(screen.getByRole('link', { name: /Weiter/ }))
         .toHaveAttribute('href', '/gym/session/42')
+    })
+
+    it('goes back in under play: skip means skip only (G-110)', () => {
+      const { container } = mount(running)
+      expect(screen.getByRole('link', { name: /Weiter/ }).querySelector('.icon-play')).not.toBeNull()
+      expect(container.querySelector('.icon-skip')).toBeNull()
     })
 
     it('measures the clock from the session start, not the page render', () => {
@@ -540,6 +548,8 @@ describe('the first-run checklist', () => {
     const go = within(first).getByRole('button', { name: /Workout starten/ })
     expect(go.closest('form')).toHaveAttribute('action', '/gym/start')
     expect(go.closest('form')!.querySelector('[name=template_id]')).toBeNull()
+    // Starting plays; skip-forward is for skipping (G-110).
+    expect(go.querySelector('.icon-play')).not.toBeNull()
   })
 
   it('hides the sections that have nothing to say yet', () => {

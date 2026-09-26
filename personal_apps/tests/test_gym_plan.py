@@ -471,14 +471,14 @@ def test_a_deload_that_rescaled_the_plan_hints_nothing(lifter):
 def test_the_card_gives_one_answer_to_what_to_lift(lifter):
     """The "Bereit" line and the stall line's own step-up are gone: the
     target is the one answer (the stall line keeps its fact). Their fields
-    stay, saying nothing, for a page loaded before the deploy: its bundle
-    reads them unguarded, and the first answer without them blanked the
-    live screen (B5 review)."""
+    stayed, saying nothing, while a page loaded before B5's deploy could
+    still read them unguarded; B5 has been live since 09-25, so they are
+    gone too (B10b)."""
     routine_id, _press_id, _row_id_ = _two_lift_routine(lifter)
     body = _payload(lifter, _start(lifter, routine_id))
 
-    assert body['stall_next_weight'] == {}
-    assert body['ready_for_more'] is None
+    assert 'stall_next_weight' not in body
+    assert 'ready_for_more' not in body
 
 
 def test_joining_under_your_own_routine_fills_it_and_plans_by_it(lifter):

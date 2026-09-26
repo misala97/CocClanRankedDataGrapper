@@ -380,6 +380,16 @@ function SessionIslandInner({ initial }: { initial: SessionDetailPayload }) {
     },
     onSaveTemplate: (name) => leavePage(() => postNavigate(
       `/gym/session/${sessionId}/save_as_template`, { template_name: name })),
+    // Where its row stands, never moved in behind a lift under way as the
+    // sheet's "Satz anhängen" is: the card was on this exercise a moment ago,
+    // so the row is in front of the one the card moved on to (a tap since
+    // would have taken the offer away), and the live rule brings the card
+    // back. Moved behind a lift already started -- the one "Jetzt machen"
+    // stepped away from -- the card stayed there, at the wrong machine.
+    onOneMore: (seId, weight, reps) => {
+      if (!mayAppend(seId)) return
+      send('planSet', seId, weight, reps, newId(), tempId())
+    },
     exerciseActions: (seId: number): ExerciseSheetActions => ({
       onRestChange: (seconds) => send('setRest', seId, seconds),
       onRoutinePlanChange: (plan) => send('routinePlan', seId, plan),

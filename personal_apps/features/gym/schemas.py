@@ -598,12 +598,6 @@ class SessionDetailPayload(_Model):
     #: Keyed the same way: the routine's plan for each exercise it holds,
     #: where the sheet's steppers start. Empty without a routine of your own.
     routine_plans: dict[str, RoutinePlan]
-    #: Kept, saying nothing, for a page loaded before B5's deploy: its bundle
-    #: reads both unguarded (the stall line's step-up, the "Bereit" line), and
-    #: the first answer without them blanked the live screen mid-workout (B5
-    #: review). Drop them in a batch after that deploy.
-    stall_next_weight: dict[str, float] = {}
-    ready_for_more: None = None
     # A set in the route; a list here. json.dumps cannot serialize a set, so
     # the builder converts and this type is what makes that non-optional.
     record_set_ids: list[int]

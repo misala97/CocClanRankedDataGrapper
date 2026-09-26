@@ -169,8 +169,10 @@ function StackStops({ meta, own, onSave }: {
   const parsed = parseStops(text)
 
   if (editing) {
+    // A draft: only "Übernehmen" keeps it, so the sheet's backdrop leaves
+    // the sheet open while it is here (and its bottom close is not shown).
     return (
-      <div className="setting__edit">
+      <div className="setting__edit" data-draft>
         <label className="setting__line" htmlFor={field}>
           Jede Gewichtsstufe in kg, mit Komma getrennt — etwa 5, 12, 19, 26.
         </label>

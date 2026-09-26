@@ -41,7 +41,10 @@ const PATHS = {
       <path d="M8 13.5v-8" /><path d="M11.5 13.5v-5.5" />
     </>
   ),
+  // Skip means skip only -- a rest, an exercise. Starting or going back into
+  // a workout plays (G-110): one icon for both read as "start = skip".
   skip: <><path d="M3.2 3.6l6 4.4-6 4.4z" /><path d="M12.2 3.6v8.8" /></>,
+  play: <path d="M4.8 3.2v9.6L12.4 8z" />,
   swap: (
     <>
       <path d="M2.6 5.6h9.2l-2.2-2.2" />
@@ -60,15 +63,10 @@ const PATHS = {
       <path d="M8 6.6v2.6l1.7 1" /><path d="M6.4 1.8h3.2" />
     </>
   ),
-  // A bar coming down to the floor: deliberately lighter. Deload carries no
-  // hue anywhere in the app, and its icon is as plain as its chip.
-  deload: (
-    <>
-      <path d="M8 2.6v6.2" />
-      <path d="M5.4 6.2L8 8.8l2.6-2.6" />
-      <path d="M2.8 13.2h10.4" />
-    </>
-  ),
+  // Steps going down: a lighter week. It was an arrow coming down to a
+  // floor, which is the download mark (G-110). Deload carries no hue
+  // anywhere in the app, and its icon is as plain as its chip.
+  deload: <path d="M2.6 4.2h3.6v3.8h3.6v3.8h3.6" />,
   bell: (
     <>
       <path d="M12 5.4a4 4 0 0 0-8 0c0 4.4-1.9 5.7-1.9 5.7h11.8S12 9.8 12 5.4" />

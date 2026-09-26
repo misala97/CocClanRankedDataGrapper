@@ -147,14 +147,13 @@ export function AddExerciseSheet({
 
   /** A row that adds: one tap, or two when the exercise is already in. */
   const row = (exercise: CatalogueExercise, name: ReactNode, meta: string | null,
-    trail: ReactNode, other = false) => {
+    trail: ReactNode) => {
     const already = countIn(exercise.id)
     const armed = armedId === exercise.id
     const busy = busyExerciseId === exercise.id
     return (
       <button type="button" key={exercise.id}
-        className={['sheet-row', 'exadd__row', other ? 'exadd__row--other' : '',
-          busy ? 'is-busy' : '', armed ? 'is-armed' : '']
+        className={['sheet-row', 'exadd__row', busy ? 'is-busy' : '', armed ? 'is-armed' : '']
           .filter(Boolean).join(' ')}
         // Not `disabled`: that blurs the row just tapped and drops focus onto
         // the page behind the sheet, and a list tap no longer refocuses the
@@ -192,10 +191,17 @@ export function AddExerciseSheet({
   const times = (exercise: CatalogueExercise) =>
     exercise.workouts > 0 ? <span className="exadd__n">{`${exercise.workouts}×`}</span> : null
   const plus = <span className="exadd__plus"><Icon name="plus" /></span>
-  /** Yours: when last and how often; the rest just its name, quieter. */
-  const exact = (exercise: CatalogueExercise) => (exercise.rank !== null
-    ? row(exercise, exercise.name, recency(exercise.days_ago), times(exercise))
-    : row(exercise, exercise.name, null, null, true))
+  /** "Deine": when last and how often. */
+  const yours = (exercise: CatalogueExercise) =>
+    row(exercise, exercise.name, recency(exercise.days_ago), times(exercise))
+  /** A search hit is a row of a movement's own list: when last (or never),
+   *  and the "+". It was the name alone, and never-done ones quieter: bare
+   *  grey text left it open that a tap adds (G-007). */
+  const result = (exercise: CatalogueExercise) => row(exercise, exercise.name,
+    exercise.rank !== null
+      ? `${recency(exercise.days_ago)} · ${workouts(exercise.workouts)}`
+      : recency(null),
+    plus)
 
   let body: ReactNode
   if (movement !== null) {
@@ -221,7 +227,7 @@ export function AddExerciseSheet({
       <>
         {hits.length > 0 && search?.tier === 'typos' && <NearMisses query={query} />}
         {hits.map((cluster) => (
-          <div className="exadd__cluster" key={cluster.movement}>{cluster.rows.map(exact)}</div>
+          <div className="exadd__cluster" key={cluster.movement}>{cluster.rows.map(result)}</div>
         ))}
         {hits.length === 0 && (
           <p className="exadd__empty" id="exadd-empty">
@@ -239,7 +245,7 @@ export function AddExerciseSheet({
             <GroupHead id="exadd-mine" label="Deine"
               count={`${common.reduce((n, cluster) => n + cluster.rows.length, 0)} Übungen, häufigste oben`} />
             {common.map((cluster) => (
-              <div className="exadd__cluster" key={cluster.movement}>{cluster.rows.map(exact)}</div>
+              <div className="exadd__cluster" key={cluster.movement}>{cluster.rows.map(yours)}</div>
             ))}
           </section>
         ) : (

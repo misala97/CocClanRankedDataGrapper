@@ -649,6 +649,34 @@ describe('SessionIsland', () => {
     })
   })
 
+  it('plans "Noch ein Satz" where the row stands, and the card comes back to it (G-107)', async () => {
+    // "Jetzt machen" stepped away from row 10, one set in, to row 9. Row 9's
+    // last set logged, the card goes back to 10. One more on 9 is one more
+    // at the machine the lifter still stands at: moved in behind the lift
+    // under way, as the sheet's "Satz anhängen" moves it (B7), the card
+    // stayed on 10.
+    const user = userEvent.setup()
+    network(() => offline())
+    const under = payload.visible_exercises[0]!
+    const set = { weight: 100, reps: 5, base_weight: null, key: null }
+    render(<SessionIsland initial={{
+      ...payload,
+      live_id: 9,
+      visible_exercises: [
+        { ...under, id: 9, exercise_id: 9, name: 'Kniebeuge', sets: [
+          { ...set, id: 90, completed: true }, { ...set, id: 91, completed: false }] },
+        ...payload.visible_exercises,
+      ],
+    }} />)
+    await user.click(screen.getByRole('button', { name: 'Satz geschafft' }))
+    expect(screen.getByRole('heading', { level: 2, name: under.name })).toBeInTheDocument()
+
+    await user.click(screen.getByRole('button', { name: 'Noch ein Satz Kniebeuge' }))
+    await waitFor(() => expect(kept().some((e) => e.kind === 'planSet')).toBe(true))
+    expect(kept().map((e) => e.kind)).toEqual(['toggleSet', 'planSet'])
+    expect(screen.getByRole('heading', { level: 2, name: 'Kniebeuge' })).toBeInTheDocument()
+  })
+
   it('closes the sheet on back, not the workout (G-066)', async () => {
     history.replaceState(null, '')
     network(() => offline())

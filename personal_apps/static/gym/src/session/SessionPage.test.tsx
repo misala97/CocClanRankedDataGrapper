@@ -22,7 +22,7 @@ const actions = (): SessionActions => ({
   onReorder: vi.fn(),
   onSessionMetaSave: vi.fn(), onSkipRest: vi.fn(), onShiftRest: vi.fn(), onInvite: vi.fn(),
   onEnablePush: vi.fn(), onToggleDeload: vi.fn(), onAddExercise: vi.fn(),
-  onSaveTemplate: vi.fn(),
+  onSaveTemplate: vi.fn(), onOneMore: vi.fn(),
   exerciseActions: () => ({
     onRestChange: vi.fn(), onOpenSettings: vi.fn(), onMetaSave: vi.fn(),
     onSetUpdate: vi.fn(), onSetDelete: vi.fn(), onAddSet: vi.fn(),
@@ -283,5 +283,29 @@ describe('the partner lines (D14)', () => {
     } })
     await user.click(screen.getByRole('button', { name: 'OK' }))
     expect(dismiss).toHaveBeenCalledWith(7)
+  })
+})
+
+describe('"Noch ein Satz" (G-107)', () => {
+  it('asks for one more set on the finished row, with its last weight and reps', async () => {
+    // Planned where the row stands (SessionIsland's onOneMore); the live rule
+    // then brings the card back to it.
+    const user = userEvent.setup()
+    const a = actions()
+    const live = payload.visible_exercises.find((se) => se.id === payload.live_id)!
+    const other = payload.visible_exercises.find((se) => se.id !== live.id)!
+    const rows = (done: (i: number) => boolean) => payload.visible_exercises.map((se) => (
+      se.id === live.id
+        ? { ...se, sets: se.sets.map((s, i) => ({ ...s, completed: done(i) })) }
+        : { ...se, skipped: false }))
+    const lastOpen = { ...payload, visible_exercises: rows((i) => i < live.sets.length - 1) }
+    const view = mount({ payload: lastOpen, actions: a })
+    await user.click(screen.getByRole('button', { name: 'Satz geschafft' }))
+    view.rerender(<SessionPage payload={{ ...payload, visible_exercises: rows(() => true), live_id: other.id }}
+      actions={a} pushSupported />)
+
+    await user.click(screen.getByRole('button', { name: `Noch ein Satz ${live.name}` }))
+    const last = live.sets.at(-1)!
+    expect(a.onOneMore).toHaveBeenCalledWith(live.id, last.weight, last.reps)
   })
 })

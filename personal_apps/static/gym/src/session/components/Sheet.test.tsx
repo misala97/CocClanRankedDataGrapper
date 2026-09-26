@@ -1,6 +1,8 @@
-import { act, render, screen } from '@testing-library/react'
+import { act, fireEvent, render, screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { beforeEach, describe, expect, it } from 'vitest'
+import type { ReactElement } from 'react'
+import { afterEach, beforeEach, describe, expect, it, type MockInstance, vi } from 'vitest'
+import { SHEET_OPEN_GUARD_MS } from '../../components/useSheetDialog'
 import { Sheet } from './Sheet'
 import { useSheets } from '../stores'
 
@@ -59,10 +61,155 @@ describe('Sheet', () => {
     expect(useSheets.getState().openId).toBeNull()
   })
 
+  describe('a tap on the backdrop (G-108)', () => {
+    // jsdom lays nothing out, so the sheet is given its box: the lower half
+    // of a 390 x 844 phone. The backdrop's presses land on the <dialog>. The
+    // clock is then put past the opening tap's bounce (SHEET_OPEN_GUARD_MS).
+    let now: MockInstance<() => number>
+    beforeEach(() => { now = vi.spyOn(Date, 'now').mockReturnValue(1_000_000) })
+    afterEach(() => { vi.restoreAllMocks() })
+    const opened = (ui: ReactElement = <Fixture />, id = 'sheet-a') => {
+      render(ui)
+      act(() => { useSheets.getState().open(id) })
+      const node = document.querySelector(`#${id}`) as HTMLDialogElement
+      node.getBoundingClientRect = () => DOMRect.fromRect({ x: 0, y: 400, width: 390, height: 444 })
+      now.mockReturnValue(1_000_000 + SHEET_OPEN_GUARD_MS)
+      return node
+    }
+    const at = (target: Element, clientX: number, clientY: number) =>
+      ({ target, coords: { clientX, clientY } })
+
+    it('closes the sheet, as its button does', async () => {
+      const user = userEvent.setup()
+      const node = opened()
+      await user.pointer({ keys: '[MouseLeft]', ...at(node, 200, 120) })
+      expect(useSheets.getState().openId).toBeNull()
+    })
+
+    it('leaves it open for a press on it: its ground, or its contents even past its edge', async () => {
+      const user = userEvent.setup()
+      const node = opened()
+      await user.pointer({ keys: '[MouseLeft]', ...at(node, 200, 600) })
+      await user.pointer({ keys: '[MouseLeft]', ...at(screen.getByText('a-body'), 200, 600) })
+      // Its own contents count wherever they are drawn: a menu reaching up
+      // past the sheet's top is still the sheet.
+      await user.pointer({ keys: '[MouseLeft]', ...at(screen.getByText('a-body'), 200, 120) })
+      expect(useSheets.getState().openId).toBe('sheet-a')
+    })
+
+    it('leaves it open for a press that starts inside and is let go outside', async () => {
+      // A stepper held, a word selected, and the thumb slides past the edge.
+      const user = userEvent.setup()
+      const node = opened()
+      await user.pointer([
+        { keys: '[MouseLeft>]', ...at(screen.getByText('a-body'), 200, 600) },
+        { keys: '[/MouseLeft]', ...at(node, 200, 120) },
+      ])
+      expect(useSheets.getState().openId).toBe('sheet-a')
+    })
+
+    it('takes no press in the moment it opens: that is the opening tap\'s bounce', async () => {
+      // A double tap on an opener above where a short sheet ends up -- a
+      // partner's line under the header -- put its second half on the new
+      // backdrop, and the sheet closed as it opened. Counted from each
+      // opening, not from the page's first render.
+      const user = userEvent.setup()
+      render(<Fixture />)
+      const node = document.querySelector('#sheet-a') as HTMLDialogElement
+      node.getBoundingClientRect = () => DOMRect.fromRect({ x: 0, y: 400, width: 390, height: 444 })
+      for (const openAt of [1_005_000, 1_015_000]) {
+        now.mockReturnValue(openAt)
+        act(() => { useSheets.getState().open('sheet-a') })
+        now.mockReturnValue(openAt + SHEET_OPEN_GUARD_MS - 1)
+        await user.pointer({ keys: '[MouseLeft]', ...at(node, 200, 120) })
+        expect(useSheets.getState().openId).toBe('sheet-a')
+
+        now.mockReturnValue(openAt + SHEET_OPEN_GUARD_MS)
+        await user.pointer({ keys: '[MouseLeft]', ...at(node, 200, 120) })
+        expect(useSheets.getState().openId).toBeNull()
+      }
+    })
+
+    it('leaves a draft open: only its own buttons save it', async () => {
+      // The debrief's typed note, lost to a tap meant to put the keyboard away.
+      const user = userEvent.setup()
+      const node = opened(<Sheet id="sheet-d" title="Workout" draft>d-body</Sheet>, 'sheet-d')
+      await user.pointer({ keys: '[MouseLeft]', ...at(node, 200, 120) })
+      expect(useSheets.getState().openId).toBe('sheet-d')
+    })
+
+    it('leaves it open while a draft is in it: a machine\'s stops being typed', async () => {
+      const user = userEvent.setup()
+      const node = opened(<Sheet id="sheet-e" title="Latzug"><div data-draft>e-body</div></Sheet>, 'sheet-e')
+      await user.pointer({ keys: '[MouseLeft]', ...at(node, 200, 120) })
+      expect(useSheets.getState().openId).toBe('sheet-e')
+    })
+  })
+
+  describe('a close at the bottom of a tall sheet (G-108)', () => {
+    // Its top in the upper third of the screen (jsdom's is 768 high), the
+    // backdrop is a strip up there, as far from the thumb as the head's close.
+    let top = 30
+    beforeEach(() => {
+      top = 30
+      vi.spyOn(HTMLDialogElement.prototype, 'getBoundingClientRect')
+        .mockImplementation(() => DOMRect.fromRect({ x: 0, y: top, width: 390, height: 768 - top }))
+    })
+    afterEach(() => { vi.restoreAllMocks(); vi.unstubAllGlobals() })
+    const open = (ui: ReactElement = <Fixture />, id = 'sheet-a') => {
+      render(ui)
+      act(() => { useSheets.getState().open(id) })
+      return document.querySelector(`#${id}`) as HTMLDialogElement
+    }
+    const foot = () => document.querySelector('.sheet__foot button')
+
+    it('closes the sheet, as its head\'s button does, and says so in its words', async () => {
+      open(<Sheet id="sheet-c" title="Freies Workout" closeLabel="Abbrechen">c-body</Sheet>, 'sheet-c')
+      expect(foot()).toHaveTextContent('Abbrechen')
+      await userEvent.click(foot()!)
+      expect(useSheets.getState().openId).toBeNull()
+    })
+
+    it('leaves a keyboard and a screen reader the one close, the head\'s', () => {
+      const node = open()
+      expect(foot()).toHaveAttribute('tabindex', '-1')
+      expect(within(node).getAllByRole('button', { name: 'Fertig' })).toHaveLength(1)
+    })
+
+    it('is not on a short sheet, nor on a draft', () => {
+      top = 400
+      open()
+      expect(foot()).toBeNull()
+      top = 30
+      open(<Sheet id="sheet-d" title="Workout" draft>d-body</Sheet>, 'sheet-d')
+      expect(foot()).toBeNull()
+    })
+
+    it('comes as the sheet grows past the third, and as the screen turns', () => {
+      // A sheet's contents change while it is open: search hits, a set added.
+      let grew = () => {}
+      vi.stubGlobal('ResizeObserver', class {
+        constructor(private measure: () => void) {}
+        observe() { grew = this.measure }
+        disconnect() {}
+      })
+      top = 400
+      open()
+      expect(foot()).toBeNull()
+      top = 30
+      act(() => { grew() })
+      expect(foot()).not.toBeNull()
+
+      top = 400
+      act(() => { fireEvent(window, new Event('resize')) })
+      expect(foot()).toBeNull()
+    })
+  })
+
   it('puts the store back in step when the platform closes it', () => {
-    // Esc and a backdrop click close a native <dialog> without going through
-    // the store. Without this, openId would keep naming a sheet nobody can
-    // see, and reopening it would appear to do nothing.
+    // Esc closes a native <dialog> without going through the store. Without
+    // this, openId would keep naming a sheet nobody can see, and reopening it
+    // would appear to do nothing.
     render(<Fixture />)
     act(() => { useSheets.getState().open('sheet-a') })
     const node = document.querySelector('#sheet-a') as HTMLDialogElement

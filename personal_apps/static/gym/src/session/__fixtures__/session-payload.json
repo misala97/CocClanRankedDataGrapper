@@ -2127,7 +2127,6 @@
       "username": "Partner 3"
     }
   ],
-  "ready_for_more": null,
   "record_details": {
     "100": {
       "kind": "e1rm",
@@ -2207,7 +2206,6 @@
   "stagnation_counts": {
     "11": 4
   },
-  "stall_next_weight": {},
   "suggestions": {
     "10": {
       "reps": 8,

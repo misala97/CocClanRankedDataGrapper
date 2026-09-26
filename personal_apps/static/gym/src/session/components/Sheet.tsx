@@ -1,5 +1,7 @@
-import { useEffect, useRef, type ReactNode } from 'react'
+import type { ReactNode } from 'react'
 import { Icon } from '../../components/Icon'
+import { SheetFoot } from '../../components/SheetFoot'
+import { useSheetDialog } from '../../components/useSheetDialog'
 import { useSheets } from '../stores'
 
 interface Props {
@@ -20,6 +22,11 @@ interface Props {
    *  (D14). The title then takes up to two lines, where it otherwise has
    *  one: a username runs as long as it likes. */
   lead?: ReactNode
+  /** Its fields are a draft only its own buttons save (the debrief's
+   *  "Workout" and "Sätze & Notizen"). A tap on the backdrop -- to put the
+   *  keyboard away -- threw a typed note away without a word: the backdrop
+   *  leaves it open, and a tall one gets no close at the bottom either. */
+  draft?: boolean
   children: ReactNode
 }
 
@@ -45,26 +52,14 @@ interface Props {
  * current state" true rather than merely intended.
  */
 export function Sheet({
-  id, title, closeLabel = 'Fertig', onBack, keepMounted = false, lead, children,
+  id, title, closeLabel = 'Fertig', onBack, keepMounted = false, lead, draft = false, children,
 }: Props) {
-  const dialog = useRef<HTMLDialogElement>(null)
   const openId = useSheets((s) => s.openId)
   const close = useSheets((s) => s.close)
   const isOpen = openId === id
-
-  useEffect(() => {
-    const node = dialog.current
-    if (node === null) return
-    if (isOpen && !node.open) {
-      node.showModal()
-      // showModal() focuses the first control, which is the dismiss button.
-      // A sheet whose job is one field names it instead. An attribute rather
-      // than React's autoFocus: that one focuses on mount, before showModal()
-      // runs, and the dialog's own focusing step then takes it away again.
-      node.querySelector<HTMLElement>('[data-autofocus]')?.focus()
-    }
-    if (!isOpen && node.open) node.close()
-  }, [isOpen])
+  // The backdrop's tap and the bottom close are the same close as the
+  // head's button.
+  const { dialog, tall, backdropProps } = useSheetDialog({ open: isOpen, close, backdrop: !draft })
 
   return (
     <dialog
@@ -72,9 +67,10 @@ export function Sheet({
       id={id}
       aria-labelledby={`${id}-title`}
       ref={dialog}
-      // Esc and the backdrop close the dialog without going through the
-      // store, which would leave openId pointing at a sheet nobody can see.
+      // Esc closes the dialog without going through the store, which would
+      // leave openId pointing at a sheet nobody can see.
       onClose={() => { if (useSheets.getState().openId === id) close() }}
+      {...backdropProps}
     >
       <div className="sheet__head">
         {onBack && (
@@ -96,6 +92,7 @@ export function Sheet({
         </button>
       </div>
       <div className="sheet__body">{(isOpen || keepMounted) && children}</div>
+      {tall && <SheetFoot label={closeLabel} onClose={close} />}
     </dialog>
   )
 }

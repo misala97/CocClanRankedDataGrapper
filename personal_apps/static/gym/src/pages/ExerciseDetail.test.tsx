@@ -1,6 +1,7 @@
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { SHEET_OPEN_GUARD_MS } from '../components/useSheetDialog'
 import { ExerciseDetailPage } from './ExerciseDetail'
 import type {
   E1rmPR, ExerciseDetailPayload, ExerciseGoal, ExerciseMeta, RoutineChoice, RunningWorkout,
@@ -1106,6 +1107,31 @@ describe('Deine Einstellungen', () => {
     await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1))
     expect([...(fetchMock.mock.calls[0]![1].body as FormData).entries()])
       .toEqual([['stack_kg', '5, 12, 19']])
+  })
+
+  it('keeps stops being typed through a tap on the backdrop: only "Übernehmen" takes them', async () => {
+    // A tap meant to put the keyboard away threw the list away with the
+    // sheet. jsdom lays nothing out: the sheet is given the lower half of a
+    // phone, and the clock is put past the opening tap's bounce.
+    const user = userEvent.setup()
+    const even = { ...stackExercise, stack_kg: null,
+      own: stackExercise.own.filter((f) => f !== 'stack_kg') }
+    const { fetchMock } = sheet(even)
+    const node = document.querySelector('dialog')!
+    node.getBoundingClientRect = () => DOMRect.fromRect({ x: 0, y: 400, width: 390, height: 444 })
+    vi.setSystemTime(Date.now() + SHEET_OPEN_GUARD_MS)
+    const backdrop = () => user.pointer({ keys: '[MouseLeft]', target: node, coords: { clientX: 200, clientY: 120 } })
+    const stops = setting('Gewichtsstufen')
+    await user.click(stops.getByRole('button', { name: 'Das Gerät hat andere Gewichtsstufen' }))
+    await user.type(stops.getByLabelText(/Jede Gewichtsstufe in kg/), '5, 12, 19')
+    await backdrop()
+    expect(node.open).toBe(true)
+    expect(stops.getByLabelText(/Jede Gewichtsstufe in kg/)).toHaveValue('5, 12, 19')
+
+    await user.click(stops.getByRole('button', { name: 'Übernehmen' }))
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1))
+    await backdrop()
+    expect(node.open).toBe(false)
   })
 
   it('says the new step in the goal\'s rule once it is saved', async () => {

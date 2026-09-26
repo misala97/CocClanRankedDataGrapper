@@ -63,6 +63,9 @@ export interface SessionActions {
   onToggleDeload(on: boolean, pct: number): void
   onAddExercise(exerciseId: number): void
   onSaveTemplate(name: string): void
+  /** "Noch ein Satz" on the exercise the card just left (G-107): one set
+   *  planned where its row stands. */
+  onOneMore(sessionExerciseId: number, weight: number, reps: number): void
   exerciseActions(sessionExerciseId: number): ExerciseSheetActions
 }
 
@@ -145,7 +148,8 @@ export function SessionPage({
         onToggleSet={actions.onToggleSet}
         onRestOver={() => announce('Pause vorbei.')}
         onShiftRest={actions.onShiftRest}
-        onSkipRest={actions.onSkipRest} />
+        onSkipRest={actions.onSkipRest}
+        onOneMore={actions.onOneMore} />
 
       <SessionTotals volume={payload.session_volume}
         setsDone={payload.sets_done}
