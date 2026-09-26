@@ -11,3 +11,16 @@ export function fetchPartnerList(sharedId: number): Promise<PartnerList> {
 export function dismissPartner(sharedId: number): Promise<{ ok: boolean }> {
   return postForm<{ ok: boolean }>(`/gym/shared/${sharedId}/dismiss`)
 }
+
+/** "Einladung zurückziehen": an invite nobody joined, taken back. 409 once
+ *  they joined; the row goes, so they can be invited again (B11). */
+export function withdrawInvite(sharedId: number): Promise<{ ok: boolean }> {
+  return postForm<{ ok: boolean }>(`/gym/shared/${sharedId}/withdraw`)
+}
+
+/** "Gemeinsames Training beenden" or "Nicht mehr mitmachen": one route for
+ *  either side of a joined link. 409 once it ended or a workout finished;
+ *  404 once it is gone (B11). */
+export function endPartner(sharedId: number): Promise<{ ok: boolean }> {
+  return postForm<{ ok: boolean }>(`/gym/shared/${sharedId}/end`)
+}

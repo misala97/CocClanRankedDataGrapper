@@ -5,6 +5,7 @@ import { SessionPage, type SessionActions } from './SessionPage'
 import { useAnnouncer, usePush, useSaveState, useSheets, useWorkoutUi } from './stores'
 import { payload } from './types.test-d'
 import type { PartnerLink } from '../partner/types'
+import { ASK_GUARD_MS } from '../partner/PartnerSheet'
 
 beforeEach(() => {
   useSheets.setState(useSheets.getInitialState(), true)
@@ -207,12 +208,15 @@ describe('the partner lines (D14)', () => {
       sets: [{ weight: 60, reps: 8 }], done: 1, open: 2, set_no: 2 }],
     ...over,
   })
-  afterEach(() => { vi.unstubAllGlobals() })
+  afterEach(() => {
+    vi.unstubAllGlobals()
+    vi.useRealTimers()
+  })
 
   it('sits right under the header, one line per partner', () => {
     const { container } = mount({ partners: {
       links: [line(), line({ id: 9, username: 'anna', state: 'invited', exercise: null })],
-      receivedAt: Date.now(), dismiss: vi.fn(),
+      receivedAt: Date.now(), dismiss: vi.fn(), withdraw: vi.fn(), end: vi.fn(),
     } })
     const lines = container.querySelector('.partners')!
     expect(container.querySelector('.session-top')!.nextElementSibling).toBe(lines)
@@ -231,7 +235,7 @@ describe('the partner lines (D14)', () => {
     vi.stubGlobal('fetch', fetchMock)
     const a = actions()
     const { rerender } = mount({ actions: a, partners: {
-      links: [line()], receivedAt: Date.now(), dismiss: vi.fn(),
+      links: [line()], receivedAt: Date.now(), dismiss: vi.fn(), withdraw: vi.fn(), end: vi.fn(),
     } })
     await user.click(screen.getByRole('button', { name: /^jglaser: Satz 2 von 3, Rudern/ }))
     const sheet = screen.getByRole('dialog', { name: 'jglaser' })
@@ -241,7 +245,7 @@ describe('the partner lines (D14)', () => {
     answer = partnerList({ sets_done: 5 })
     rerender(<SessionPage payload={payload} actions={a} pushSupported partners={{
       links: [line({ set_no: 3, done_in_exercise: 2, sets_done: 5, list_key: 2 })],
-      receivedAt: Date.now(), dismiss: vi.fn(),
+      receivedAt: Date.now(), dismiss: vi.fn(), withdraw: vi.fn(), end: vi.fn(),
     }} />)
     await waitFor(() => expect(sheet).toHaveTextContent('5 von 12 Sätzen'))
     expect(fetchMock).toHaveBeenCalledTimes(2)
@@ -259,10 +263,11 @@ describe('the partner lines (D14)', () => {
     const invite = { exercise: null, last_set: null }
     const show = (links: PartnerLink[]) => rerender(
       <SessionPage payload={payload} actions={a} pushSupported partners={{
-        links, receivedAt: Date.now(), dismiss: vi.fn(),
+        links, receivedAt: Date.now(), dismiss: vi.fn(), withdraw: vi.fn(), end: vi.fn(),
       }} />)
     const { rerender } = mount({ actions: a, partners: {
-      links: [line({ state: 'invited', ...invite })], receivedAt: Date.now(), dismiss: vi.fn(),
+      links: [line({ state: 'invited', ...invite })], receivedAt: Date.now(),
+      dismiss: vi.fn(), withdraw: vi.fn(), end: vi.fn(),
     } })
     await user.click(screen.getByRole('button', { name: /^jglaser ist eingeladen/ }))
     const sheet = screen.getByRole('dialog', { name: 'jglaser' })
@@ -279,10 +284,45 @@ describe('the partner lines (D14)', () => {
     const dismiss = vi.fn()
     mount({ partners: {
       links: [line({ state: 'declined', exercise: null, last_set: null })],
-      receivedAt: 0, dismiss,
+      receivedAt: 0, dismiss, withdraw: vi.fn(), end: vi.fn(),
     } })
     await user.click(screen.getByRole('button', { name: 'OK' }))
     expect(dismiss).toHaveBeenCalledWith(7)
+  })
+
+  it("hands the sheet's foot to the sync: ending it, and taking an invite back (B11)", async () => {
+    vi.useFakeTimers({ toFake: ['Date'] })
+    const user = userEvent.setup()
+    vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify(partnerList()))))
+    const end = vi.fn(async () => ({ done: true as const }))
+    let answer!: (outcome: { done: true }) => void
+    const withdraw = vi.fn(() => new Promise<{ done: true }>((resolve) => { answer = resolve }))
+    const partners = {
+      links: [line(), line({ id: 9, username: 'anna', state: 'invited', exercise: null })],
+      receivedAt: Date.now(), dismiss: vi.fn(), withdraw, end,
+    }
+    const view = mount({ partners })
+    await user.click(screen.getByRole('button', { name: /^jglaser: Satz 2 von 3, Rudern/ }))
+    const sheet = screen.getByRole('dialog', { name: 'jglaser' })
+    const foot = () => within(sheet).getByRole('button', { name: /^Gemeinsames Training beenden/ })
+    await user.click(foot())
+    vi.advanceTimersByTime(ASK_GUARD_MS)
+    await user.click(foot())
+    expect(end).toHaveBeenCalledWith(7)
+    await waitFor(() => expect(sheet).not.toHaveAttribute('open'))
+
+    await user.click(screen.getByRole('button', { name: /^anna ist eingeladen/ }))
+    await user.click(within(screen.getByRole('dialog', { name: 'anna' }))
+      .getByRole('button', { name: /^Einladung zurückziehen/ }))
+    expect(withdraw).toHaveBeenCalledWith(9)
+    expect(end).toHaveBeenCalledTimes(1)
+    // The line goes at once (usePartnerSync), the sheet's opener with it: the
+    // focus then lands just above the partner lines, not at the top.
+    view.rerender(<SessionPage payload={payload} actions={view.actions} pushSupported
+      partners={{ ...partners, links: [line()] }} />)
+    await act(async () => { answer({ done: true }) })
+    expect(useSheets.getState().openId).toBeNull()
+    expect(document.activeElement).toBe(screen.getByRole('heading', { level: 1 }))
   })
 })
 

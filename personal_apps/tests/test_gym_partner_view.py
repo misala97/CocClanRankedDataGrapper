@@ -354,13 +354,38 @@ def test_the_follower_sees_their_leader_finish(lifter):
     assert (line['sets_done'], line['sets_total']) == (1, 3)
 
 
-def test_a_link_that_ended_with_the_partner_still_training_has_no_line(lifter):
+def test_a_link_that_ended_with_the_partner_still_training_says_so_on_both_sides(lifter):
+    """Left or ended (B11): each side's line says so, dated by the end, and
+    carries nothing of the partner's rows -- nothing about it moves any more,
+    so nothing polls it."""
     with flask_app.app_context():
         pair = _pair(lifter)
-        db.session.get(SharedSession, pair['link']).ended_at = lifter.now - MIN
+        db.session.get(SharedSession, pair['link']).ended_at = lifter.now - 2 * MIN
+        db.session.commit()
+        ended_at = (lifter.now - 2 * MIN).isoformat()
+
+    [led] = _lines(lifter, pair['leader'])
+    [followed] = _lines(lifter, pair['follower'], pair['partner'])
+    for line, leads in ((led, True), (followed, False)):
+        assert (line['state'], line['viewer_leads'], line['id']) == ('ended', leads, pair['link'])
+        assert line['since'].startswith(ended_at[:16])
+        assert (line['exercise'], line['sets_done'], line['sets_total'], line['list_key'],
+                line['rest_left']) == (None, 0, 0, 0, None)
+    # The list behind it is still there, no longer together.
+    assert _list(lifter, pair['link']).get_json()['link_live'] is False
+
+
+def test_a_finish_that_left_no_stamp_ended_the_sharing_all_the_same(lifter):
+    """Live as B11a says it: not ended and both workouts running. A finish
+    that left no stamp (prod rows from before B11) does not read "Zusammen
+    seit" on the partner's list."""
+    with flask_app.app_context():
+        pair = _pair(lifter)
+        db.session.get(WorkoutSession, pair['leader']).finished_at = lifter.now - MIN
         db.session.commit()
 
-    assert _lines(lifter, pair['leader']) == []
+    assert _list(lifter, pair['link']).get_json()['link_live'] is False
+    assert _list(lifter, pair['link'], pair['partner']).get_json()['link_live'] is False
 
 
 def test_a_link_naming_someone_elses_workout_shows_nothing_of_it(lifter):

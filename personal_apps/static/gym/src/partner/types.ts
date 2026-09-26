@@ -15,8 +15,9 @@ export interface PartnerLink {
   id: number
   username: string
   viewer_leads: boolean
-  state: 'invited' | 'declined' | 'joined' | 'finished'
-  /** invited: when it was sent; declined: when; joined, finished: accepted. */
+  state: 'invited' | 'declined' | 'joined' | 'ended' | 'finished'
+  /** invited: when it was sent; declined: when; joined, finished: accepted;
+   *  ended (left or ended, the partner still training): when it ended. */
   since: string
   /** The partner's own finish. */
   finished_at: string | null
@@ -38,6 +39,13 @@ export interface PartnerLink {
   /** joined: a fingerprint of their list -- an open sheet asks again when it
    *  moves. 0 in every other state. */
   list_key: number
+}
+
+/** A line as the live screen shows it: the server's, or one the client keeps
+ *  after its link vanished -- `vanished`, never sent by the server: a
+ *  joined or ended link deleted with a workout thrown away (B11). */
+export interface ShownLink extends Omit<PartnerLink, 'state'> {
+  state: PartnerLink['state'] | 'vanished'
 }
 
 export interface PartnerListRow {

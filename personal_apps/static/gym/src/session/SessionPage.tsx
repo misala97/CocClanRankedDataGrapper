@@ -5,7 +5,7 @@ import type { PartnerSync } from './usePartnerSync'
 import { useAnnouncer, useSheets } from './stores'
 import { PARTNER_SHEET, PartnerLines } from '../partner/PartnerLine'
 import { PartnerSheet } from '../partner/PartnerSheet'
-import type { PartnerLink } from '../partner/types'
+import type { ShownLink } from '../partner/types'
 import { useSheetHistory } from './useSheetHistory'
 import { FinishSheet } from './components/FinishSheet'
 import { SessionHeader } from './components/SessionHeader'
@@ -81,7 +81,10 @@ interface Props {
   partners?: PartnerSync
 }
 
-const NO_PARTNERS: PartnerSync = { links: [], receivedAt: 0, dismiss: () => {} }
+const NOTHING_TO_END = () => Promise.resolve({ done: true } as const)
+const NO_PARTNERS: PartnerSync = {
+  links: [], receivedAt: 0, dismiss: () => {}, withdraw: NOTHING_TO_END, end: NOTHING_TO_END,
+}
 
 /**
  * The live workout.
@@ -106,7 +109,7 @@ export function SessionPage({
   // an open list follows the poll, and it is remembered as last carried: a
   // line the poll drops (put away on the other phone, a partner gone) keeps
   // its sheet as it last was, rather than turning into a list nobody has.
-  const [partnerShown, setPartnerShown] = useState<PartnerLink | null>(null)
+  const [partnerShown, setPartnerShown] = useState<ShownLink | null>(null)
   const shownLine = partnerShown === null
     ? undefined : partners.links.find((link) => link.id === partnerShown.id)
   useEffect(() => { if (shownLine !== undefined) setPartnerShown(shownLine) }, [shownLine])
@@ -180,7 +183,7 @@ export function SessionPage({
         onInvite={actions.onInvite}
         onEnablePush={actions.onEnablePush} />
 
-      <PartnerSheet target={partnerTarget} />
+      <PartnerSheet target={partnerTarget} actions={partners} />
 
       <DeloadSheet session={payload.session}
         deloadApplied={payload.deload_applied}

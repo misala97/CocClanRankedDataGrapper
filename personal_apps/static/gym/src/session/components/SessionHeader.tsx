@@ -49,8 +49,12 @@ export function SessionHeader({ session, deloadApplied, deloadDefaultPct }: Prop
       </a>
       {/* The page's h1. It was a <span>, which left the whole document
           starting at h2 -- the live exercise's name -- so heading navigation
-          returned one exercise and nothing about the workout. */}
-      <h1 className="session-top__name" style={{ viewTransitionName: 'session' }}>{session.name || 'Workout'}</h1>
+          returned one exercise and nothing about the workout. And where the
+          focus goes when a sheet closes whose opener went meanwhile -- an
+          invite taken back from its own sheet (useSheetDialog): just above
+          the partner lines, not the top of the document. */}
+      <h1 className="session-top__name" style={{ viewTransitionName: 'session' }}
+        data-sheet-return tabIndex={-1}>{session.name || 'Workout'}</h1>
       {session.is_deload && (
         <span className="session-top__deload">
           {deloadApplied

@@ -26,10 +26,29 @@ export function useSheetDialog({ open, close, backdrop }: Options) {
   const openedAt = useRef(0)
   const shut = close ?? (() => dialog.current?.close())
 
+  // The dialog gives the focus back to whatever had it when it opened --
+  // unless that went while it was open: an invite taken back from its own
+  // sheet takes its line along. The focus would fall to the top of the
+  // document; it goes to what the page names for it instead.
+  const opener = useRef<Element | null>(null)
+  useEffect(() => {
+    const node = dialog.current
+    if (node === null) return
+    const back = () => {
+      if (opener.current !== null && !opener.current.isConnected) {
+        document.querySelector<HTMLElement>('[data-sheet-return]')?.focus()
+      }
+      opener.current = null
+    }
+    node.addEventListener('close', back)
+    return () => node.removeEventListener('close', back)
+  }, [])
+
   useEffect(() => {
     const node = dialog.current
     if (node === null) return
     if (open && !node.open) {
+      opener.current = document.activeElement
       node.showModal()
       openedAt.current = Date.now()
       // showModal() focuses the first control, which is the dismiss button.

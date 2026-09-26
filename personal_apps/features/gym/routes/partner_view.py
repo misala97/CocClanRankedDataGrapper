@@ -121,9 +121,9 @@ def _line(link, username, leads, state, since, partner=None):
 
 def partner_links(session_):
     """The live screen's partner lines for this workout: one per link it
-    leads (invited, declined, joined, finished), or the one to the leader it
-    follows (joined, finished). A link that ended with the partner still
-    training -- nothing does that before B11's leave -- has no line."""
+    leads (invited, declined, joined, ended, finished), or the one to the
+    leader it follows (joined, ended, finished). An invite that ended nobody
+    joined has none."""
     viewer = session_.user_id
     lines = []
     led = (SharedSession.query
@@ -159,7 +159,10 @@ def _accepted_line(link, viewer):
     if partner.finished_at is not None:
         return [_line(link, name, leads, 'finished', link.accepted_at, partner)]
     if link.ended_at is not None:
-        return []
+        # Left or ended, the partner still training (B11): said, not dropped.
+        # Nothing about it moves any more, so it carries none of the partner's
+        # rows and nothing polls it.
+        return [_line(link, name, leads, 'ended', link.ended_at)]
     return [_line(link, name, leads, 'joined', link.accepted_at, partner)]
 
 
@@ -200,9 +203,14 @@ def partner_list(link, partner, leads):
                        else None),
         })
     done, total = _totals(partner)
+    # Live as sharing._live_links says it: not ended, and both workouts still
+    # run -- a finish that left no stamp ended the sharing all the same (B11).
+    own = db.session.get(WorkoutSession,
+                         link.leader_session_id if leads else link.follower_session_id)
     return {
         'id': link.id, 'username': _username(partner.user_id), 'viewer_leads': leads,
-        'link_live': link.ended_at is None,
+        'link_live': (link.ended_at is None and not finished
+                      and own is not None and own.finished_at is None),
         'since': link.accepted_at, 'started_at': partner.started_at,
         'finished_at': partner.finished_at,
         'sets_done': done, 'sets_total': total,

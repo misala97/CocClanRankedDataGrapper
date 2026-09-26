@@ -2,7 +2,7 @@ import { act, render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { PartnerLines } from './PartnerLine'
-import type { PartnerLink } from './types'
+import type { PartnerLink, ShownLink } from './types'
 
 /* The partner line (D14, M5 variant A): one per partner, under the header.
  * What it says per state is words.ts; these assert what reaches the screen
@@ -19,7 +19,7 @@ function link(over: Partial<PartnerLink> = {}): PartnerLink {
   }
 }
 
-function mount(links: PartnerLink[], receivedAt = Date.now()) {
+function mount(links: ShownLink[], receivedAt = Date.now()) {
   const onOpen = vi.fn()
   const onDismiss = vi.fn()
   const result = render(
@@ -133,6 +133,60 @@ describe('PartnerLines', () => {
     expect(line(container)).toHaveTextContent('Ab jetzt bestimmst du die Reihenfolge.')
   })
 
+  it('says a partner training on alone once it ended, to either side, with their list', async () => {
+    // As the server sends it (B11): dated by the end, nothing of their rows.
+    const ended = {
+      state: 'ended' as const, since: '2026-09-25T09:40:00', exercise: null, set_no: null,
+      done_in_exercise: 0, sets_in_exercise: 0, last_set: null, sets_done: 0, sets_total: 0,
+      list_key: 0,
+    }
+    const user = userEvent.setup()
+    const { container, onOpen, rerender } = mount([link(ended)])
+    expect(line(container)).toHaveClass('is-ended')
+    expect(line(container).querySelector('.partner__who'))
+      .toHaveTextContent('jglaser trainiert allein weiter')
+    expect(line(container).querySelector('.partner__ex'))
+      .toHaveTextContent('Ihr trainiert jeder für sich weiter.')
+    expect(line(container).querySelector('.partner__set')).toBeNull()
+    await user.click(screen.getByRole('button', {
+      name: 'jglaser trainiert allein weiter. Liste ansehen',
+    }))
+    expect(onOpen).toHaveBeenCalledTimes(1)
+
+    // Not "allein" of the one who led: another partner may still be in.
+    const none = () => {}
+    rerender(<PartnerLines links={[link({ ...ended, viewer_leads: false })]} receivedAt={0}
+      onOpen={none} onDismiss={none} />)
+    expect(line(container).querySelector('.partner__who'))
+      .toHaveTextContent('jglaser trainiert weiter')
+    expect(line(container)).not.toHaveTextContent('allein')
+    expect(line(container).querySelector('.partner__ex'))
+      .toHaveTextContent('Ab jetzt bestimmst du die Reihenfolge.')
+    expect(screen.getByRole('button', {
+      name: 'jglaser trainiert weiter, ab jetzt bestimmst du die Reihenfolge. Liste ansehen',
+    })).toBeInTheDocument()
+  })
+
+  it('says a line whose link vanished without claiming they train on, and offers no list', () => {
+    // A workout thrown away took the link with it: list.json has nothing.
+    const { container, rerender } = mount([{ ...link(), state: 'vanished' }])
+    expect(line(container)).toHaveClass('is-vanished')
+    expect(line(container).querySelector('.partner__who'))
+      .toHaveTextContent('jglaser ist nicht mehr dabei')
+    // Over for the two of them: another partner may still be in.
+    expect(line(container).querySelector('.partner__ex'))
+      .toHaveTextContent('Euer gemeinsames Training ist vorbei.')
+    expect(line(container)).not.toHaveTextContent('trainiert')
+    expect(line(container).querySelector('.partner__set')).toBeNull()
+    expect(screen.queryByRole('button')).toBeNull()
+
+    const none = () => {}
+    rerender(<PartnerLines links={[{ ...link({ viewer_leads: false }), state: 'vanished' }]}
+      receivedAt={0} onOpen={none} onDismiss={none} />)
+    expect(line(container).querySelector('.partner__ex'))
+      .toHaveTextContent('Ab jetzt bestimmst du die Reihenfolge.')
+  })
+
   it('opens the list with the line it was opened from', async () => {
     const user = userEvent.setup()
     const joined = link()
@@ -147,7 +201,8 @@ describe('PartnerLines', () => {
       state: 'declined', exercise: null, last_set: null,
     })])
     expect(screen.getByRole('status')).toHaveTextContent('jglaser hat abgelehnt')
-    expect(screen.getByRole('status')).toHaveTextContent('Du trainierst allein weiter.')
+    // Not "allein": a second partner may be in.
+    expect(screen.getByRole('status')).toHaveTextContent('Du trainierst ohne jglaser weiter.')
     expect(screen.queryByRole('button', { name: /Liste ansehen/ })).toBeNull()
     expect(line(container)).toHaveClass('is-declined')
     await user.click(screen.getByRole('button', { name: 'OK' }))

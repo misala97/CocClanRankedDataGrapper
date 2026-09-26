@@ -1,5 +1,5 @@
 import { clockTime, kg, setsLine, weekdayDate } from '../format'
-import type { PartnerLink, PartnerList, PartnerListRow, PartnerSet } from './types'
+import type { PartnerList, PartnerListRow, PartnerSet, ShownLink } from './types'
 
 /**
  * Every sentence the partner line and the partner's list say (D14, M5):
@@ -25,7 +25,7 @@ export function doneOf(done: number, total: number): string {
 }
 
 /** The finished line's count: "alle 21 Sätze", or "19 von 21 Sätzen". */
-function finishedCount(link: PartnerLink): string {
+function finishedCount(link: ShownLink): string {
   if (link.sets_done === link.sets_total) {
     return link.sets_total === 1 ? sets(1) : `alle ${sets(link.sets_total)}`
   }
@@ -34,7 +34,7 @@ function finishedCount(link: PartnerLink): string {
 
 /** Where a joined partner is, without the name: "Satz 2 von 3",
  *  "Pause nach Satz 2 von 3", "Pause, dann Satz 1 von 3". */
-function where(link: PartnerLink, resting: boolean): string {
+function where(link: ShownLink, resting: boolean): string {
   const k = link.sets_in_exercise
   if (resting) {
     if (k === 0) return 'Pause'
@@ -57,7 +57,10 @@ export interface LineWords {
   spoken: string
 }
 
-export function lineWords(link: PartnerLink, resting: boolean): LineWords {
+/** The follower's sentence once the order is theirs again. */
+const ORDER_YOURS = 'Ab jetzt bestimmst du die Reihenfolge.'
+
+export function lineWords(link: ShownLink, resting: boolean): LineWords {
   const n = link.username
   switch (link.state) {
     case 'invited':
@@ -67,7 +70,8 @@ export function lineWords(link: PartnerLink, resting: boolean): LineWords {
       }
     case 'declined':
       return {
-        state: 'hat abgelehnt', second: 'Du trainierst allein weiter.',
+        // Not "allein": a second partner may be in.
+        state: 'hat abgelehnt', second: `Du trainierst ohne ${n} weiter.`,
         chip: null, spoken: `${n} hat abgelehnt`,
       }
     case 'finished': {
@@ -76,10 +80,33 @@ export function lineWords(link: PartnerLink, resting: boolean): LineWords {
         state: 'ist fertig',
         second: link.viewer_leads && link.finished_at !== null
           ? `${clockTime(link.finished_at)} · ${count}`
-          : 'Ab jetzt bestimmst du die Reihenfolge.',
+          : ORDER_YOURS,
         chip: null, spoken: `${n} ist fertig, ${count}`,
       }
     }
+    // Left or ended, the partner still training (B11). "allein" only of the
+    // one who followed: a leader may train on with another partner still in.
+    case 'ended':
+      return {
+        state: link.viewer_leads ? 'trainiert allein weiter' : 'trainiert weiter',
+        second: link.viewer_leads ? 'Ihr trainiert jeder für sich weiter.' : ORDER_YOURS,
+        chip: null,
+        spoken: link.viewer_leads
+          ? `${n} trainiert allein weiter`
+          : `${n} trainiert weiter, ab jetzt bestimmst du die Reihenfolge`,
+      }
+    // The link went with a workout thrown away: nobody trains on in it, so
+    // not "trainiert weiter". And over for the two of them only: another
+    // partner may still be in.
+    case 'vanished':
+      return {
+        state: 'ist nicht mehr dabei',
+        second: link.viewer_leads ? 'Euer gemeinsames Training ist vorbei.' : ORDER_YOURS,
+        chip: null,
+        spoken: link.viewer_leads
+          ? `${n} ist nicht mehr dabei`
+          : `${n} ist nicht mehr dabei, ab jetzt bestimmst du die Reihenfolge`,
+      }
     case 'joined': {
       if (link.exercise === null) {
         return {
@@ -112,8 +139,7 @@ export function sheetMeta(list: PartnerList, dated: boolean): string {
     : `Trainiert noch · ${count}`
 }
 
-/** The note at the sheet's foot. Ending, leaving and withdrawing come with
- *  B11; until then the note stands alone. */
+/** The note at the sheet's foot, above the row that ends it (footWords). */
 export function sheetNote(list: PartnerList): string {
   const n = list.username
   if (list.finished_at !== null) return `So hat ${n} das Workout beendet. Nur zum Ansehen.`
@@ -125,19 +151,51 @@ export function sheetNote(list: PartnerList): string {
 }
 
 /** An invite's sheet, from its line alone: still waiting, or answered no. */
-export function inviteMeta(link: PartnerLink): string {
+export function inviteMeta(link: ShownLink): string {
   return link.state === 'declined'
     ? `Abgelehnt um ${clockTime(link.since)}`
     : `Eingeladen um ${clockTime(link.since)} · noch keine Antwort`
 }
 
-export function inviteNote(link: PartnerLink): string {
-  // Not the line's "Du trainierst allein weiter": a second partner may be in.
+export function inviteNote(link: ShownLink): string {
+  // Not "allein" here either: a second partner may be in.
   return link.state === 'declined'
     ? `${link.username} trainiert nicht mit.`
     : `Sobald ${link.username} dabei ist, stehen hier die Übungen und Sätze, `
       + 'in deiner Reihenfolge.'
 }
+
+/** The row at the sheet's foot that ends it for this viewer (M5, B11): an
+ *  invite taken back in one tap; training together ended by the one who
+ *  leads, or left by the one who follows, each after asking once more. */
+export interface FootWords {
+  name: string
+  meta: string
+  /** What the row asks after the first tap; null: the first tap acts. */
+  ask: string | null
+}
+
+export function footWords(link: ShownLink): FootWords | null {
+  const n = link.username
+  if (link.state === 'invited') {
+    return { name: 'Einladung zurückziehen', meta: `${n} kann dann nicht mehr beitreten.`, ask: null }
+  }
+  if (link.state !== 'joined') return null
+  return link.viewer_leads
+    ? {
+      name: 'Gemeinsames Training beenden', meta: `${n} trainiert allein weiter.`,
+      ask: 'Wirklich beenden?',
+    }
+    : {
+      name: 'Nicht mehr mitmachen',
+      meta: 'Dein Workout läuft weiter, die Reihenfolge bestimmst dann du.',
+      ask: 'Wirklich nicht mehr mitmachen?',
+    }
+}
+
+/** The foot's row when its request did not get through: the next tap sends
+ *  it again. */
+export const FOOT_FAILED = 'Ging nicht durch — nochmal tippen.'
 
 /** A row skipped after a set: what it got stays said, and that the rest was
  *  skipped -- as their own queue says it (G-065). */

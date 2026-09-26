@@ -3574,7 +3574,9 @@ button.partner__hit:active { background: var(--raised); }
 }
 /* not dabei (yet, or any more): the outline breaks */
 .partner.is-invited .partner__tile,
-.partner.is-declined .partner__tile {
+.partner.is-declined .partner__tile,
+.partner.is-ended .partner__tile,
+.partner.is-vanished .partner__tile {
   background: transparent; box-shadow: none; color: var(--dim);
   outline: 1.5px dashed var(--edge-hi); outline-offset: -1.5px;
 }
@@ -3655,6 +3657,16 @@ button.partner__hit:active { background: var(--raised); }
 .psheet__row.is-skipped .row__name { text-decoration: line-through; color: var(--unlit); }
 .psheet__end { border-block-start: 1px solid var(--edge); margin-block-start: var(--sp-2); }
 .psheet__end .sheet__note { padding-block: var(--sp-3) var(--sp-1); margin: 0; }
+/* What the foot's row says -- its meta, the ask, a failure -- over a hidden
+   copy of the meta in one cell: the row keeps the height the meta gave it,
+   so the ask cannot pull it down from under the thumb between two taps. */
+.psheet__say { display: grid; }
+.psheet__said, .psheet__say::after { grid-area: 1 / 1; }
+.psheet__say::after { content: attr(data-room); visibility: hidden; }
+/* Asking once more, or saying it did not get through: the add sheet's
+   "Nochmal hinzufügen?" voice. On its way, dimmed as an add. */
+.psheet__act.is-armed .psheet__said { color: var(--stall-ink); font-weight: var(--w-semi); }
+.psheet__act.is-busy { opacity: 0.5; }
 
 /* "mit <Name>" on a finished workout, in the debrief head and on the Verlauf
    row: quiet text with the tile, only a target -- the sheet it opens is the

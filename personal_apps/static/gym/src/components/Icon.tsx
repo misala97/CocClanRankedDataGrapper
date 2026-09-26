@@ -80,6 +80,14 @@ const PATHS = {
       <path d="M12.5 4.4l-.6 8.7a1.3 1.3 0 0 1-1.3 1.2H5.4a1.3 1.3 0 0 1-1.3-1.2l-.6-8.7" />
     </>
   ),
+  // Out through a door: ending or leaving training together (M5).
+  leave: (
+    <>
+      <path d="M6.6 2.6H3.4v10.8h3.2" />
+      <path d="M7.6 8h6" />
+      <path d="M11.2 5.4L13.8 8l-2.6 2.6" />
+    </>
+  ),
   // Stands in for an exercise whose drawing is not made yet (round 4).
   dumbbell: (
     <>

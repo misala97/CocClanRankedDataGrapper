@@ -1,10 +1,14 @@
 import { act, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { MitPartner, PartnerSheet, type PartnerTarget } from './PartnerSheet'
+import {
+  ASK_GUARD_MS, MitPartner, PartnerSheet, type PartnerFootActions, type PartnerTarget,
+} from './PartnerSheet'
 import { PARTNER_SHEET } from './PartnerLine'
 import { useSheets } from '../session/stores'
+import type { FootOutcome } from '../session/usePartnerSync'
 import type { PartnerLink, PartnerList, PartnerListRow } from './types'
+import { FOOT_FAILED } from './words'
 
 /* The partner's list (D14, M5): read-only, loaded when the sheet opens,
  * fetched again whenever the line it was opened from moves. */
@@ -247,7 +251,7 @@ describe('PartnerSheet', () => {
       line: link({ state: 'declined', since: '2026-09-25T09:30:00', ...invite }),
     }} />)
     expect(sheet().querySelector('.psheet__meta')).toHaveTextContent('Abgelehnt um 11:30')
-    // Not "Du trainierst allein weiter": a second partner may be in.
+    // Not "allein": a second partner may be in.
     expect(sheet().querySelector('.sheet__note')).toHaveTextContent('jglaser trainiert nicht mit.')
     expect(fetchMock).not.toHaveBeenCalled()
   })
@@ -305,6 +309,273 @@ describe('PartnerSheet', () => {
       expect(sheet()).toHaveTextContent('Die Liste ließ sich nicht laden.')
     })
   })
+})
+
+describe('PartnerSheet: ending it at the foot (B11)', () => {
+  const DONE: FootOutcome = { done: true }
+  const invite = { state: 'invited' as const, exercise: null, last_set: null }
+
+  function actions(over: Partial<PartnerFootActions> = {}) {
+    return {
+      withdraw: vi.fn(async (_id: number) => DONE),
+      end: vi.fn(async (_id: number) => DONE),
+      ...over,
+    }
+  }
+
+  function mountWith(target: PartnerTarget, acts: PartnerFootActions) {
+    const result = render(<PartnerSheet target={target} actions={acts} />)
+    act(() => { useSheets.getState().open(PARTNER_SHEET) })
+    return result
+  }
+
+  const foot = () => sheet().querySelector<HTMLButtonElement>('.psheet__act')
+  const isOpen = () => useSheets.getState().openId === PARTNER_SHEET
+
+  // The clock alone, still unless moved on: a second tap sooner than
+  // ASK_GUARD_MS after the one that asked is that one's bounce.
+  beforeEach(() => { vi.useFakeTimers({ toFake: ['Date'] }) })
+  afterEach(() => { vi.useRealTimers() })
+  const later = () => { vi.advanceTimersByTime(ASK_GUARD_MS) }
+
+  it('takes an invite back at one tap, and closes', async () => {
+    const user = userEvent.setup()
+    vi.stubGlobal('fetch', server(() => list()))
+    const acts = actions()
+    mountWith({ id: 7, username: 'jglaser', line: link(invite) }, acts)
+    expect(foot()).toHaveClass('sheet-row', 'sheet-row--danger')
+    expect(foot()!.querySelector('.sheet-row__name')).toHaveTextContent('Einladung zurückziehen')
+    expect(foot()!.querySelector('.sheet-row__meta'))
+      .toHaveTextContent('jglaser kann dann nicht mehr beitreten.')
+    expect(foot()!.querySelector('.sheet-row__lead .icon-leave')).not.toBeNull()
+
+    await user.click(foot()!)
+    expect(acts.withdraw).toHaveBeenCalledTimes(1)
+    expect(acts.withdraw).toHaveBeenCalledWith(7)
+    expect(acts.end).not.toHaveBeenCalled()
+    await waitFor(() => { expect(isOpen()).toBe(false) })
+  })
+
+  it('lets the leader end it at the second tap: the first asks, on the same row', async () => {
+    const user = userEvent.setup()
+    vi.stubGlobal('fetch', server(() => list()))
+    const acts = actions()
+    mountWith({ id: 7, username: 'jglaser', line: link() }, acts)
+    await waitFor(() => { expect(rows()).toHaveLength(4) })
+    // Under the note, at the sheet's end.
+    expect(sheet().querySelector('.psheet__end .sheet__note + .psheet__act')).toBe(foot())
+    expect(foot()!.querySelector('.sheet-row__name'))
+      .toHaveTextContent('Gemeinsames Training beenden')
+    expect(foot()!.querySelector('.sheet-row__meta'))
+      .toHaveTextContent('jglaser trainiert allein weiter.')
+
+    await user.click(foot()!)
+    expect(acts.end).not.toHaveBeenCalled()
+    expect(foot()!.querySelector('.sheet-row__meta')).toHaveTextContent('Wirklich beenden?')
+    expect(foot()).toHaveClass('is-armed')
+    expect(isOpen()).toBe(true)
+
+    later()
+    await user.click(foot()!)
+    expect(acts.end).toHaveBeenCalledTimes(1)
+    expect(acts.end).toHaveBeenCalledWith(7)
+    expect(acts.withdraw).not.toHaveBeenCalled()
+    await waitFor(() => { expect(isOpen()).toBe(false) })
+  })
+
+  it('lets the follower leave at the second tap', async () => {
+    const user = userEvent.setup()
+    vi.stubGlobal('fetch', server(() => list({ viewer_leads: false })))
+    const acts = actions()
+    mountWith({ id: 7, username: 'jglaser', line: link({ viewer_leads: false }) }, acts)
+    expect(foot()!.querySelector('.sheet-row__name')).toHaveTextContent('Nicht mehr mitmachen')
+    expect(foot()!.querySelector('.sheet-row__meta'))
+      .toHaveTextContent('Dein Workout läuft weiter, die Reihenfolge bestimmst dann du.')
+    await user.click(foot()!)
+    expect(foot()!.querySelector('.sheet-row__meta'))
+      .toHaveTextContent('Wirklich nicht mehr mitmachen?')
+    // Over a hidden copy of the two-line meta, which holds the row at its
+    // height: the one-line ask must not pull it down from under the thumb.
+    expect(foot()!.querySelector('.psheet__say')).toHaveAttribute('data-room',
+      'Dein Workout läuft weiter, die Reihenfolge bestimmst dann du.')
+    expect(acts.end).not.toHaveBeenCalled()
+    later()
+    await user.click(foot()!)
+    expect(acts.end).toHaveBeenCalledWith(7)
+  })
+
+  it("does not take the asking tap's bounce for the answer", async () => {
+    // Ended, the two cannot be invited to this workout again.
+    const user = userEvent.setup()
+    vi.stubGlobal('fetch', server(() => list()))
+    const acts = actions()
+    mountWith({ id: 7, username: 'jglaser', line: link() }, acts)
+    await user.click(foot()!)
+    vi.advanceTimersByTime(ASK_GUARD_MS - 1)
+    await user.click(foot()!)
+    expect(acts.end).not.toHaveBeenCalled()
+    expect(foot()).toHaveClass('is-armed')
+    vi.advanceTimersByTime(1)
+    await user.click(foot()!)
+    expect(acts.end).toHaveBeenCalledTimes(1)
+  })
+
+  it('keeps asking when the list arrives between the two taps', async () => {
+    const user = userEvent.setup()
+    let deliver!: () => void
+    vi.stubGlobal('fetch', vi.fn(() => new Promise<Response>((resolve) => {
+      deliver = () => resolve(new Response(JSON.stringify(list()),
+        { headers: { 'Content-Type': 'application/json' } }))
+    })))
+    const acts = actions()
+    mountWith({ id: 7, username: 'jglaser', line: link() }, acts)
+    expect(sheet()).toHaveTextContent('Lädt …')
+    await user.click(foot()!)
+    expect(foot()).toHaveClass('is-armed')
+    await act(async () => { deliver() })
+    await waitFor(() => { expect(rows()).toHaveLength(4) })
+    expect(foot()).toHaveClass('is-armed')
+    later()
+    await user.click(foot()!)
+    expect(acts.end).toHaveBeenCalledTimes(1)
+  })
+
+  it('asks again on the next visit to the sheet', async () => {
+    const user = userEvent.setup()
+    vi.stubGlobal('fetch', server(() => list()))
+    const acts = actions()
+    mountWith({ id: 7, username: 'jglaser', line: link() }, acts)
+    await user.click(foot()!)
+    expect(foot()).toHaveClass('is-armed')
+    act(() => { useSheets.getState().close() })
+    act(() => { useSheets.getState().open(PARTNER_SHEET) })
+    expect(foot()).not.toHaveClass('is-armed')
+    expect(foot()!.querySelector('.sheet-row__meta'))
+      .toHaveTextContent('jglaser trainiert allein weiter.')
+    await user.click(foot()!)
+    expect(acts.end).not.toHaveBeenCalled()
+  })
+
+  it('does nothing more while the request is on its way', async () => {
+    const user = userEvent.setup()
+    vi.stubGlobal('fetch', server(() => list()))
+    let answer!: (outcome: FootOutcome) => void
+    const acts = actions({
+      end: vi.fn(() => new Promise<FootOutcome>((resolve) => { answer = resolve })),
+    })
+    mountWith({ id: 7, username: 'jglaser', line: link() }, acts)
+    await user.click(foot()!)
+    later()
+    await user.click(foot()!)
+    expect(foot()).toHaveAttribute('aria-disabled', 'true')
+    expect(foot()).toHaveClass('is-busy')
+    await user.click(foot()!)
+    expect(acts.end).toHaveBeenCalledTimes(1)
+    // Not `disabled`: the focus stays on the row, inside the sheet.
+    expect(foot()).not.toBeDisabled()
+    await act(async () => { answer(DONE) })
+    await waitFor(() => { expect(isOpen()).toBe(false) })
+  })
+
+  it('says a request that did not get through, and sends it again at the next tap', async () => {
+    const user = userEvent.setup()
+    vi.stubGlobal('fetch', server(() => list()))
+    const acts = actions({
+      end: vi.fn<(id: number) => Promise<FootOutcome>>()
+        .mockResolvedValueOnce({ done: false, message: FOOT_FAILED })
+        .mockResolvedValueOnce(DONE),
+    })
+    mountWith({ id: 7, username: 'jglaser', line: link() }, acts)
+    await user.click(foot()!)
+    later()
+    await user.click(foot()!)
+    await waitFor(() => {
+      expect(foot()!.querySelector('.sheet-row__meta'))
+        .toHaveTextContent('Ging nicht durch — nochmal tippen.')
+    })
+    expect(foot()).not.toHaveAttribute('aria-disabled')
+    expect(isOpen()).toBe(true)
+    await user.click(foot()!)
+    expect(acts.end).toHaveBeenCalledTimes(2)
+    await waitFor(() => { expect(isOpen()).toBe(false) })
+  })
+
+  it('starts over when the line changes under it', async () => {
+    const user = userEvent.setup()
+    vi.stubGlobal('fetch', server(() => list()))
+    const acts = actions({
+      withdraw: vi.fn(async (_id: number): Promise<FootOutcome> => (
+        { done: false, message: FOOT_FAILED })),
+    })
+    const target = (over: Partial<PartnerLink> = {}): PartnerTarget => (
+      { id: 7, username: 'jglaser', line: link({ ...invite, ...over }) })
+    const { rerender } = mountWith(target(), acts)
+    await user.click(foot()!)
+    await waitFor(() => {
+      expect(foot()!.querySelector('.sheet-row__meta')).toHaveTextContent(FOOT_FAILED)
+    })
+    // They said no meanwhile, and were asked again from the other phone:
+    // the same row, an invite again, with nothing failed about it.
+    rerender(<PartnerSheet target={target({ state: 'declined' })} actions={acts} />)
+    expect(foot()).toBeNull()
+    rerender(<PartnerSheet target={target()} actions={acts} />)
+    expect(foot()!.querySelector('.sheet-row__meta'))
+      .toHaveTextContent('jglaser kann dann nicht mehr beitreten.')
+    expect(foot()).not.toHaveClass('is-armed')
+  })
+
+  it('leaves the screen alone when the answer comes after the sheet was closed', async () => {
+    const user = userEvent.setup()
+    vi.stubGlobal('fetch', server(() => list()))
+    let answer!: (outcome: FootOutcome) => void
+    const acts = actions({
+      end: vi.fn(() => new Promise<FootOutcome>((resolve) => { answer = resolve })),
+    })
+    mountWith({ id: 7, username: 'jglaser', line: link() }, acts)
+    await user.click(foot()!)
+    later()
+    await user.click(foot()!)
+    expect(acts.end).toHaveBeenCalledTimes(1)
+    // Closed while it was on its way, and another sheet open since.
+    act(() => { useSheets.getState().open('sheet-menu') })
+    await act(async () => { answer(DONE) })
+    expect(useSheets.getState().openId).toBe('sheet-menu')
+  })
+
+  it('offers the way out even when the list would not load', async () => {
+    vi.stubGlobal('fetch', server(() => 500))
+    mountWith({ id: 7, username: 'jglaser', line: link() }, actions())
+    await waitFor(() => {
+      expect(sheet()).toHaveTextContent('Die Liste ließ sich nicht laden.')
+    })
+    expect(foot()!.querySelector('.sheet-row__name'))
+      .toHaveTextContent('Gemeinsames Training beenden')
+  })
+
+  it('offers nothing once it ended, finished or vanished, for a no, or away from the live screen',
+    async () => {
+      vi.stubGlobal('fetch', server(() => list({ link_live: false })))
+      const { rerender } = mountWith({ id: 7, username: 'jglaser', line: link() }, actions())
+      expect(foot()).not.toBeNull()
+      const acts = actions()
+      for (const over of [
+        { state: 'ended' as const }, { state: 'finished' as const },
+        { state: 'declined' as const, exercise: null, last_set: null },
+      ]) {
+        rerender(<PartnerSheet target={{ id: 7, username: 'jglaser', line: link(over) }}
+          actions={acts} />)
+        expect(foot()).toBeNull()
+      }
+      rerender(<PartnerSheet target={{
+        id: 7, username: 'jglaser', line: { ...link(), state: 'vanished' },
+      }} actions={acts} />)
+      expect(foot()).toBeNull()
+      // The debrief's and Verlauf's sheets: no line, no actions.
+      rerender(<PartnerSheet target={{ id: 7, username: 'jglaser' }} actions={acts} />)
+      expect(foot()).toBeNull()
+      rerender(<PartnerSheet target={{ id: 7, username: 'jglaser', line: link() }} />)
+      expect(foot()).toBeNull()
+    })
 })
 
 describe('MitPartner', () => {

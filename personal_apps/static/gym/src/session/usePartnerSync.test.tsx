@@ -39,6 +39,13 @@ function link(over: Partial<PartnerLink> = {}): PartnerLink {
   }
 }
 
+/** A line as the server sends it once the link ended with the partner still
+ *  training (B11): nothing of their rows. */
+const ENDED = {
+  state: 'ended' as const, exercise: null, set_no: null, done_in_exercise: 0,
+  sets_in_exercise: 0, last_set: null, sets_done: 0, sets_total: 0, list_key: 0,
+}
+
 interface Answer { version?: number; partner_links?: PartnerLink[] }
 
 /** fetch, routed: sync.json answers `answer()`, anything else `other`. */
@@ -210,6 +217,286 @@ describe('usePartnerSync: the lines', () => {
   })
 })
 
+describe('usePartnerSync: ending it (B11)', () => {
+  const posts = (fetchMock: ReturnType<typeof server>, path: string) =>
+    fetchMock.mock.calls.filter(([url]) => String(url) === path).length
+
+  it('asks nothing more once every line has ended', async () => {
+    vi.useFakeTimers()
+    const fetchMock = server(() => ({ partner_links: [link(ENDED)] }))
+    vi.stubGlobal('fetch', fetchMock)
+    const { result } = renderHook(() => usePartnerSync(SESSION, {
+      initial: [link()], follower: false, knownVersion: 1,
+    }), { wrapper: wrap(freshClient()) })
+
+    await vi.advanceTimersByTimeAsync(LEADER_POLL_MS + 100)
+    expect(result.current.links.map((l) => l.state)).toEqual(['ended'])
+    await vi.advanceTimersByTimeAsync(LEADER_POLL_MS * 4)
+    expect(syncCalls(fetchMock)).toBe(1)
+  })
+
+  it('asks after an ended line on a return to the tab or the network', async () => {
+    // It turns finished when the partner finishes, or goes with their
+    // workout thrown away: too seldom to poll for, not never.
+    vi.useFakeTimers()
+    const fetchMock = server(() => ({ partner_links: [link(ENDED)] }))
+    vi.stubGlobal('fetch', fetchMock)
+    renderHook(() => usePartnerSync(SESSION, {
+      initial: [link(ENDED)], follower: false, knownVersion: 1,
+    }), { wrapper: wrap(freshClient()) })
+
+    await vi.advanceTimersByTimeAsync(LEADER_POLL_MS * 3)
+    expect(syncCalls(fetchMock)).toBe(0)
+    await returnToTab()
+    expect(syncCalls(fetchMock)).toBe(1)
+    await vi.advanceTimersByTimeAsync(FOLLOWER_POLL_MS + 100)
+    await returnToNetwork()
+    expect(syncCalls(fetchMock)).toBe(2)
+  })
+
+  it('takes an invite back: gone at once, then sync.json asked what is so', async () => {
+    const fetchMock = server(() => ({ partner_links: [link()] }), () => new Response('{"ok": true}'))
+    vi.stubGlobal('fetch', fetchMock)
+    const { result } = renderHook(() => usePartnerSync(SESSION, {
+      initial: [link({ id: 8, state: 'invited' }), link()], follower: false, knownVersion: 1,
+    }), { wrapper: wrap(freshClient()) })
+
+    let sent!: Promise<unknown>
+    act(() => { sent = result.current.withdraw(8) })
+    expect(result.current.links.map((l) => l.id)).toEqual([7])
+    let outcome: unknown
+    await act(async () => { outcome = await sent })
+    expect(outcome).toEqual({ done: true })
+    expect(fetchMock).toHaveBeenCalledWith(
+      '/gym/shared/8/withdraw', expect.objectContaining({ method: 'POST' }))
+    await waitFor(() => expect(syncCalls(fetchMock)).toBe(1))
+    expect(result.current.links.map((l) => l.id)).toEqual([7])
+  })
+
+  it('brings a withdrawn invite back when the request did not get through', async () => {
+    const fetchMock = server(() => ({}), () => { throw new TypeError('offline') })
+    vi.stubGlobal('fetch', fetchMock)
+    const { result } = renderHook(() => usePartnerSync(SESSION, {
+      initial: [link({ id: 8, state: 'invited' })], follower: false, knownVersion: 1,
+    }), { wrapper: wrap(freshClient()) })
+
+    let outcome: unknown
+    await act(async () => { outcome = await result.current.withdraw(8) })
+    expect(outcome).toEqual({ done: false, message: 'Ging nicht durch — nochmal tippen.' })
+    expect(result.current.links.map((l) => [l.id, l.state])).toEqual([[8, 'invited']])
+    // Nothing answered, so nothing to ask sync.json about.
+    expect(syncCalls(fetchMock)).toBe(0)
+  })
+
+  it('takes a 404 or a 409 as an answer: the line then says what is so', async () => {
+    // Joined after all (409): back, as joined. Gone already (404): stays gone.
+    let answer: PartnerLink[] = [link({ id: 8, state: 'invited' }), link({ id: 9, state: 'invited' })]
+    const fetchMock = server(() => ({ partner_links: answer }), () => new Response('{}', {
+      status: fetchMock.mock.calls.at(-1)![0].includes('/8/') ? 409 : 404,
+    }))
+    vi.stubGlobal('fetch', fetchMock)
+    const { result } = renderHook(() => usePartnerSync(SESSION, {
+      initial: answer, follower: false, knownVersion: 1,
+    }), { wrapper: wrap(freshClient()) })
+
+    answer = [link({ id: 8 }), link({ id: 9, state: 'invited' })]
+    let outcomes: unknown[] = []
+    await act(async () => {
+      outcomes = await Promise.all([result.current.withdraw(8), result.current.withdraw(9)])
+    })
+    expect(outcomes).toEqual([{ done: true }, { done: true }])
+    await waitFor(() => expect(result.current.links.map((l) => [l.id, l.state]))
+      .toEqual([[8, 'joined']]))
+  })
+
+  it('ends it through the one route, and asks sync.json at once', async () => {
+    const fetchMock = server(() => ({ partner_links: [link(ENDED)] }),
+      () => new Response('{"ok": true}'))
+    vi.stubGlobal('fetch', fetchMock)
+    const { result } = renderHook(() => usePartnerSync(SESSION, {
+      initial: [link()], follower: false, knownVersion: 1,
+    }), { wrapper: wrap(freshClient()) })
+
+    let outcome: unknown
+    await act(async () => { outcome = await result.current.end(7) })
+    expect(outcome).toEqual({ done: true })
+    expect(posts(fetchMock, '/gym/shared/7/end')).toBe(1)
+    await waitFor(() => expect(result.current.links.map((l) => l.state)).toEqual(['ended']))
+  })
+
+  it('answers an end the server refused as done, and one not sent as what to say', async () => {
+    let status = 409
+    const fetchMock = server(() => ({ partner_links: [link()] }),
+      () => new Response('{}', { status }))
+    vi.stubGlobal('fetch', fetchMock)
+    const { result } = renderHook(() => usePartnerSync(SESSION, {
+      initial: [link()], follower: false, knownVersion: 1,
+    }), { wrapper: wrap(freshClient()) })
+
+    const outcome = async () => {
+      let got: unknown
+      await act(async () => { got = await result.current.end(7) })
+      return got
+    }
+    expect(await outcome()).toEqual({ done: true })
+    status = 404
+    expect(await outcome()).toEqual({ done: true })
+    status = 503
+    expect(await outcome()).toEqual({ done: false, message: 'Ging nicht durch — nochmal tippen.' })
+    // Sending again cannot mend a lapsed session: said as such.
+    status = 403
+    expect(await outcome()).toEqual({
+      done: false, message: 'Sitzung abgelaufen — bitte Seite neu laden.',
+    })
+  })
+
+  it('keeps a line whose link vanished, in its place, said as vanished', async () => {
+    vi.useFakeTimers()
+    let answer: PartnerLink[] = [link({ id: 3, username: 'anna' }), link(),
+      link({ id: 9, username: 'mghorbani', ...ENDED }), link({ id: 11, username: 'wt', state: 'invited' })]
+    const fetchMock = server(() => ({ partner_links: answer }))
+    vi.stubGlobal('fetch', fetchMock)
+    const { result } = renderHook(() => usePartnerSync(SESSION, {
+      initial: answer, follower: false, knownVersion: 1,
+    }), { wrapper: wrap(freshClient()) })
+
+    // Two workouts thrown away took 3's link and 9's; an invite taken back
+    // on the other phone just goes.
+    answer = [link()]
+    await act(async () => { await vi.advanceTimersByTimeAsync(LEADER_POLL_MS + 100) })
+    expect(result.current.links.map((l) => [l.id, l.state])).toEqual([
+      [3, 'vanished'], [7, 'joined'], [9, 'vanished'],
+    ])
+    // And stays so, answer after answer.
+    await act(async () => { await vi.advanceTimersByTimeAsync(LEADER_POLL_MS) })
+    expect(syncCalls(fetchMock)).toBe(2)
+    expect(result.current.links.map((l) => [l.id, l.state])).toEqual([
+      [3, 'vanished'], [7, 'joined'], [9, 'vanished'],
+    ])
+  })
+
+  it('lets a vanished line go once its partner is back on a line of their own', async () => {
+    vi.useFakeTimers()
+    const anna = link({ id: 5, username: 'anna' })
+    let answer: PartnerLink[] = [anna, link()]
+    vi.stubGlobal('fetch', server(() => ({ partner_links: answer })))
+    const { result } = renderHook(() => usePartnerSync(SESSION, {
+      initial: answer, follower: false, knownVersion: 1,
+    }), { wrapper: wrap(freshClient()) })
+    const shown = () => result.current.links.map((l) => [l.id, l.username, l.state])
+    const next = async (lines: PartnerLink[]) => {
+      answer = lines
+      await act(async () => { await vi.advanceTimersByTimeAsync(LEADER_POLL_MS + 100) })
+    }
+
+    // jglaser's workout thrown away; asked again from the other phone: a
+    // new link, and the old line goes.
+    await next([anna])
+    expect(shown()).toEqual([[5, 'anna', 'joined'], [7, 'jglaser', 'vanished']])
+    await next([anna, link({ id: 12, state: 'invited' })])
+    expect(shown()).toEqual([[5, 'anna', 'joined'], [12, 'jglaser', 'invited']])
+    // For good: the invite taken back, it does not come back.
+    await next([anna])
+    expect(shown()).toEqual([[5, 'anna', 'joined']])
+    // Asked once more and in, then thrown away once more: said once.
+    await next([anna, link({ id: 14, state: 'invited' })])
+    await next([anna, link({ id: 14 })])
+    await next([anna])
+    expect(shown()).toEqual([[5, 'anna', 'joined'], [14, 'jglaser', 'vanished']])
+    // A line that comes back is itself again, and only itself.
+    await next([anna, link({ id: 14 })])
+    expect(shown()).toEqual([[5, 'anna', 'joined'], [14, 'jglaser', 'joined']])
+    // Gone and asked again between two answers: the new line alone.
+    await next([anna, link({ id: 16, state: 'invited' })])
+    expect(shown()).toEqual([[5, 'anna', 'joined'], [16, 'jglaser', 'invited']])
+  })
+
+  it('keeps a vanished line beside an older line of the same partner', async () => {
+    // Followed until they finished, then asked back into this workout: the
+    // workout they came with thrown away, that line goes, the finished stays
+    // -- answer after answer.
+    vi.useFakeTimers()
+    const finished = link({
+      id: 4, viewer_leads: false, state: 'finished', finished_at: '2026-09-25T10:40:00',
+    })
+    const anna = (setNo: number) => link({ id: 5, username: 'anna', set_no: setNo })
+    let answer: PartnerLink[] = [finished, anna(1), link({ id: 12 })]
+    vi.stubGlobal('fetch', server(() => ({ partner_links: answer })))
+    const { result } = renderHook(() => usePartnerSync(SESSION, {
+      initial: answer, follower: false, knownVersion: 1,
+    }), { wrapper: wrap(freshClient()) })
+    const shown = () => result.current.links.map((l) => [l.id, l.state])
+
+    answer = [finished, anna(1)]
+    await act(async () => { await vi.advanceTimersByTimeAsync(LEADER_POLL_MS + 100) })
+    expect(shown()).toEqual([[4, 'finished'], [5, 'joined'], [12, 'vanished']])
+    answer = [finished, anna(2)]
+    await act(async () => { await vi.advanceTimersByTimeAsync(LEADER_POLL_MS) })
+    expect(shown()).toEqual([[4, 'finished'], [5, 'joined'], [12, 'vanished']])
+  })
+
+  it('never shows a frame without the line whose link vanished', async () => {
+    // Gone for one render, it would move all under it by its 52 px.
+    vi.useFakeTimers()
+    let answer: PartnerLink[] = [link({ id: 3, username: 'anna' }), link()]
+    vi.stubGlobal('fetch', server(() => ({ partner_links: answer })))
+    const frames: number[][] = []
+    renderHook(() => {
+      const sync = usePartnerSync(SESSION, { initial: answer, follower: false, knownVersion: 1 })
+      frames.push(sync.links.map((l) => l.id))
+      return sync
+    }, { wrapper: wrap(freshClient()) })
+
+    answer = [link({ id: 3, username: 'anna' })]
+    await act(async () => { await vi.advanceTimersByTimeAsync(LEADER_POLL_MS + 100) })
+    expect(frames.length).toBeGreaterThan(1)
+    expect(frames.filter((ids) => !ids.includes(7))).toEqual([])
+  })
+
+  it('says aloud when a line stops being joined, once', async () => {
+    vi.useFakeTimers()
+    const other = (over: Partial<PartnerLink> = {}) =>
+      link({ id: 8, username: 'mghorbani', ...over })
+    let answer: PartnerLink[] = [link(), other()]
+    const fetchMock = server(() => ({ partner_links: answer }))
+    vi.stubGlobal('fetch', fetchMock)
+    const { result } = renderHook(() => usePartnerSync(SESSION, {
+      initial: answer, follower: false, knownVersion: 1,
+    }), { wrapper: wrap(freshClient()) })
+
+    await vi.advanceTimersByTimeAsync(LEADER_POLL_MS + 100)
+    expect(useAnnouncer.getState().message).toBe('')
+    answer = [link(ENDED), other()]
+    await vi.advanceTimersByTimeAsync(LEADER_POLL_MS)
+    expect(result.current.links.map((l) => l.state)).toEqual(['ended', 'joined'])
+    expect(useAnnouncer.getState().message).toBe('jglaser trainiert allein weiter.')
+    expect(useAnnouncer.getState().nonce).toBe(1)
+    // The other partner lifts on: nothing more is said.
+    answer = [link(ENDED), other({ set_no: 3, done_in_exercise: 2, sets_done: 2 })]
+    await vi.advanceTimersByTimeAsync(LEADER_POLL_MS)
+    expect(result.current.links.map((l) => l.set_no)).toEqual([null, 3])
+    expect(useAnnouncer.getState().nonce).toBe(1)
+  })
+
+  it('says a vanished line and a finished leader aloud too', async () => {
+    vi.useFakeTimers()
+    let answer: PartnerLink[] = [link({ viewer_leads: false }), link({ id: 8 })]
+    const fetchMock = server(() => ({ partner_links: answer }))
+    vi.stubGlobal('fetch', fetchMock)
+    renderHook(() => usePartnerSync(SESSION, {
+      initial: answer, follower: false, knownVersion: 1,
+    }), { wrapper: wrap(freshClient()) })
+
+    answer = [link({ id: 8 })]
+    await vi.advanceTimersByTimeAsync(LEADER_POLL_MS + 100)
+    expect(useAnnouncer.getState().message)
+      .toBe('jglaser ist nicht mehr dabei, ab jetzt bestimmst du die Reihenfolge.')
+    answer = [link({ id: 8, state: 'finished', sets_done: 9, sets_total: 9 })]
+    await vi.advanceTimersByTimeAsync(LEADER_POLL_MS)
+    expect(useAnnouncer.getState().message).toBe('jglaser ist fertig, alle 9 Sätze.')
+  })
+})
+
 describe('usePartnerSync: the follower keeps up with the leader\'s plan', () => {
   it('asks every five seconds while the leader trains', async () => {
     vi.useFakeTimers()
@@ -301,6 +588,25 @@ describe('usePartnerSync: the follower keeps up with the leader\'s plan', () => 
   })
 
   it('stops following when the link ends under a leader still training', async () => {
+    // As the server says it since B11: the line, ended.
+    vi.useFakeTimers()
+    vi.stubGlobal('fetch', server(() => ({
+      version: 1, partner_links: [link({ viewer_leads: false, ...ENDED })],
+    })))
+    const client = freshClient()
+    const invalidate = vi.spyOn(client, 'invalidateQueries')
+    renderHook(() => usePartnerSync(SESSION, {
+      initial: [link({ viewer_leads: false })], follower: true, knownVersion: 1,
+    }), { wrapper: wrap(client) })
+
+    // Following, with the leader's line: nothing to ask.
+    expect(invalidate).not.toHaveBeenCalled()
+    await vi.advanceTimersByTimeAsync(FOLLOWER_POLL_MS + 100)
+    expect(invalidate).toHaveBeenCalledWith({ queryKey: sessionKey(SESSION) })
+  })
+
+  it('stops following when the leader\'s workout is thrown away', async () => {
+    // The link goes with it: no line at all, the page's own said as vanished.
     vi.useFakeTimers()
     vi.stubGlobal('fetch', server(() => ({ version: 1, partner_links: [] })))
     const client = freshClient()

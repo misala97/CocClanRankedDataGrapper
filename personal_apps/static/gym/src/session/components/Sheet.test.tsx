@@ -217,6 +217,40 @@ describe('Sheet', () => {
     expect(useSheets.getState().openId).toBeNull()
   })
 
+  it('hands the focus to the page when what opened it went while it was open', () => {
+    // A <dialog> gives the focus back to whatever had it. An invite taken
+    // back from its own sheet takes its line -- the opener -- along, and the
+    // focus fell to the top of the document: the page names where it goes.
+    const Page = ({ opener }: { opener: boolean }) => (
+      <>
+        <h1 data-sheet-return tabIndex={-1}>Push</h1>
+        {opener && <button type="button">jglaser</button>}
+        <Sheet id="sheet-a" title="Erste">a-body</Sheet>
+      </>
+    )
+    const { rerender } = render(<Page opener />)
+    screen.getByRole('button', { name: 'jglaser' }).focus()
+    act(() => { useSheets.getState().open('sheet-a') })
+    rerender(<Page opener={false} />)
+    act(() => { useSheets.getState().close() })
+    expect(document.activeElement).toBe(screen.getByRole('heading', { name: 'Push' }))
+  })
+
+  it('leaves the focus to the dialog while what opened it is still there', () => {
+    render(
+      <>
+        <h1 data-sheet-return tabIndex={-1}>Push</h1>
+        <button type="button">jglaser</button>
+        <Sheet id="sheet-a" title="Erste">a-body</Sheet>
+      </>,
+    )
+    const opener = screen.getByRole('button', { name: 'jglaser' })
+    opener.focus()
+    act(() => { useSheets.getState().open('sheet-a') })
+    act(() => { useSheets.getState().close() })
+    expect(document.activeElement).toBe(opener)
+  })
+
   it('names itself for assistive tech', () => {
     render(<Fixture />)
     act(() => { useSheets.getState().open('sheet-a') })

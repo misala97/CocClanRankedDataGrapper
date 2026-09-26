@@ -472,8 +472,9 @@ class PartnerLink(_Model):
     id: int
     username: str
     viewer_leads: bool
-    state: Literal['invited', 'declined', 'joined', 'finished']
-    #: invited: when it was sent; declined: when; joined, finished: accepted.
+    state: Literal['invited', 'declined', 'joined', 'ended', 'finished']
+    #: invited: when it was sent; declined: when; joined, finished: accepted;
+    #: ended (left or ended, the partner still training): when it ended.
     since: datetime
     #: The partner's own finish.
     finished_at: datetime | None

@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { Icon } from '../components/Icon'
 import { kg } from '../format'
-import type { PartnerLink } from './types'
+import type { ShownLink } from './types'
 import { initial, lineWords } from './words'
 
 /** The one sheet a partner's list opens in, on every page that has one. */
@@ -30,9 +30,9 @@ export function useRestRunning(restLeft: number | null, receivedAt: number): boo
 }
 
 interface LineProps {
-  link: PartnerLink
+  link: ShownLink
   receivedAt: number
-  onOpen(link: PartnerLink): void
+  onOpen(link: ShownLink): void
   onDismiss(id: number): void
 }
 
@@ -41,7 +41,8 @@ interface LineProps {
  *
  * Always 52 px, whatever it says: a poll that changes what it says must
  * never move "Satz geschafft" under a thumb. The whole line opens the
- * partner's list; a declined invite has no list, only its OK.
+ * partner's list; a declined invite has no list, only its OK, and a line
+ * whose link vanished has none either (B11).
  */
 function PartnerLine({ link, receivedAt, onOpen, onDismiss }: LineProps) {
   const resting = useRestRunning(link.state === 'joined' ? link.rest_left : null, receivedAt)
@@ -75,6 +76,17 @@ function PartnerLine({ link, receivedAt, onOpen, onDismiss }: LineProps) {
       </div>
     )
   }
+  if (link.state === 'vanished') {
+    // Said once through the announcer when it turns vanished (usePartnerSync).
+    return (
+      <div className="partner is-vanished">
+        <div className="partner__hit">
+          <PartnerTile username={link.username} />
+          {main}
+        </div>
+      </div>
+    )
+  }
   return (
     <div className={`partner is-${link.state}`}>
       <button type="button" className="partner__hit" aria-haspopup="dialog"
@@ -90,9 +102,9 @@ function PartnerLine({ link, receivedAt, onOpen, onDismiss }: LineProps) {
 
 /** Every partner line of the workout, in the order they were invited. */
 export function PartnerLines({ links, receivedAt, onOpen, onDismiss }: {
-  links: PartnerLink[]
+  links: ShownLink[]
   receivedAt: number
-  onOpen(link: PartnerLink): void
+  onOpen(link: ShownLink): void
   onDismiss(id: number): void
 }) {
   if (links.length === 0) return null
